@@ -1,5 +1,10 @@
+"""
+This module defines the base RTAState class for wrapping state vectors with custom class interfaces
+"""
 from __future__ import annotations
+
 import numpy as np
+
 
 class RTAState:
     """rta state used by rta algorithms to determine safety and compute safe actions
@@ -41,4 +46,4 @@ class RTAState:
         return self._vector.size
 
     def __len__(self) -> int:
-        return self.size()
+        return self.size

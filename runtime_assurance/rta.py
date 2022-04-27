@@ -1,5 +1,5 @@
 """
-This module implements the base rta implementations and auxilliary RTA classes including states and constraints
+This module implements the base rta interface and algorithm implementations
 Inlcudes base implementations for the following RTA algorithms:
     - Explicit Simplex
     - Implicit Simplex
@@ -7,10 +7,11 @@ Inlcudes base implementations for the following RTA algorithms:
     - Implicit Active Set Invariance Filter (ASIF)
 """
 from __future__ import annotations
+
 import abc
 from collections import OrderedDict
-from typing import Union
-import numbers
+from typing import Any, Optional, Union
+
 import numpy as np
 import quadprog
 
@@ -22,10 +23,6 @@ class RTAModule(abc.ABC):
 
     Parameters
     ----------
-    platform_name : str
-        name of the platform this rta module is attaching to
-    rta_state_type : RTAState, optional
-        RTAState subclass this rta module is designed to work with, by default RTAState
     control_bounds_high : Union[float, int, list], optional
         upper bound of allowable control. Pass a list for element specific limit. By default None
     control_bounds_low : Union[float, int, list], optional
@@ -33,16 +30,12 @@ class RTAModule(abc.ABC):
     """
 
     def __init__(
-            self,
-            platform_name: str,
-            *args,
-            rta_state_type: RTAState = None,
-            control_bounds_high: Union[float, int, list] = None,
-            control_bounds_low: Union[float, int, list] = None,
-            **kwargs
-            ):
-        self.platform_name = platform_name
-
+        self,
+        *args: Any,
+        control_bounds_high: Union[float, int, list, np.ndarray] = None,
+        control_bounds_low: Union[float, int, list, np.ndarray] = None,
+        **kwargs: Any
+    ):
         if isinstance(control_bounds_high, list):
             control_bounds_high = np.array(control_bounds_high, float)
 
@@ -54,13 +47,8 @@ class RTAModule(abc.ABC):
 
         self.enable = True
         self.intervening = False
-        self.control_desired = None
-        self.control_actual = None
-
-        if rta_state_type is None:
-            rta_state_type = RTAState
-        assert issubclass(rta_state_type, RTAState), "rta_state_type must be a subclass of rta_state_type"
-        self._rta_state_type: RTAState = rta_state_type
+        self.control_desired: Optional[np.ndarray] = None
+        self.control_actual: Optional[np.ndarray] = None
 
         super().__init__(*args, **kwargs)
 
@@ -72,13 +60,12 @@ class RTAModule(abc.ABC):
         """
         self.enable = True
         self.intervening = False
-        self.control_desired = None
-        self.control_actual = None
+        self.control_desired: np.ndarray = None
+        self.control_actual: np.ndarray = None
 
     def _setup_properties(self):
         """Additional initialization function to allow custom initialization to run after baseclass initialization,
         but before constraint initialization"""
-        pass
 
     @abc.abstractmethod
     def _setup_constraints(self) -> OrderedDict:
@@ -99,16 +86,15 @@ class RTAModule(abc.ABC):
     def _get_state(self, input_state) -> RTAState:
         """Converts the global state to an internal RTA state"""
 
-        assert isinstance(input_state, RTAState) or isinstance(input_state, np.ndarray), (
+        assert isinstance(input_state, (RTAState, np.ndarray)), (
             "input_state must be an RTAState or numpy array. "
             "If you are tying to use a custom state variable, make sure to implement a custom "
             "_get_state() method to translate your custom state to an RTAState")
 
         if isinstance(input_state, RTAState):
             return input_state
-        else:
-            return self._rta_state_type(vector=input_state)
-        
+
+        return self.gen_rta_state(vector=input_state)
 
     def filter_control(self, input_state, step_size: float, control: np.ndarray) -> np.ndarray:
         """filters desired control into safe action
@@ -189,13 +175,29 @@ class RTAModule(abc.ABC):
             clipped control vector
         """
         if self.control_bounds_low is not None or self.control_bounds_high is not None:
-            control = np.clip(control, self.control_bounds_low, self.control_bounds_high)
+            control = np.clip(control, self.control_bounds_low, self.control_bounds_high)  # type: ignore
         return control
+
+    def gen_rta_state(self, vector: np.ndarray) -> RTAState:
+        """Wraps a numpy array into an rta state
+
+        Parameters
+        ----------
+        vector : np.array
+            state vector
+
+        Returns
+        -------
+        RTAState
+            rta state derived from input state vector
+        """
+        return RTAState(vector=vector)
 
 
 class RTABackupController(abc.ABC):
     """Base Class for backup controllers used by backup control based RTA methods
     """
+
     @abc.abstractmethod
     def generate_control(self, state: RTAState, step_size: float) -> np.ndarray:
         """Generates safe backup control given the current state and step size
@@ -232,22 +234,19 @@ class RTABackupController(abc.ABC):
     def reset(self):
         """Resets the backup controller to its initial state for a new episode
         """
-        pass
 
     def save(self):
         """Save the internal state of the backup controller
         Allows trajectory integration with a stateful backup controller
         """
-        pass
 
     def restore(self):
         """Restores the internal state of the backup controller from the last save
         Allows trajectory integration with a stateful backup controller
         """
-        pass
 
 
-class BackupControlBasedRTA(abc.ABC):
+class BackupControlBasedRTA(RTAModule):
     """Base class for backup control based RTA algorithms
     Adds iterfaces for backup controller member
 
@@ -256,7 +255,8 @@ class BackupControlBasedRTA(abc.ABC):
     backup_controller : RTABackupController
         backup controller object utilized by rta module to generate backup control
     """
-    def __init__(self, *args, backup_controller: RTABackupController, **kwargs):
+
+    def __init__(self, *args: Any, backup_controller: RTABackupController, **kwargs: Any):
         self.backup_controller = backup_controller
         super().__init__(*args, **kwargs)
 
@@ -297,7 +297,7 @@ class BackupControlBasedRTA(abc.ABC):
         self.backup_controller.restore()
 
 
-class SimplexModule(RTAModule, BackupControlBasedRTA):
+class SimplexModule(BackupControlBasedRTA):
     """Base class for simplex RTA modules.
     Simplex methods for RTA utilize a monitor that detects unsafe behavior and a backup controller that takes over to
         prevent the unsafe behavior
@@ -307,9 +307,6 @@ class SimplexModule(RTAModule, BackupControlBasedRTA):
     backup_controller : RTABackupController
         backup controller object utilized by rta module to generate backup control
     """
-
-    def __init__(self, backup_controller, *args, **kwargs):
-        super().__init__(*args, backup_controller=backup_controller, **kwargs)
 
     def reset(self):
         """Resets the rta module to the initial state at the beginning of an episode
@@ -326,8 +323,8 @@ class SimplexModule(RTAModule, BackupControlBasedRTA):
 
         if self.intervening:
             return self.backup_control(state, step_size)
-        else:
-            return control
+
+        return control
 
     def monitor(self, state: RTAState, step_size: float, control: np.ndarray) -> bool:
         """Detects if desired control will result in an unsafe state
@@ -376,6 +373,7 @@ class ExplicitSimplexModule(SimplexModule):
     Switches to backup controller if desired control would evaluate safety constraint at next timestep
     Requires a backup controller which is known safe within the constraint set
     """
+
     def _monitor(self, state: RTAState, step_size: float, control: np.ndarray, intervening: bool) -> bool:
         pred_state = self._pred_state(state, step_size, control)
         for c in self.constraints.values():
@@ -399,12 +397,13 @@ class ImplicitSimplexModule(SimplexModule):
     backup_controller : RTABackupController
         backup controller object utilized by rta module to generate backup control
     """
-    def __init__(self, backup_window: float, backup_controller: RTABackupController, *args, **kwargs):
+
+    def __init__(self, *args: Any, backup_window: float, backup_controller: RTABackupController, **kwargs: Any):
         self.backup_window = backup_window
         super().__init__(*args, backup_controller=backup_controller, **kwargs)
 
     def _monitor(self, state: RTAState, step_size: float, control: np.ndarray, intervening: bool) -> bool:
-        Nsteps = int(self.backup_window/step_size) + 1
+        Nsteps = int(self.backup_window / step_size) + 1
 
         next_state = self._pred_state(state, step_size, control)
         traj_states = self.integrate(next_state, step_size, Nsteps)
@@ -416,7 +415,7 @@ class ImplicitSimplexModule(SimplexModule):
 
         return False
 
-    def integrate(self, state: RTAState, step_size: float, Nsteps: int) -> np.ndarray:
+    def integrate(self, state: RTAState, step_size: float, Nsteps: int) -> list:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
 
         Parameters
@@ -437,7 +436,7 @@ class ImplicitSimplexModule(SimplexModule):
 
         self.backup_controller_save()
 
-        for i in range(1, Nsteps):
+        for _ in range(1, Nsteps):
             control = self.backup_control(state, step_size)
             state = self._pred_state(state, step_size, control)
             traj_states.append(state)
@@ -461,7 +460,7 @@ class ASIFModule(RTAModule):
         default of 1e-2
     """
 
-    def __init__(self, *args, epsilon: float = 1e-2, **kwargs):
+    def __init__(self, *args: Any, epsilon: float = 1e-2, **kwargs: Any):
         self.epsilon = epsilon
         super().__init__(*args, **kwargs)
 
@@ -479,7 +478,7 @@ class ASIFModule(RTAModule):
 
         return actual_control
 
-    def _generate_objective_function_mats(self, control: np.ndarray) -> tuple(np.ndarray, np.ndarray):
+    def _generate_objective_function_mats(self, control: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """generates matrices for quadratic program optimization objective function
 
         Parameters
@@ -498,7 +497,7 @@ class ASIFModule(RTAModule):
         obj_constant = np.reshape(control, len(control)).astype('float64')
         return obj_weight, obj_constant
 
-    def _generate_actuation_constraint_mats(self, dim: int) -> tuple(np.ndarray, np.ndarray):
+    def _generate_actuation_constraint_mats(self, dim: int) -> tuple[np.ndarray, np.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices that impose actuator limits
         on optimized control vector
 
@@ -531,8 +530,7 @@ class ASIFModule(RTAModule):
 
         return ineq_weight, ineq_constant
 
-    def _optimize(self, obj_weight: np.ndarray, obj_constant: np.ndarray, ineq_weight: np.ndarray,
-                  ineq_constant: np.ndarray) -> np.ndarray:
+    def _optimize(self, obj_weight: np.ndarray, obj_constant: np.ndarray, ineq_weight: np.ndarray, ineq_constant: np.ndarray) -> np.ndarray:
         """Solve ASIF optimization problem via quadratic program
 
         Parameters
@@ -570,12 +568,11 @@ class ASIFModule(RTAModule):
         """
         if np.linalg.norm(desired_control - actual_control) <= self.epsilon:
             return False
-        else:
-            return True
+
+        return True
 
     @abc.abstractmethod
-    def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int
-                                          ) -> tuple(np.ndarray, np.ndarray):
+    def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int) -> tuple[np.ndarray, np.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -650,8 +647,8 @@ class ExplicitASIFModule(ASIFModule):
         threshold distance between desired action and actual safe action at which the rta is said to be intervening
         default of 1e-2
     """
-    def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int
-                                          ) -> tuple(np.ndarray, np.ndarray):
+
+    def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int) -> tuple[np.ndarray, np.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -697,8 +694,6 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
     Parameters
     ----------
-    backup_controller : RTABackupController
-        backup controller object utilized by rta module to generate backup control
     backup_window : float
         Duration of time in seconds to evaluate backup controller trajectory.
     num_check_all : int
@@ -712,16 +707,19 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
     subsample_constraints_num_least : int
         subsample the backup trajectory down to the points with the N least constraint function outputs
             i.e. the n points closest to violating a safety constraint
+    backup_controller : RTABackupController
+        backup controller object utilized by rta module to generate backup control
     """
+
     def __init__(
-            self,
-            backup_controller: RTABackupController,
-            backup_window: float,
-            num_check_all: int = 0,
-            skip_length: int = 1,
-            subsample_constraints_num_least: int = None,
-            *args,
-            **kwargs,
+        self,
+        *args: Any,
+        backup_window: float,
+        num_check_all: int = 0,
+        skip_length: int = 1,
+        subsample_constraints_num_least: int = None,
+        backup_controller: RTABackupController,
+        **kwargs: Any,
     ):
         self.backup_window = backup_window
         self.num_check_all = num_check_all
@@ -740,8 +738,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         super().reset()
         self.reset_backup_controller()
 
-    def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int
-                                          ) -> tuple(np.ndarray, np.ndarray):
+    def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int) -> tuple[np.ndarray, np.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -768,7 +765,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         ineq_weight = np.empty((0, dim))
         ineq_constant = np.empty(0)
 
-        num_steps = int(self.backup_window/step_size) + 1
+        num_steps = int(self.backup_window / step_size) + 1
 
         traj_states, traj_sensitivities = self.integrate(state, step_size, num_steps)
 
@@ -796,7 +793,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         return ineq_weight, ineq_constant
 
     def invariance_constraints(self, initial_state: RTAState, traj_state: RTAState, traj_sensitivity: np.ndarray,
-                               dim: int) -> tuple(np.ndarray, np.ndarray):
+                               dim: int) -> tuple[np.ndarray, np.ndarray]:
         """Computes safety constraint invariance constraints via Nagumo's condition for a point in the backup trajectory
 
         Parameters
@@ -836,7 +833,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
         return ineq_weight, ineq_constant
 
-    def integrate(self, state: RTAState, step_size: float, Nsteps: int) -> tuple(np.ndarray, np.ndarray):
+    def integrate(self, state: RTAState, step_size: float, Nsteps: int) -> tuple[list, list]:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
 
         Parameters
@@ -863,10 +860,10 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
         self.backup_controller_save()
 
-        for i in range(1, Nsteps):
+        for _ in range(1, Nsteps):
             control = self.backup_control(state, step_size)
             state = self._pred_state(state, step_size, control)
-            sensitivity = sensitivity + (self.compute_jacobian(state) @ sensitivity)*step_size
+            sensitivity = sensitivity + (self.compute_jacobian(state) @ sensitivity) * step_size
 
             traj_states.append(state)
             traj_sensitivity.append(sensitivity)
@@ -892,13 +889,12 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         raise NotImplementedError()
 
 
-def get_lower_bound_ineq_constraint_mats(bound, vec_len: Union[np.ndarray, numbers.Number]
-                                         ) -> tuple(np.ndarray, np.ndarray):
+def get_lower_bound_ineq_constraint_mats(bound: Union[np.ndarray, int, float], vec_len: int) -> tuple[np.ndarray, np.ndarray]:
     """Computes inequality constraint matrices for applying a lower bound to optimization var in quadprog
 
     Parameters
     ----------
-    bound : Union[np.ndarray, numbers.Number]
+    bound : Union[np.ndarray, int, float]
         Lower bound for optimization variable.
         If np.ndarray, must be same length as optimization variable. Will be applied elementwise.
         If number, will be applied to all elements.
@@ -915,7 +911,7 @@ def get_lower_bound_ineq_constraint_mats(bound, vec_len: Union[np.ndarray, numbe
     c = np.eye(vec_len)
 
     if isinstance(bound, np.ndarray):
-        assert bound.shape == (vec_len,), f"the shape of bound must be ({vec_len},)"
+        assert bound.shape == (vec_len, ), f"the shape of bound must be ({vec_len},)"
         b = np.copy(bound)
     else:
         b = bound * np.ones(vec_len)

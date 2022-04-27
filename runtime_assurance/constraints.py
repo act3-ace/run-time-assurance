@@ -1,9 +1,15 @@
+"""
+This module defines the base RTA constraints and constraint strengthener classes and includes some standard implementations
+"""
 from __future__ import annotations
+
 import abc
 import numbers
+
 import numpy as np
 
 from runtime_assurance.state import RTAState
+
 
 class ConstraintModule(abc.ABC):
     """Base class implementation for safety constraints
@@ -14,6 +20,7 @@ class ConstraintModule(abc.ABC):
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
     """
+
     def __init__(self, alpha: ConstraintStrengthener = None):
         assert isinstance(alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         self._alpha = alpha
@@ -89,6 +96,7 @@ class ConstraintStrengthener(abc.ABC):
 
     Required for ASIF methods
     """
+
     @abc.abstractmethod
     def __call__(self, x) -> float:
         """
@@ -149,10 +157,11 @@ class PolynomialConstraintStrengthener(ConstraintStrengthener):
         list of polynomial coefs. Arbitrary length.
         Results in strengthening function sum(coefs[i]*(x**i)) for i in range(0, len(coefs))
     """
+
     def __init__(self, coefs: list = None):
         assert isinstance(coefs, list) or coefs is None, "coefs must be a list of numbers"
 
-        assert coefs is None or all([isinstance(i, numbers.Number) for i in coefs]), "coefs must be a list of numbers"
+        assert coefs is None or all((isinstance(i, numbers.Number) for i in coefs)), "coefs must be a list of numbers"
 
         if coefs is None:
             coefs = [0, 1]
