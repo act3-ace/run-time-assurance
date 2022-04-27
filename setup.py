@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+"""Setup script for runtime_assurance"""
 from pathlib import Path
 
 from setuptools import setup, find_packages
@@ -72,5 +72,3 @@ if __name__ == '__main__':
         },
         python_requires='>=3.8',
     )
-
-
