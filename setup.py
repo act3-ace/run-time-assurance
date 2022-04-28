@@ -70,5 +70,5 @@ if __name__ == '__main__':
             "testing":  tests_require,
             "docs":  docs_require,
         },
-        python_requires='>=3.8',
+        python_requires='>=3.7',
     )
