@@ -1,10 +1,13 @@
 """Implements base dynamics for use in RTA modules"""
 
 from __future__ import annotations
+
 import abc
 from typing import Union
+
 import numpy as np
 import scipy
+
 
 class BaseDynamics(abc.ABC):
     """

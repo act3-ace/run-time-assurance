@@ -1,21 +1,21 @@
 """This module implements RTA methods for the docking problem with 3D CWH dynamics models
 """
 from collections import OrderedDict
+
+import constraint
 import numpy as np
 import scipy
-import constraint
 
-from run_time_assurance.state import RTAState
-from run_time_assurance.rta import RTABackupController, ExplicitASIFModule, ImplicitASIFModule, ExplicitSimplexModule, ImplicitSimplexModule
-from run_time_assurance.constraint import ConstraintModule, ConstraintStrengthener, PolynomialConstraintStrengthener, ConstraintStateLimit
+from run_time_assurance.constraint import ConstraintModule, ConstraintStateLimit, ConstraintStrengthener, PolynomialConstraintStrengthener
 from run_time_assurance.dynamics import BaseLinearODESolverDynamics
-
+from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule, RTABackupController
+from run_time_assurance.state import RTAState
+from run_time_assurance.zoo.cwh.docking_2d import V0_DEFAULT, X_VEL_LIMIT_DEFAULT, Y_VEL_LIMIT_DEFAULT
 from run_time_assurance.zoo.cwh.dynamics import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
-from run_time_assurance.zoo.cwh.docking_2d import X_VEL_LIMIT_DEFAULT, Y_VEL_LIMIT_DEFAULT, V0_DEFAULT
 
 Z_VEL_LIMIT_DEFAULT = 10
 V1_COEF_DEFAULT = 4
-V1_DEFAULT = V1_COEF_DEFAULT*N_DEFAULT
+V1_DEFAULT = V1_COEF_DEFAULT * N_DEFAULT
 
 
 class Docking3dState(RTAState):
@@ -86,31 +86,34 @@ class Docking3dRTAMixin:
     """Mixin class provides 3D docking RTA util functions
     Must call mixin methods using the RTA interface methods
     """
-    def _setup_docking_properties(self):
+
+    def _setup_docking_properties(self, m: float, n: float, v1_coef: float):
         """Initializes docking specific properties from other class members"""
-        self.v1 = self.v1_coef*self.n
-        self.A, self.B = generate_cwh_matrices(self.m, self.n, mode="3d")
+        self.v1 = v1_coef * n
+        self.A, self.B = generate_cwh_matrices(m, n, mode="3d")
         self.dynamics = BaseLinearODESolverDynamics(A=self.A, B=self.B, integration_method="RK45")
 
-    def _setup_docking_constraints(self) -> OrderedDict:
+    def _setup_docking_constraints(self, v0: float, v1: float, x_vel_limit: float, y_vel_limit: float, z_vel_limit: float) -> OrderedDict:
         """generates constraints used in the docking problem"""
-        return OrderedDict([
-            ('rel_vel', ConstraintDocking3dRelativeVelocity(v0=self.v0, v1=self.v1)),
-            ('x_vel', ConstraintStateLimit(limit_val=self.x_vel_limit, state_index=3)),
-            ('y_vel', ConstraintStateLimit(limit_val=self.y_vel_limit, state_index=4)),
-            ('z_vel', ConstraintStateLimit(limit_val=self.z_vel_limit, state_index=5)),
-        ])
+        return OrderedDict(
+            [
+                ('rel_vel', ConstraintDocking3dRelativeVelocity(v0=v0, v1=v1)),
+                ('x_vel', ConstraintStateLimit(limit_val=x_vel_limit, state_index=3)),
+                ('y_vel', ConstraintStateLimit(limit_val=y_vel_limit, state_index=4)),
+                ('z_vel', ConstraintStateLimit(limit_val=z_vel_limit, state_index=5)),
+            ]
+        )
 
-    def _docking_pred_state(self, state: Docking3dState, step_size: float, control: np.ndarray) -> Docking3dState:
+    def _docking_pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> np.ndarray:
         """Predicts the next state given the current state and control action"""
         next_state_vec, _ = self.dynamics.step(step_size, state.vector, control)
         return next_state_vec
 
-    def _docking_f_x(self, state: Docking3dState) -> np.ndarray:
+    def _docking_f_x(self, state: RTAState) -> np.ndarray:
         """Computes the system contribution to the state transition: f(x) of dx/dt = f(x) + g(x)u"""
         return self.A @ state.vector
 
-    def _docking_g_x(self, _: Docking3dState) -> np.ndarray:
+    def _docking_g_x(self, _: RTAState) -> np.ndarray:
         """Computes the control input contribution to the state transition: g(x) of dx/dt = f(x) + g(x)u"""
         return np.copy(self.B)
 
@@ -144,6 +147,7 @@ class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
     """
+
     def __init__(
         self,
         *args,
@@ -171,16 +175,24 @@ class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
         if backup_controller is None:
             backup_controller = Docking3dStopLQRBackupController(m=self.m, n=self.n)
 
-        super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low,
-                         backup_controller=backup_controller, **kwargs)
+        super().__init__(
+            *args,
+            control_bounds_high=control_bounds_high,
+            control_bounds_low=control_bounds_low,
+            backup_controller=backup_controller,
+            **kwargs
+        )
 
     def _setup_properties(self):
-        self._setup_docking_properties()
+        self._setup_docking_properties(self.m, self.n, self.v1_coef)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints()
+        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
-    def _pred_state(self, state: Docking3dState, step_size: float, control: np.ndarray) -> Docking3dState:
+    def gen_rta_state(self, vector: np.ndarray) -> Docking3dState:
+        return Docking3dState(vector=vector)
+
+    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Docking3dState:
         return self.gen_rta_state(self._docking_pred_state(state, step_size, control))
 
 
@@ -215,6 +227,7 @@ class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
     """
+
     def __init__(
         self,
         *args,
@@ -243,16 +256,25 @@ class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
         if backup_controller is None:
             backup_controller = Docking3dStopLQRBackupController(m=self.m, n=self.n)
 
-        super().__init__(*args, backup_window=backup_window, backup_controller=backup_controller, control_bounds_high=control_bounds_high,
-                         control_bounds_low=control_bounds_low, **kwargs)
+        super().__init__(
+            *args,
+            backup_window=backup_window,
+            backup_controller=backup_controller,
+            control_bounds_high=control_bounds_high,
+            control_bounds_low=control_bounds_low,
+            **kwargs
+        )
 
     def _setup_properties(self):
-        self._setup_docking_properties()
+        self._setup_docking_properties(self.m, self.n, self.v1_coef)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints()
+        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
-    def _pred_state(self, state: Docking3dState, step_size: float, control: np.ndarray) -> Docking3dState:
+    def gen_rta_state(self, vector: np.ndarray) -> Docking3dState:
+        return Docking3dState(vector=vector)
+
+    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Docking3dState:
         return self.gen_rta_state(self._docking_pred_state(state, step_size, control))
 
 
@@ -288,6 +310,7 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
     """
+
     def __init__(
         self,
         *args,
@@ -318,18 +341,21 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
 
     def _setup_properties(self):
-        self._setup_docking_properties()
+        self._setup_docking_properties(self.m, self.n, self.v1_coef)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints()
+        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
-    def _pred_state(self, state: Docking3dState, step_size: float, control: np.ndarray) -> Docking3dState:
+    def gen_rta_state(self, vector: np.ndarray) -> Docking3dState:
+        return Docking3dState(vector=vector)
+
+    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Docking3dState:
         return self.gen_rta_state(self._docking_pred_state(state, step_size, control))
 
-    def state_transition_system(self, state: Docking3dState) -> np.ndarray:
+    def state_transition_system(self, state: RTAState) -> np.ndarray:
         return self._docking_f_x(state)
 
-    def state_transition_input(self, state: Docking3dState) -> np.ndarray:
+    def state_transition_input(self, state: RTAState) -> np.ndarray:
         return self._docking_g_x(state)
 
 
@@ -376,6 +402,7 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
     """
+
     def __init__(
         self,
         *args,
@@ -406,26 +433,36 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
         if backup_controller is None:
             backup_controller = Docking3dStopLQRBackupController(m=self.m, n=self.n)
 
-        super().__init__(*args, backup_window=backup_window, skip_length=Nskip, num_check_all=N_checkall,
-                         backup_controller=backup_controller, control_bounds_high=control_bounds_high,
-                         control_bounds_low=control_bounds_low, **kwargs)
+        super().__init__(
+            *args,
+            backup_window=backup_window,
+            skip_length=Nskip,
+            num_check_all=N_checkall,
+            backup_controller=backup_controller,
+            control_bounds_high=control_bounds_high,
+            control_bounds_low=control_bounds_low,
+            **kwargs
+        )
 
     def _setup_properties(self):
-        self._setup_docking_properties()
+        self._setup_docking_properties(self.m, self.n, self.v1_coef)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints()
+        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
-    def _pred_state(self, state: Docking3dState, step_size: float, control: np.ndarray) -> Docking3dState:
+    def gen_rta_state(self, vector: np.ndarray) -> Docking3dState:
+        return Docking3dState(vector=vector)
+
+    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Docking3dState:
         return self.gen_rta_state(self._docking_pred_state(state, step_size, control))
 
-    def compute_jacobian(self, state: Docking3dState) -> np.ndarray:
+    def compute_jacobian(self, state: RTAState) -> np.ndarray:
         return self.A + self.B @ self.backup_controller.compute_jacobian(state)
 
-    def state_transition_system(self, state: Docking3dState) -> np.ndarray:
+    def state_transition_system(self, state: RTAState) -> np.ndarray:
         return self._docking_f_x(state)
 
-    def state_transition_input(self, state: Docking3dState) -> np.ndarray:
+    def state_transition_input(self, state: RTAState) -> np.ndarray:
         return self._docking_g_x(state)
 
 
@@ -439,6 +476,7 @@ class Docking3dStopLQRBackupController(RTABackupController):
     n : float, optional
         orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
     """
+
     def __init__(self, m: float = M_DEFAULT, n: float = N_DEFAULT):
         # LQR Gain Matrices
         self.Q = np.multiply(.050, np.eye(6))
@@ -478,10 +516,11 @@ class Docking3dENMTTrackingBackupController(RTABackupController):
         coefficient of linear component of the distance depending speed limit in 1/seconds, by default V1_COEF_DEFAULT
         v1_coef of v_limit = v0 + v1_coef*n*||r||
     """
+
     def __init__(self, m: float = M_DEFAULT, n: float = N_DEFAULT, v1_coef: float = V1_COEF_DEFAULT):
         # LQR Gain Matrices
-        self.Q = np.eye(12)*1e-5
-        self.R = np.eye(3)*1e7
+        self.Q = np.eye(12) * 1e-5
+        self.R = np.eye(3) * 1e7
 
         self.num_enmt_points = 10
         self.eps = 1.5
@@ -490,7 +529,7 @@ class Docking3dENMTTrackingBackupController(RTABackupController):
         self.error_integral_saved = self.error_integral
 
         self.n = n
-        self.v1 = v1_coef*self.n
+        self.v1 = v1_coef * self.n
 
         C = np.eye(6)
         self.A, self.B = generate_cwh_matrices(m, self.n, mode="3d")
@@ -505,11 +544,12 @@ class Docking3dENMTTrackingBackupController(RTABackupController):
         self.K_2 = self.K[:, 6:]
 
         def safety_constraint(theta1, theta2):
-            if (np.tan(theta2)**2+4*np.cos(theta1)**2)/np.sin(theta1)**2 <= (self.v1/self.n)**2 - 4:
+            if (np.tan(theta2)**2 + 4 * np.cos(theta1)**2) / np.sin(theta1)**2 <= (self.v1 / self.n)**2 - 4:
                 return True
+            return False
 
         problem = constraint.Problem()
-        problem.addVariable('theta1', np.linspace(np.pi/10, np.pi/2-np.pi/10, self.num_enmt_points))
+        problem.addVariable('theta1', np.linspace(np.pi / 10, np.pi / 2 - np.pi / 10, self.num_enmt_points))
         problem.addVariable('theta2', np.linspace(0.001, np.pi, self.num_enmt_points))
         problem.addConstraint(safety_constraint, ['theta1', 'theta2'])
         self.solutions = problem.getSolutions()
@@ -519,13 +559,21 @@ class Docking3dENMTTrackingBackupController(RTABackupController):
         for _, solution in enumerate(self.solutions):
             theta1 = solution['theta1']
             theta2 = solution['theta2']
-            z_coef = 1/np.sin(theta1)*np.sqrt(np.tan(theta2)**2+4*np.cos(theta1)**2)
+            z_coef = 1 / np.sin(theta1) * np.sqrt(np.tan(theta2)**2 + 4 * np.cos(theta1)**2)
             for i1 in range(self.num_enmt_points):
                 self.z_coefs.append(z_coef)
-                psi = i1/self.num_enmt_points*2*np.pi
-                nu = np.arctan(2*np.cos(theta1)/np.tan(theta2))+psi
-                x_NMT = np.array([np.sin(nu), 2*np.cos(nu), z_coef*np.sin(psi), self.n*np.cos(nu),
-                                  -2*self.n*np.sin(nu), self.n*z_coef*np.cos(psi)])
+                psi = i1 / self.num_enmt_points * 2 * np.pi
+                nu = np.arctan(2 * np.cos(theta1) / np.tan(theta2)) + psi
+                x_NMT = np.array(
+                    [
+                        np.sin(nu),
+                        2 * np.cos(nu),
+                        z_coef * np.sin(psi),
+                        self.n * np.cos(nu),
+                        -2 * self.n * np.sin(nu),
+                        self.n * z_coef * np.cos(psi)
+                    ]
+                )
                 enmts.append(x_NMT)
 
         self.enmts = np.array(enmts)
@@ -542,15 +590,15 @@ class Docking3dENMTTrackingBackupController(RTABackupController):
 
         # check if controller is tracking trajectory
         if np.linalg.norm(state_vec[0:3] - state_desired[0:3]) <= self.eps:
-            state_desired = state_desired + (self.A @ state_desired)*step_size
+            state_desired = state_desired + (self.A @ state_desired) * step_size
 
         error = state_vec - state_desired
         backup_action = -self.K_1 @ error - self.K_2 @ self.error_integral
-        self.error_integral = self.error_integral + error*step_size
+        self.error_integral = self.error_integral + error * step_size
 
         return backup_action
 
-    def compute_jacobian(self, state: Docking3dState) -> np.ndarray:
+    def compute_jacobian(self, state: RTAState) -> np.ndarray:
         return -self.K_1
 
     def find_eNMT(self, state_vec: np.ndarray) -> np.ndarray:
@@ -566,17 +614,17 @@ class Docking3dENMTTrackingBackupController(RTABackupController):
         np.ndarray
             closest eNMT point
         """
-        b = state_vec[0]/(np.sin(np.arctan(2*state_vec[0]/state_vec[1])))
+        b = state_vec[0] / (np.sin(np.arctan(2 * state_vec[0] / state_vec[1])))
         if b > 4868.5:
-            b = b/b*4868.5
+            b = b / b * 4868.5
         dist = []
         nmts = []
 
         for i in range(len(self.z_coefs)):
-            if b*self.z_coefs[i] <= 9737:
-                x_nmt = self.enmts[i, :]*b
+            if b * self.z_coefs[i] <= 9737:
+                x_nmt = self.enmts[i, :] * b
                 nmts.append(x_nmt)
-                dist.append(np.linalg.norm(state_vec[0:3].flatten()-x_nmt[0:3]))
+                dist.append(np.linalg.norm(state_vec[0:3].flatten() - x_nmt[0:3]))
 
         return nmts[np.argmin(dist)]
 
@@ -610,21 +658,21 @@ class ConstraintDocking3dRelativeVelocity(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
         super().__init__(alpha=alpha)
 
-    def _compute(self, state: Docking3dState) -> float:
+    def _compute(self, state: RTAState) -> float:
         state_vec = state.vector
-        return (self.v0 + self.v1 * np.linalg.norm(state_vec[0:3])) - np.linalg.norm(state_vec[3:6])
+        return float((self.v0 + self.v1 * np.linalg.norm(state_vec[0:3])) - np.linalg.norm(state_vec[3:6]))
 
-    def grad(self, state: Docking3dState) -> np.ndarray:
+    def grad(self, state: RTAState) -> np.ndarray:
         state_vec = state.vector
-        Hs = np.array([[2*self.v1**2, 0, 0, 0, 0, 0],
-                       [0, 2*self.v1**2, 0, 0, 0, 0],
-                       [0, 0, 2*self.v1**2, 0, 0, 0],
-                       [0, 0, 0, -2, 0, 0],
-                       [0, 0, 0, 0, -2, 0],
-                       [0, 0, 0, 0, 0, -2]])
+        Hs = np.array(
+            [
+                [2 * self.v1**2, 0, 0, 0, 0, 0], [0, 2 * self.v1**2, 0, 0, 0, 0], [0, 0, 2 * self.v1**2, 0, 0, 0], [0, 0, 0, -2, 0, 0],
+                [0, 0, 0, 0, -2, 0], [0, 0, 0, 0, 0, -2]
+            ]
+        )
 
         ghs = Hs @ state_vec
-        ghs[0] = ghs[0] + 2*self.v1*self.v0*state_vec[0]/np.linalg.norm(state_vec[0:3])
-        ghs[1] = ghs[1] + 2*self.v1*self.v0*state_vec[1]/np.linalg.norm(state_vec[0:3])
-        ghs[2] = ghs[2] + 2*self.v1*self.v0*state_vec[2]/np.linalg.norm(state_vec[0:3])
+        ghs[0] = ghs[0] + 2 * self.v1 * self.v0 * state_vec[0] / np.linalg.norm(state_vec[0:3])
+        ghs[1] = ghs[1] + 2 * self.v1 * self.v0 * state_vec[1] / np.linalg.norm(state_vec[0:3])
+        ghs[2] = ghs[2] + 2 * self.v1 * self.v0 * state_vec[2] / np.linalg.norm(state_vec[0:3])
         return ghs
