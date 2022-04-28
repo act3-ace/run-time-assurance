@@ -2,22 +2,21 @@
 """
 from collections import OrderedDict
 from typing import Union
+
 import numpy as np
 import scipy
 
-from run_time_assurance.state import RTAState
-from run_time_assurance.rta import RTABackupController, ExplicitASIFModule, ImplicitASIFModule, ExplicitSimplexModule, ImplicitSimplexModule
-from run_time_assurance.constraint import ConstraintModule, ConstraintStrengthener,PolynomialConstraintStrengthener, ConstraintStateLimit
+from run_time_assurance.constraint import ConstraintModule, ConstraintStateLimit, ConstraintStrengthener, PolynomialConstraintStrengthener
 from run_time_assurance.dynamics import BaseLinearODESolverDynamics
-
+from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule, RTABackupController
+from run_time_assurance.state import RTAState
 from run_time_assurance.zoo.cwh.dynamics import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
-
 
 X_VEL_LIMIT_DEFAULT = 10
 Y_VEL_LIMIT_DEFAULT = 10
 V0_DEFAULT = 0.2
 V1_COEF_DEFAULT = 2
-V1_DEFAULT = V1_COEF_DEFAULT*N_DEFAULT
+V1_DEFAULT = V1_COEF_DEFAULT * N_DEFAULT
 
 
 class Docking2dState(RTAState):
@@ -68,30 +67,33 @@ class Docking2dRTAMixin:
     """Mixin class provides 2D docking RTA util functions
     Must call mixin methods using the RTA interface methods
     """
-    def _setup_docking_properties(self):
+
+    def _setup_docking_properties(self, m: float, n: float, v1_coef: float):
         """Initializes docking specific properties from other class members"""
-        self.v1 = self.v1_coef*self.n
-        self.A, self.B = generate_cwh_matrices(self.m, self.n, mode="2d")
+        self.v1 = v1_coef * n
+        self.A, self.B = generate_cwh_matrices(m, n, mode="2d")
         self.dynamics = BaseLinearODESolverDynamics(A=self.A, B=self.B, integration_method="RK45")
 
-    def _setup_docking_constraints(self) -> OrderedDict:
+    def _setup_docking_constraints(self, v0: float, v1: float, x_vel_limit: float, y_vel_limit: float) -> OrderedDict:
         """generates constraints used in the docking problem"""
-        return OrderedDict([
-            ('rel_vel', ConstraintDocking2dRelativeVelocity(v0=self.v0, v1=self.v1)),
-            ('x_vel', ConstraintStateLimit(limit_val=self.x_vel_limit, state_index=2)),
-            ('y_vel', ConstraintStateLimit(limit_val=self.y_vel_limit, state_index=3)),
-        ])
+        return OrderedDict(
+            [
+                ('rel_vel', ConstraintDocking2dRelativeVelocity(v0=v0, v1=v1)),
+                ('x_vel', ConstraintStateLimit(limit_val=x_vel_limit, state_index=2)),
+                ('y_vel', ConstraintStateLimit(limit_val=y_vel_limit, state_index=3)),
+            ]
+        )
 
-    def _docking_pred_state(self, state: Docking2dState, step_size: float, control: np.ndarray) -> np.ndarray:
+    def _docking_pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> np.ndarray:
         """Predicts the next state given the current state and control action"""
         next_state_vec, _ = self.dynamics.step(step_size, state.vector, control)
         return next_state_vec
 
-    def _docking_f_x(self, state: Docking2dState) -> np.ndarray:
+    def _docking_f_x(self, state: RTAState) -> np.ndarray:
         """Computes the system contribution to the state transition: f(x) of dx/dt = f(x) + g(x)u"""
         return self.A @ state.vector
 
-    def _docking_g_x(self, _: Docking2dState) -> np.ndarray:
+    def _docking_g_x(self, _: RTAState) -> np.ndarray:
         """Computes the control input contribution to the state transition: g(x) of dx/dt = f(x) + g(x)u"""
         return np.copy(self.B)
 
@@ -125,6 +127,7 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
     """
+
     def __init__(
         self,
         *args,
@@ -150,16 +153,24 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         if backup_controller is None:
             backup_controller = Docking2dStopLQRBackupController(m=self.m, n=self.n)
 
-        super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low,
-                         backup_controller=backup_controller, **kwargs)
+        super().__init__(
+            *args,
+            control_bounds_high=control_bounds_high,
+            control_bounds_low=control_bounds_low,
+            backup_controller=backup_controller,
+            **kwargs
+        )
 
     def _setup_properties(self):
-        self._setup_docking_properties()
+        self._setup_docking_properties(self.m, self.n, self.v1_coef)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints()
+        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
 
-    def _pred_state(self, state: Docking2dState, step_size: float, control: np.ndarray) -> Docking2dState:
+    def gen_rta_state(self, vector: np.ndarray) -> Docking2dState:
+        return Docking2dState(vector=vector)
+
+    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Docking2dState:
         return self.gen_rta_state(self._docking_pred_state(state, step_size, control))
 
 
@@ -194,6 +205,7 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
     """
+
     def __init__(
         self,
         *args,
@@ -220,16 +232,25 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         if backup_controller is None:
             backup_controller = Docking2dStopLQRBackupController(m=self.m, n=self.n)
 
-        super().__init__(*args, backup_window=backup_window, backup_controller=backup_controller, control_bounds_high=control_bounds_high,
-                         control_bounds_low=control_bounds_low, **kwargs)
+        super().__init__(
+            *args,
+            backup_window=backup_window,
+            backup_controller=backup_controller,
+            control_bounds_high=control_bounds_high,
+            control_bounds_low=control_bounds_low,
+            **kwargs
+        )
 
     def _setup_properties(self):
-        self._setup_docking_properties()
+        self._setup_docking_properties(self.m, self.n, self.v1_coef)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints()
+        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
 
-    def _pred_state(self, state: Docking2dState, step_size: float, control: np.ndarray) -> Docking2dState:
+    def gen_rta_state(self, vector: np.ndarray) -> Docking2dState:
+        return Docking2dState(vector=vector)
+
+    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Docking2dState:
         return self.gen_rta_state(self._docking_pred_state(state, step_size, control))
 
 
@@ -262,6 +283,7 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
     control_bounds_low : Union[float, np.ndarray], optional
         lower bound of allowable control. Pass a list for element specific limit. By default -1
     """
+
     def __init__(
         self,
         *args,
@@ -286,18 +308,21 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
         super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
 
     def _setup_properties(self):
-        self._setup_docking_properties()
+        self._setup_docking_properties(self.m, self.n, self.v1_coef)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints()
+        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
 
-    def _pred_state(self, state: Docking2dState, step_size: float, control: np.ndarray) -> Docking2dState:
+    def gen_rta_state(self, vector: np.ndarray) -> Docking2dState:
+        return Docking2dState(vector=vector)
+
+    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Docking2dState:
         return self.gen_rta_state(self._docking_pred_state(state, step_size, control))
 
-    def state_transition_system(self, state: Docking2dState) -> np.ndarray:
+    def state_transition_system(self, state: RTAState) -> np.ndarray:
         return self._docking_f_x(state)
 
-    def state_transition_input(self, state: Docking2dState) -> np.ndarray:
+    def state_transition_input(self, state: RTAState) -> np.ndarray:
         return self._docking_g_x(state)
 
 
@@ -344,6 +369,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
     """
+
     def __init__(
         self,
         *args,
@@ -371,26 +397,36 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         if backup_controller is None:
             backup_controller = Docking2dStopLQRBackupController(m=self.m, n=self.n)
 
-        super().__init__(*args, backup_window=backup_window, num_check_all=num_check_all, skip_length=skip_length,
-                         backup_controller=backup_controller, control_bounds_high=control_bounds_high,
-                         control_bounds_low=control_bounds_low, **kwargs)
+        super().__init__(
+            *args,
+            backup_window=backup_window,
+            num_check_all=num_check_all,
+            skip_length=skip_length,
+            backup_controller=backup_controller,
+            control_bounds_high=control_bounds_high,
+            control_bounds_low=control_bounds_low,
+            **kwargs
+        )
 
     def _setup_properties(self):
-        self._setup_docking_properties()
+        self._setup_docking_properties(self.m, self.n, self.v1_coef)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints()
+        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
 
-    def _pred_state(self, state: Docking2dState, step_size: float, control: np.ndarray) -> Docking2dState:
+    def gen_rta_state(self, vector: np.ndarray) -> Docking2dState:
+        return Docking2dState(vector=vector)
+
+    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Docking2dState:
         return self.gen_rta_state(self._docking_pred_state(state, step_size, control))
 
-    def compute_jacobian(self, state: Docking2dState) -> np.ndarray:
+    def compute_jacobian(self, state: RTAState) -> np.ndarray:
         return self.A + self.B @ self.backup_controller.compute_jacobian(state)
 
-    def state_transition_system(self, state: Docking2dState) -> np.ndarray:
+    def state_transition_system(self, state: RTAState) -> np.ndarray:
         return self._docking_f_x(state)
 
-    def state_transition_input(self, state: Docking2dState) -> np.ndarray:
+    def state_transition_input(self, state: RTAState) -> np.ndarray:
         return self._docking_g_x(state)
 
 
@@ -404,6 +440,7 @@ class Docking2dStopLQRBackupController(RTABackupController):
     n : float, optional
         orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
     """
+
     def __init__(self, m: float = M_DEFAULT, n: float = N_DEFAULT):
         # LQR Gain Matrices
         self.Q = np.multiply(.050, np.eye(4))
@@ -416,7 +453,7 @@ class Docking2dStopLQRBackupController(RTABackupController):
         # Construct the constain gain matrix, K
         self.K = np.linalg.inv(self.R) @ (np.transpose(self.B) @ P)
 
-    def generate_control(self, state: Docking2dState, step_size: float) -> np.ndarray:
+    def generate_control(self, state: RTAState, step_size: float) -> np.ndarray:
         state_vec = state.vector
         state_des = np.copy(state_vec)
         state_des[2:] = 0
@@ -426,7 +463,7 @@ class Docking2dStopLQRBackupController(RTABackupController):
 
         return backup_action
 
-    def compute_jacobian(self, state: Docking2dState):
+    def compute_jacobian(self, state: RTAState):
         return -self.K
 
 
@@ -453,12 +490,12 @@ class ConstraintDocking2dRelativeVelocity(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
         super().__init__(alpha=alpha)
 
-    def _compute(self, state: Docking2dState) -> float:
+    def _compute(self, state: RTAState) -> float:
         state_vec = state.vector
 
-        return (self.v0 + self.v1 * np.linalg.norm(state_vec[0:2])) - np.linalg.norm(state_vec[2:4])
+        return float((self.v0 + self.v1 * np.linalg.norm(state_vec[0:2])) - np.linalg.norm(state_vec[2:4]))
 
-    def grad(self, state: Docking2dState) -> np.ndarray:
+    def grad(self, state: RTAState) -> np.ndarray:
         state_vec = state.vector
 
         Hs = np.array([[2 * self.v1**2, 0, 0, 0], [0, 2 * self.v1**2, 0, 0], [0, 0, -2, 0], [0, 0, 0, -2]])

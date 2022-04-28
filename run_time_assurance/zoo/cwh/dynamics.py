@@ -1,7 +1,7 @@
 """This module implements dynamics for the linearized Clohessy Wiltshire dynamics"""
 from __future__ import annotations
-import numpy as np
 
+import numpy as np
 
 M_DEFAULT = 12
 N_DEFAULT = 0.001027
@@ -31,7 +31,7 @@ def generate_cwh_matrices(m: float, n: float, mode: str = '2d') -> tuple[np.ndar
         A = np.array([
             [0, 0, 1, 0],
             [0, 0, 0, 1],
-            [3 * n ** 2, 0, 0, 2 * n],
+            [3 * n**2, 0, 0, 2 * n],
             [0, 0, -2 * n, 0],
         ], dtype=np.float64)
 
@@ -42,14 +42,17 @@ def generate_cwh_matrices(m: float, n: float, mode: str = '2d') -> tuple[np.ndar
             [0, 1 / m],
         ], dtype=np.float64)
     else:
-        A = np.array([
-            [0, 0, 0, 1, 0, 0],
-            [0, 0, 0, 0, 1, 0],
-            [0, 0, 0, 0, 0, 1],
-            [3 * n ** 2, 0, 0, 0, 2 * n, 0],
-            [0, 0, 0, -2 * n, 0, 0],
-            [0, 0, -n ** 2, 0, 0, 0],
-        ], dtype=np.float64)
+        A = np.array(
+            [
+                [0, 0, 0, 1, 0, 0],
+                [0, 0, 0, 0, 1, 0],
+                [0, 0, 0, 0, 0, 1],
+                [3 * n**2, 0, 0, 0, 2 * n, 0],
+                [0, 0, 0, -2 * n, 0, 0],
+                [0, 0, -n**2, 0, 0, 0],
+            ],
+            dtype=np.float64
+        )
 
         B = np.array([
             [0, 0, 0],
