@@ -95,14 +95,14 @@ repos:
 # Start python formatters
       - id: isort
         name: isort
-        files: runtime_assurance
+        files: run_time_assurance
         description: "isort: import sorter"
         entry: python -m isort
         language: system
         types: [ python ]
       - id: yapf
         name: yapf
-        files: runtime_assurance
+        files: run_time_assurance
         description: "YAPF: Yet Another Python Formatter"
         entry: python -m yapf
         language: system
@@ -111,7 +111,7 @@ repos:
 # Start python linters
       - id: mypy
         name: mypy
-        files: runtime_assurance
+        files: run_time_assurance
         stages: [ commit ]
         language: system
         entry: python -m mypy
@@ -119,7 +119,7 @@ repos:
       - id: flake8
         description: "Flake8: Your Tool For Style Guide Enforcement"
         name: flake8
-        files: runtime_assurance
+        files: run_time_assurance
         stages: [ commit ]
         language: system
         entry: python -m flake8
@@ -127,7 +127,7 @@ repos:
         verbose: false
       - id: pylint
         name: pylint
-        files: runtime_assurance
+        files: run_time_assurance
         stages: [ commit ]
         language: system
         entry: python -m pylint
