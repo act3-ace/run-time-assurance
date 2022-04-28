@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Setup script for runtime_assurance"""
+"""Setup script for run-time-assurance"""
 from pathlib import Path
 
 from setuptools import setup, find_packages
@@ -45,15 +45,15 @@ if __name__ == '__main__':
     ]
 
     setup(
-        name="runtime-assurance",
+        name="run-time-assurance",
         author="ACT3 Safe Autonomy Team",
-        description="ACT3 Safe Autonomy Runtime Assurance Package",
+        description="ACT3 Safe Autonomy Run Time Assurance Package",
         version="0.1.1",
 
         long_description=Path("README.md").read_text(),
         long_description_content_type="text/markdown",
 
-        url="https://git.act3-ace.com/rta/runtime-assurance",
+        url="https://git.act3-ace.com/rta/run-time-assurance",
 
         license="Distribution C",
 

@@ -1,4 +1,4 @@
-# Runtime Assurance
+# Run Time Assurance
 
 
 
@@ -15,14 +15,14 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-git remote add origin https://git.act3-ace.com/rta/runtime-assurance.git
+git remote add origin https://git.act3-ace.com/rta/run_time-assurance.git
 git branch -M main
 git push -uf origin main
 ```
 
 ## Integrate with your tools
 
-- [ ] [Set up project integrations](https://git.act3-ace.com/rta/runtime-assurance/-/settings/integrations)
+- [ ] [Set up project integrations](https://git.act3-ace.com/rta/run_time-assurance/-/settings/integrations)
 
 ## Collaborate with your team
 

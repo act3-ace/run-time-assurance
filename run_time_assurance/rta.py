@@ -15,7 +15,7 @@ from typing import Any, Optional, Union
 import numpy as np
 import quadprog
 
-from runtime_assurance.state import RTAState
+from run_time_assurance.state import RTAState
 
 
 class RTAModule(abc.ABC):

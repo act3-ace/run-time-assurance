@@ -8,7 +8,7 @@ import numbers
 
 import numpy as np
 
-from runtime_assurance.state import RTAState
+from run_time_assurance.state import RTAState
 
 
 class ConstraintModule(abc.ABC):
