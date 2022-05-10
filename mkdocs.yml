@@ -107,7 +107,7 @@ nav:
     - rta: reference/rta.md
     - state: reference/state.md
     - zoo:
-        cwh:
+        - cwh:
           - api/zoo/cwh/index.md
           - reference/zoo/cwh/dynamics.md
           - reference/zoo/cwh/docking_2d.md
