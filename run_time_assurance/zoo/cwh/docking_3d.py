@@ -306,9 +306,6 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         upper bound of allowable control. Pass a list for element specific limit. By default 1
     control_bounds_low : Union[float, np.ndarray], optional
         lower bound of allowable control. Pass a list for element specific limit. By default -1
-    backup_controller : RTABackupController, optional
-        backup controller object utilized by rta module to generate backup control.
-        By default Docking2dStopLQRBackupController
     """
 
     def __init__(
@@ -323,7 +320,6 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         z_vel_limit: float = Z_VEL_LIMIT_DEFAULT,
         control_bounds_high: float = 1,
         control_bounds_low: float = -1,
-        backup_controller: RTABackupController = None,
         **kwargs
     ):
         self.m = m
@@ -334,9 +330,6 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         self.x_vel_limit = x_vel_limit
         self.y_vel_limit = y_vel_limit
         self.z_vel_limit = z_vel_limit
-
-        if backup_controller is None:
-            backup_controller = Docking3dStopLQRBackupController(m=self.m, n=self.n)
 
         super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
 
