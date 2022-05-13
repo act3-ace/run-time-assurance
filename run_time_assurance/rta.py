@@ -457,7 +457,7 @@ class ASIFModule(RTAModule):
     ----------
     epislon : float
         threshold distance between desired action and actual safe action at which the rta is said to be intervening
-        default of 1e-2
+        default 1e-2
     """
 
     def __init__(self, *args: Any, epsilon: float = 1e-2, **kwargs: Any):
@@ -645,7 +645,7 @@ class ExplicitASIFModule(ASIFModule):
     ----------
     epislon : float
         threshold distance between desired action and actual safe action at which the rta is said to be intervening
-        default of 1e-2
+        default 1e-2
     """
 
     def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int) -> tuple[np.ndarray, np.ndarray]:

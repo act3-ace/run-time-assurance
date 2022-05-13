@@ -106,6 +106,7 @@ class ConstraintStrengthener(abc.ABC):
         Returns
         -------
         float
+            output of monotonically decreasing constraint strengther function
         """
         raise NotImplementedError
 
@@ -179,6 +180,7 @@ class PolynomialConstraintStrengthener(ConstraintStrengthener):
         Returns
         -------
         float
+            output of monotonically decreasing constraint strengther function
         """
         output = 0
         for n, c in enumerate(self.coefs):
