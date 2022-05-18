@@ -1,3 +1,8 @@
 numpy
 quadprog
 python-constraint
+scipy
+
+## tests
+# linters
+pylint==2.8.3
