@@ -22,6 +22,7 @@ WORKDIR /opt/project
 COPY . .
 
 RUN python setup.py bdist_wheel -d ${RTA_ROOT}
+RUN pip install .
 
 
 #########################################################################################
@@ -31,4 +32,4 @@ RUN python setup.py bdist_wheel -d ${RTA_ROOT}
 # the CI/CD pipeline uses the last stage by default so set your stage for CI/CD here with FROM your_ci_cd_stage as cicd
 # this image should be able to run and test your source code
 # python CI/CD jobs assume a python executable will be in the PATH to run all testing, documentation, etc.
-FROM develop as cicd
+FROM build as cicd
