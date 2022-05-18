@@ -40,6 +40,11 @@ mkdocs:
     paths:
       - site/
 
+unit test:
+  rules:
+    - when: never
+  script:
+    - ls
 
 pages:
   stage: Release
