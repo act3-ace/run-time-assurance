@@ -1,0 +1,114 @@
+#--------------------------------------------------------------------------
+#Air Force Research Laboratory (AFRL) Autonomous Capabilities Team (ACT3)
+#Reinforcement Learning (RL) Core  Extension.
+#
+#This is a US Government Work not subject to copyright protection in the US.
+#
+#The use, dissemination or disclosure of data in this file is subject to
+#limitation or restriction. See accompanying README and LICENSE for details.
+#---------------------------------------------------------------------------
+site_name: Run-Time-Assurance
+site_author: Safe-Autonomy Team
+repo_url: https://github.com/act3-ace/run-time-assurance
+docs_dir: "docs"
+site_url: https://github.com/act3-ace/
+edit_uri: blob/main/docs/
+site_dir: site
+site_description: "The Run Time Assurance "
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          selection:
+            docstring_style: numpy
+  - autorefs
+  - gen-files:
+      scripts:
+        - docs/gen_ref_nav.py  # or any other name or path
+  - section-index
+  - pdf-export:
+      verbose: false
+      media_type: print
+      enabled_if_env: ENABLE_PDF_EXPORT
+      combined: true
+
+
+theme:
+  name: material
+  icon:
+    logo: material/currency-sign
+  features:
+  - navigation.tabs
+  - navigation.top
+  palette:
+  - media: "(prefers-color-scheme: dark)"
+    scheme: slate
+    primary: black
+    accent: lime
+    toggle:
+      icon: material/weather-night
+      name: Switch to light mode
+  - media: "(prefers-color-scheme: light)"
+    scheme: default
+    primary: teal
+    accent: purple
+    toggle:
+      icon: material/weather-sunny
+      name: Switch to dark mode
+
+
+extra_css:
+  - css/style.css
+  - css/material.css
+  - css/mkdocstrings.css
+
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.emoji
+  - pymdownx.magiclink
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - pymdownx.tasklist
+  - toc:
+      permalink: "¤"
+  - codehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_div_format
+
+extra_javascript:
+  - https://unpkg.com/mermaid@8.4.2/dist/mermaid.min.js
+
+handlers:
+  python:
+    setup_commands:
+    - import sys
+    - sys.path.append("docs")
+    selection:
+      new_path_syntax: yes
+    import:  # demonstration purpose in the docs
+      - https://docs.python-requests.org/en/master/objects.inv
+
+nav:
+  - "Introduction": index.md
+  - "API":
+#   - reference/SUMMARY.md  # API "Table of Contents"
+    - api/index.md
+    - constraint: reference/constraint.md
+    - dynamics: reference/dynamics.md
+    - rta: reference/rta.md
+    - state: reference/state.md
+    - zoo:
+        - cwh:
+          - api/zoo/cwh/index.md
+          - reference/zoo/cwh/dynamics.md
+          - reference/zoo/cwh/docking_2d.md
+          - reference/zoo/cwh/docking_3d.md

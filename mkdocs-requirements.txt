@@ -1,0 +1,17 @@
+# docs requirements
+mkdocs
+mkdocs-git-revision-date-localized-plugin
+mkdocs-material
+mkdocs-material-extensions
+mkdocs-mermaid-plugin
+mkdocs-pdf-export-plugin
+mkdocstrings
+mkdocs-autorefs
+mkdocs-coverage
+mkdocs-gen-files
+mkdocs-section-index
+
+papermill
+Pillow
+pymdown-extensions
+pygments

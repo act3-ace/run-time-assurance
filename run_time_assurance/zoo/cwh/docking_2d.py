@@ -103,8 +103,6 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
 
     Parameters
     ----------
-    platform_name : str, optional
-        name of the platform this rta module is attaching to, by default "deputy"
     m : float, optional
         mass in kg of spacecraft, by default M_DEFAULT
     n : float, optional
@@ -181,8 +179,6 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
     ----------
     backup_window : float
         Duration of time in seconds to evaluate backup controller trajectory
-    platform_name : str, optional
-        name of the platform this rta module is attaching to, by default "deputy"
     m : float, optional
         mass in kg of spacecraft, by default M_DEFAULT
     n : float, optional
@@ -262,8 +258,6 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
 
     Parameters
     ----------
-    platform_name : str, optional
-        name of the platform this rta module is attaching to, by default "deputy"
     m : float, optional
         mass in kg of spacecraft, by default M_DEFAULT
     n : float, optional
@@ -345,8 +339,6 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         skipping every skip_length points to reduce the number of backup trajectory constraints. Will always check the
         last point in the backup trajectory as well.
         Defaults to 1, resulting in no skipping.
-    platform_name : str, optional
-        name of the platform this rta module is attaching to, by default "deputy"
     m : float, optional
         mass in kg of spacecraft, by default M_DEFAULT
     n : float, optional
