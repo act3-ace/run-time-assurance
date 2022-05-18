@@ -21,8 +21,8 @@ ENV RTA_ROOT=/opt/libact3-rta
 WORKDIR /opt/project
 COPY . .
 
-RUN python setup.py bdist_wheel -d ${RTA_ROOT}
-RUN pip install .
+RUN python setup.py bdist_wheel -d ${RTA_ROOT} && \
+    pip install --no-cache-dir .
 
 
 #########################################################################################
