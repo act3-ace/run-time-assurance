@@ -39,6 +39,23 @@ using the `-e, --editable` option:
 pip install -e .
 ```
 
+## Build Docs Locally
+
+First make sure the mkdocs requirements are installed 
+
+```shell
+pip install -r mkdocs-requirements.txt
+```
+
+Now, build the documentation and serve it locally. By default, you should be able to reach the docs on your local web browser at `127.0.0.1:8000`
+
+```shell
+rm -r site
+mkdocs build
+cp -r docs/. site/
+mkdocs serve
+```
+
 ## Team
 Umberto Ravaioli,
 Kyle Dunlap,
