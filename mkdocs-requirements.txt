@@ -6,6 +6,7 @@ mkdocs-material-extensions
 mkdocs-mermaid-plugin
 mkdocs-pdf-export-plugin
 mkdocstrings
+mkdocstrings-python-legacy
 mkdocs-autorefs
 mkdocs-coverage
 mkdocs-gen-files
