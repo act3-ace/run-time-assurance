@@ -6,7 +6,7 @@ The run-time-assurance library provides an interface and implementations for Run
 This package contains base classes for implementing RTA modules and defining RTA safety constraints. Also included are generic implementations of the RTA algorithms Explicit Simplex, Implicit Simplex, Explicit Acitive Set Invariance Filter (ASIF), and Implicit ASIF which simply require contraints and control system state transition models to become functional RTA modules for any custom application. Additionally, the RTA Zoo includes our growing library of custom RTA implementations for various safety critical control problems.
 
 ## Docs
-Library documentation and api reference located at [https://rta.github.com/act3-ace/run-time-assurance/](https://rta.github.com/act3-ace/run-time-assurance/)
+Library documentation and api reference located at [https://rta.github.com/act3-ace/safe-autonomy-stack/run-time-assurance/](https://rta.github.com/act3-ace/safe-autonomy-stack/run-time-assurance/)
 
 ## Installation
 The following instructions detail how to install 
