@@ -8,7 +8,7 @@ include:
 
 
 variables:
-  KANIKO_ARGS: --cache=true --skip-unused-stages --registry-mirror=$KANIKO_REGISTRY_MIRROR --cache-repo=$CI_REGISTRY_IMAGE/cache --build-arg IMAGE_REPO_BASE=$IMAGE_REPO_BASE --build-arg PIP_INDEX_URL=$PIP_INDEX_URL --build-arg APT_MIRROR_URL=$APT_MIRROR_URL
+  KANIKO_ARGS: --cache=true --skip-unused-stages --registry-mirror=$KANIKO_REGISTRY_MIRROR --cache-repo=$CI_REGISTRY_IMAGE/cache --build-arg IMAGE_REPO_BASE=$IMAGE_REPO_BASE --build-arg PIP_INDEX_URL=$PIP_INDEX_URL --build-arg APT_MIRROR_URL=$APT_MIRROR_URL --build-arg CI_JOB_TOKEN=$CI_JOB_TOKEN
   APT_MIRROR_URL: http://10.1.3.235:3142/ftp.debian.org/debian
   DO_RELEASE: "true"
   KANIKO_REGISTRY_MIRROR: reg-cache.act3-ace.ai

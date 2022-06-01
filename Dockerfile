@@ -11,6 +11,9 @@ ARG PIP_INDEX_URL
 RUN echo "deb ${APT_MIRROR_URL} stable main contrib non-free" > /etc/apt/sources.list && \
 echo "deb-src ${APT_MIRROR_URL} stable main contrib non-free" >> /etc/apt/sources.list
 
+# Clone dynamics repo
+RUN git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@git.act3-ace.com/rta/safe-autonomy-stack/safe-autonomy-dynamics
+
 #########################################################################################
 # build stage packages the source code
 #########################################################################################
