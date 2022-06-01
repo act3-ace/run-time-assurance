@@ -7,11 +7,11 @@ import numpy as np
 import scipy
 
 from run_time_assurance.constraint import ConstraintModule, ConstraintStateLimit, ConstraintStrengthener, PolynomialConstraintStrengthener
-from run_time_assurance.dynamics import BaseLinearODESolverDynamics
 from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule, RTABackupController
 from run_time_assurance.state import RTAState
 from run_time_assurance.zoo.cwh.docking_2d import V0_DEFAULT, X_VEL_LIMIT_DEFAULT, Y_VEL_LIMIT_DEFAULT
-from run_time_assurance.zoo.cwh.dynamics import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
+from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
 Z_VEL_LIMIT_DEFAULT = 10
 V1_COEF_DEFAULT = 4
