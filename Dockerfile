@@ -6,6 +6,7 @@ ARG IMAGE_REPO_BASE
 FROM ${IMAGE_REPO_BASE}docker.io/python:3.8 as develop
 
 ARG PIP_INDEX_URL
+ARG CI_JOB_TOKEN
 
 #Sets up apt mirrors to replace the default registries
 RUN echo "deb ${APT_MIRROR_URL} stable main contrib non-free" > /etc/apt/sources.list && \
