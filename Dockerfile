@@ -14,6 +14,10 @@ echo "deb-src ${APT_MIRROR_URL} stable main contrib non-free" >> /etc/apt/source
 # Clone dynamics repo
 RUN git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@git.act3-ace.com/rta/safe-autonomy-stack/safe-autonomy-dynamics
 
+RUN python --version && \
+    python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir safe-autonomy-dynamics/
+
 #########################################################################################
 # build stage packages the source code
 #########################################################################################
