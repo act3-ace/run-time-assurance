@@ -83,9 +83,12 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_div_format
+  - pymdownx.arithmatex:  # MathJax (latex)
+      generic: true
 
 extra_javascript:
   - https://unpkg.com/mermaid@8.4.2/dist/mermaid.min.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 handlers:
   python:
