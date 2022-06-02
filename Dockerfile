@@ -6,10 +6,18 @@ ARG IMAGE_REPO_BASE
 FROM ${IMAGE_REPO_BASE}docker.io/python:3.8 as develop
 
 ARG PIP_INDEX_URL
+ARG CI_JOB_TOKEN
 
 #Sets up apt mirrors to replace the default registries
 RUN echo "deb ${APT_MIRROR_URL} stable main contrib non-free" > /etc/apt/sources.list && \
 echo "deb-src ${APT_MIRROR_URL} stable main contrib non-free" >> /etc/apt/sources.list
+
+# Clone dynamics repo
+RUN git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@git.act3-ace.com/rta/safe-autonomy-stack/safe-autonomy-dynamics
+
+RUN python --version && \
+    python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir safe-autonomy-dynamics/
 
 #########################################################################################
 # build stage packages the source code

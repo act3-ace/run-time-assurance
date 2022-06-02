@@ -5,12 +5,12 @@ from typing import Union
 
 import numpy as np
 import scipy
+from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
+from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
 from run_time_assurance.constraint import ConstraintModule, ConstraintStateLimit, ConstraintStrengthener, PolynomialConstraintStrengthener
-from run_time_assurance.dynamics import BaseLinearODESolverDynamics
 from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule, RTABackupController
 from run_time_assurance.state import RTAState
-from run_time_assurance.zoo.cwh.dynamics import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
 X_VEL_LIMIT_DEFAULT = 10
 Y_VEL_LIMIT_DEFAULT = 10
