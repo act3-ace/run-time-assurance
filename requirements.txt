@@ -2,6 +2,7 @@ numpy
 quadprog
 python-constraint
 scipy
+safe-autonomy-dynamics
 
 ## tests
 # linters
