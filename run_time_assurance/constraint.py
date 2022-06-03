@@ -111,9 +111,9 @@ class ConstraintStrengthener(abc.ABC):
         raise NotImplementedError
 
 
-class ConstraintStateLimit(ConstraintModule):
+class ConstraintMagnitudeStateLimit(ConstraintModule):
     """
-    Generic state vector element limit constraint
+    Generic state vector element magnitude limit constraint
     Builds a constraint function for |state[state_index]| <= limit_val
 
     Parameters
@@ -122,7 +122,7 @@ class ConstraintStateLimit(ConstraintModule):
         state vector element limit constraint value
     state_index: int
         index/indices of state vector element to apply limit constraint to
-        Currently only supports since indices
+        Currently only supports single indices
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
@@ -160,7 +160,7 @@ class ConstraintMaxStateLimit(ConstraintModule):
         state vector element limit constraint value
     state_index: int
         index/indices of state vector element to apply limit constraint to
-        Currently only supports since indices
+        Currently only supports single indices
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
@@ -197,7 +197,7 @@ class ConstraintMinStateLimit(ConstraintModule):
         state vector element limit constraint value
     state_index: int
         index/indices of state vector element to apply limit constraint to
-        Currently only supports since indices
+        Currently only supports single indices
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
