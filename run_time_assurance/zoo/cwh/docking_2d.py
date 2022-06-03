@@ -8,7 +8,7 @@ import scipy
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
-from run_time_assurance.constraint import ConstraintModule, ConstraintStateLimit, ConstraintStrengthener, PolynomialConstraintStrengthener
+from run_time_assurance.constraint import ConstraintModule, ConstraintMagnitudeStateLimit, ConstraintStrengthener, PolynomialConstraintStrengthener
 from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule, RTABackupController
 from run_time_assurance.state import RTAState
 
@@ -79,8 +79,8 @@ class Docking2dRTAMixin:
         return OrderedDict(
             [
                 ('rel_vel', ConstraintDocking2dRelativeVelocity(v0=v0, v1=v1)),
-                ('x_vel', ConstraintStateLimit(limit_val=x_vel_limit, state_index=2)),
-                ('y_vel', ConstraintStateLimit(limit_val=y_vel_limit, state_index=3)),
+                ('x_vel', ConstraintMagnitudeStateLimit(limit_val=x_vel_limit, state_index=2)),
+                ('y_vel', ConstraintMagnitudeStateLimit(limit_val=y_vel_limit, state_index=3)),
             ]
         )
 
