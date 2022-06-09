@@ -1,10 +1,7 @@
 include:
-- project: devsecops/cicd/pipeline
-  ref: v3.1.6
-  file: python/packaged_lib.yml
-- project: devsecops/cicd/pipeline
-  ref: v3.1.6
-  file: python/docs.yml
+  - project: devsecops/cicd/pipeline
+    ref: v5.0.10
+    file: 'main.yml'
 
 
 variables:
@@ -17,42 +14,22 @@ variables:
   UNIT_TEST_DIR: tests
 
 mkdocs:
-  stage: Test
-  rules:
-    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME != null'
-      exists:
-        - mkdocs.yml
-    - if: '$CI_COMMIT_TAG =~ /^v([0-9]+)\.([0-9]+)\.([0-9]+)$|^v([0-9]+)\.([0-9]+)\.([0-9]+)-.*$/' 
-      exists:
-        - mkdocs.yml
-    - if: '$CI_COMMIT_REF_PROTECTED == "true"'
-      exists:
-        - mkdocs.yml
-  image:
-    name: $CI_REGISTRY_IMAGE:ci-$CI_PIPELINE_ID
-    entrypoint: ['']
+  allow_failure: true
   variables:
     ENABLE_PDF_EXPORT: 1
   script:
-  - pip install -r mkdocs-requirements.txt
-  - mkdocs build
-  artifacts:
-    paths:
-      - site/
+    - pip install -r mkdocs-requirements.txt
+    - python -m mkdocs build
 
-unit test:
+python unit test:
   rules:
     - when: never
+  variables:
+    UNIT_TEST_DIR: tests
   script:
     - ls
 
 pages:
-  stage: Release
-  image: ${IMAGE_REPO_BASE}docker.io/alpine
-  rules:
-    - if: '$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH'
-      exists:
-        - mkdocs.yml
   script:
     # create public directory if needed
     - mkdir -p public
@@ -60,6 +37,25 @@ pages:
     - mv site/* public/
     # if htmlcov exits (made by the pytest-cov) then move the directory htmlcov to inside directory public (eg. public/htmlcov)
     - if [ -e htmlcov ]; then mv htmlcov/ public/; fi
-  artifacts:
-    paths:
-      - public/
+
+semantic release:
+  variables:
+    DO_RELEASE: "true"
+
+# image specifications
+build image:
+  variables:
+    TARGET_STAGE: cicd
+
+# release images
+build tagged image:
+  variables:
+    TARGET_STAGE: build
+    DESTINATION_PATH: /releases
+
+package image:
+  stage: Containerize
+  extends: build tagged image
+  variables:
+    TARGET_STAGE: package
+    DESTINATION_PATH: /releases/$TARGET_STAGE
