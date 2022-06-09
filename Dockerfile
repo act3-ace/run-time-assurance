@@ -5,7 +5,7 @@ ARG ACT3_OCI_REGISTRY=reg.git.act3-ace.com
 ARG IMAGE_REPO_BASE
 ARG SA_DYNAMICS_TAG=0.0.1
 
-FROM ${ACT3_OCI_REGISTRY}/rta/safe-autonomy-stack/safe-autonomy-dynamics/releases/package:v${SA_DYNAMICS_TAG} as sa_dynamics_package
+FROM ${ACT3_OCI_REGISTRY}/rta/safe-autonomy-stack/safe-autonomy-dynamics/releases/package:v0.0.1001 as sa_dynamics_package
 
 FROM ${IMAGE_REPO_BASE}docker.io/python:3.8 as develop
 
