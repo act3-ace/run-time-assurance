@@ -111,9 +111,9 @@ class ConstraintStrengthener(abc.ABC):
         raise NotImplementedError
 
 
-class ConstraintStateLimit(ConstraintModule):
+class ConstraintMagnitudeStateLimit(ConstraintModule):
     """
-    Generic state vector element limit constraint
+    Generic state vector element magnitude limit constraint
     Builds a constraint function for |state[state_index]| <= limit_val
 
     Parameters
@@ -122,7 +122,7 @@ class ConstraintStateLimit(ConstraintModule):
         state vector element limit constraint value
     state_index: int
         index/indices of state vector element to apply limit constraint to
-        Currently only supports since indices
+        Currently only supports single indices
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
@@ -146,6 +146,80 @@ class ConstraintStateLimit(ConstraintModule):
         gh = np.zeros((state_vec.size, state_vec.size), dtype=float)
         gh[self.state_index, self.state_index] = -2
         g = gh @ state_vec
+        return g
+
+
+class ConstraintMaxStateLimit(ConstraintModule):
+    """
+    Generic state vector element maximum limit constraint
+    Builds a constraint function for state[state_index] <= limit_val
+
+    Parameters
+    ----------
+    limit_val : float
+        state vector element limit constraint value
+    state_index: int
+        index/indices of state vector element to apply limit constraint to
+        Currently only supports single indices
+    alpha : ConstraintStrengthener
+        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
+        Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
+    """
+
+    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None):
+        self.limit_val = limit_val
+        self.state_index = state_index
+
+        if alpha is None:
+            alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
+        super().__init__(alpha=alpha)
+
+    def _compute(self, state: RTAState) -> float:
+        state_vec = state.vector
+        return self.limit_val - state_vec[self.state_index]
+
+    def grad(self, state: RTAState) -> np.ndarray:
+        state_vec = state.vector
+
+        g = np.zeros(state_vec.size, dtype=float)
+        g[self.state_index] = -1
+        return g
+
+
+class ConstraintMinStateLimit(ConstraintModule):
+    """
+    Generic state vector element minimum limit constraint
+    Builds a constraint function for state[state_index] >= limit_val
+
+    Parameters
+    ----------
+    limit_val : float
+        state vector element limit constraint value
+    state_index: int
+        index/indices of state vector element to apply limit constraint to
+        Currently only supports single indices
+    alpha : ConstraintStrengthener
+        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
+        Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
+    """
+
+    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None):
+        self.limit_val = limit_val
+        self.state_index = state_index
+
+        if alpha is None:
+            alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
+        super().__init__(alpha=alpha)
+
+    def _compute(self, state: RTAState) -> float:
+        state_vec = state.vector
+        return state_vec[self.state_index] - self.limit_val
+
+    def grad(self, state: RTAState) -> np.ndarray:
+        state_vec = state.vector
+
+        g = np.zeros(state_vec.size, dtype=float)
+        g[self.state_index] = 1
         return g
 
 
