@@ -246,6 +246,58 @@ class RTABackupController(abc.ABC):
         """
 
 
+class CascadedRTA(RTAModule):
+    """Base class for cascaded RTA systems
+    """
+    def __init__(self, *args: Any, **kwargs: Any):
+        self.rta_list = self._setup_rta_list()
+        super().__init__(*args, **kwargs)
+
+    def _filter_control(self, state: RTAState, step_size: float, control: np.ndarray) -> np.ndarray:
+        """Filters desired control into safe action using multiple RTA objects
+        Note: Satisfaction of all constraints ("safety") is not guaranteed when constraints are conflicting
+
+        Parameters
+        ----------
+        state : RTAState
+            current rta state of the system
+        step_size : float
+            simulation step size
+        control : np.ndarray
+            desired control vector
+
+        Returns
+        -------
+        np.ndarray
+            safe filtered control vector
+        """
+        for rta_object in self.rta_list:
+            rta = rta_object()
+            control = np.copy(rta._filter_control(state, step_size, control))
+            if rta.intervening:
+                self.intervening = True
+
+        return control
+
+    @abc.abstractmethod
+    def _setup_rta_list(self) -> list:
+        """Setup list of RTA objects
+
+        Returns
+        -------
+        list
+            list of RTA objects in order from lowest to highest priority
+            for list of length N, where {i = 1, ..., N}, output of RTA {i} is passed as input RTA {i+1}
+        """
+        raise NotImplementedError()
+
+    def _setup_constraints(self) -> OrderedDict:
+        pass
+
+    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> RTAState:
+        pass
+
+
 class BackupControlBasedRTA(RTAModule):
     """Base class for backup control based RTA algorithms
     Adds iterfaces for backup controller member
