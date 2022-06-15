@@ -249,6 +249,7 @@ class RTABackupController(abc.ABC):
 class CascadedRTA(RTAModule):
     """Base class for cascaded RTA systems
     """
+
     def __init__(self, *args: Any, **kwargs: Any):
         self.rta_list = self._setup_rta_list()
         super().__init__(*args, **kwargs)
