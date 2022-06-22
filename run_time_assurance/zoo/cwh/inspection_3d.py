@@ -328,13 +328,10 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
         super().__init__(alpha=alpha)
 
     def _compute(self, state: RTAState) -> float:
-        try:
-            state_vec = state.vector
-        except Exception:
-            state_vec = state
+        state_vec = state.vector
 
-        delta_p = state_vec[0:3] - state_vec[self.deputy * 6:self.deputy * 6 + 3]
-        delta_v = state_vec[3:6] - state_vec[self.deputy * 6 + 3:self.deputy * 6 + 6]
+        delta_p = state_vec[0:3] - state_vec[int(self.deputy * 6):int(self.deputy * 6 + 3)]
+        delta_v = state_vec[3:6] - state_vec[int(self.deputy * 6 + 3):int(self.deputy * 6 + 6)]
         mag_delta_p = np.linalg.norm(delta_p)
         h = np.sqrt(4 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
         return float(h)
@@ -342,8 +339,8 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
     def grad(self, state: RTAState) -> np.ndarray:
         i = self.deputy
         x = state.vector
-        dp = x[0:3] - x[i * 6:i * 6 + 3]
-        dv = x[3:6] - x[i * 6 + 3:i * 6 + 6]
+        dp = x[0:3] - x[int(i * 6):int(i * 6 + 3)]
+        dv = x[3:6] - x[int(i * 6 + 3):int(i * 6 + 6)]
         mdp = np.linalg.norm(dp)
         mdv = dp.T @ dv
         a = self.a_max / (mdp * np.sqrt(self.a_max * (mdp - self.collision_radius))) - mdv / mdp**3
@@ -387,7 +384,7 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
     def _compute(self, state: RTAState) -> float:
         try:
             state_vec = state.vector
-        except Exception:
+        except AttributeError:
             state_vec = state
 
         p = state_vec[0:3]
