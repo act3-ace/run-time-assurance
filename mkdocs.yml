@@ -102,7 +102,17 @@ handlers:
 
 nav:
   - "Introduction": index.md
-  - "Concepts": RTA/index.md
+  - "Concepts":
+    - RTA/index.md
+    - "Defining Safety": RTA/safety.md
+    - "Simplex RTA Filters": 
+      - RTA/simplex.md
+      - "Explicit Simplex": RTA/explicit_simplex.md
+      - "Implicit Simplex": RTA/implicit_simplex.md
+    - "ASIF RTA Filters":
+      - RTA/asif.md
+      - "Explicit ASIF": RTA/explicit_asif.md
+      - "Implicit ASIF": RTA/implicit_asif.md
   - "API":
 #   - reference/SUMMARY.md  # API "Table of Contents"
     - api/index.md
