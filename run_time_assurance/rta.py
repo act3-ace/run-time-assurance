@@ -53,7 +53,6 @@ class RTAModule(abc.ABC):
         super().__init__(*args, **kwargs)
 
         self._setup_properties()
-        self.constraints = self._setup_constraints()
 
     def reset(self):
         """Resets the rta module to the initial state at the beginning of an episode
@@ -67,18 +66,6 @@ class RTAModule(abc.ABC):
         """Additional initialization function to allow custom initialization to run after baseclass initialization,
         but before constraint initialization"""
 
-    @abc.abstractmethod
-    def _setup_constraints(self) -> OrderedDict:
-        """Initializes and returns RTA constraints
-
-        Returns
-        -------
-        OrderedDict
-            OrderedDict of rta contraints with name string keys and ConstraintModule object values
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
     def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> RTAState:
         """predict the next state of the system given the current state, step size, and control vector"""
         raise NotImplementedError()
@@ -194,6 +181,73 @@ class RTAModule(abc.ABC):
         return RTAState(vector=vector)
 
 
+class ConstraintBasedRTA(RTAModule):
+    """Base class for constraint-based RTA systems
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.constraints = self._setup_constraints()
+
+    @abc.abstractmethod
+    def _setup_constraints(self) -> OrderedDict:
+        """Initializes and returns RTA constraints
+
+        Returns
+        -------
+        OrderedDict
+            OrderedDict of rta contraints with name string keys and ConstraintModule object values
+        """
+        raise NotImplementedError()
+
+
+class CascadedRTA(RTAModule):
+    """Base class for cascaded RTA systems
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        self.rta_list = self._setup_rta_list()
+        super().__init__(*args, **kwargs)
+
+    def _filter_control(self, state: RTAState, step_size: float, control: np.ndarray) -> np.ndarray:
+        """Filters desired control into safe action using multiple RTA objects
+        Note: Satisfaction of all constraints ("safety") is not guaranteed when constraints are conflicting
+
+        Parameters
+        ----------
+        state : RTAState
+            current rta state of the system
+        step_size : float
+            simulation step size
+        control : np.ndarray
+            desired control vector
+
+        Returns
+        -------
+        np.ndarray
+            safe filtered control vector
+        """
+        for rta_object in self.rta_list:
+            rta = rta_object()
+            control = np.copy(rta.filter_control(state, step_size, control))
+            if rta.intervening:
+                self.intervening = True
+
+        return control
+
+    @abc.abstractmethod
+    def _setup_rta_list(self) -> list:
+        """Setup list of RTA objects
+
+        Returns
+        -------
+        list
+            list of RTA objects in order from lowest to highest priority
+            for list of length N, where {i = 1, ..., N}, output of RTA {i} is passed as input RTA {i+1}
+        """
+        raise NotImplementedError()
+
+
 class RTABackupController(abc.ABC):
     """Base Class for backup controllers used by backup control based RTA methods
     """
@@ -246,60 +300,7 @@ class RTABackupController(abc.ABC):
         """
 
 
-class CascadedRTA(RTAModule):
-    """Base class for cascaded RTA systems
-    """
-
-    def __init__(self, *args: Any, **kwargs: Any):
-        self.rta_list = self._setup_rta_list()
-        super().__init__(*args, **kwargs)
-
-    def _filter_control(self, state: RTAState, step_size: float, control: np.ndarray) -> np.ndarray:
-        """Filters desired control into safe action using multiple RTA objects
-        Note: Satisfaction of all constraints ("safety") is not guaranteed when constraints are conflicting
-
-        Parameters
-        ----------
-        state : RTAState
-            current rta state of the system
-        step_size : float
-            simulation step size
-        control : np.ndarray
-            desired control vector
-
-        Returns
-        -------
-        np.ndarray
-            safe filtered control vector
-        """
-        for rta_object in self.rta_list:
-            rta = rta_object()
-            control = np.copy(rta._filter_control(state, step_size, control))
-            if rta.intervening:
-                self.intervening = True
-
-        return control
-
-    @abc.abstractmethod
-    def _setup_rta_list(self) -> list:
-        """Setup list of RTA objects
-
-        Returns
-        -------
-        list
-            list of RTA objects in order from lowest to highest priority
-            for list of length N, where {i = 1, ..., N}, output of RTA {i} is passed as input RTA {i+1}
-        """
-        raise NotImplementedError()
-
-    def _setup_constraints(self) -> OrderedDict:
-        pass
-
-    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> RTAState:
-        pass
-
-
-class BackupControlBasedRTA(RTAModule):
+class BackupControlBasedRTA(ConstraintBasedRTA):
     """Base class for backup control based RTA algorithms
     Adds iterfaces for backup controller member
 
@@ -499,7 +500,7 @@ class ImplicitSimplexModule(SimplexModule):
         return traj_states
 
 
-class ASIFModule(RTAModule):
+class ASIFModule(ConstraintBasedRTA):
     """
     Base class for Active Set Invariance Filter Optimization RTA
 
