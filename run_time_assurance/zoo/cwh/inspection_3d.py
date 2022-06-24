@@ -3,6 +3,7 @@
 from collections import OrderedDict
 
 import numpy as np
+import scipy
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
@@ -189,19 +190,19 @@ class InspectionRTA(ExplicitASIFModule):
                 (
                     'x_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.x_vel_limit, state_index=3, grad_len=6, alpha=PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
+                        limit_val=self.x_vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
                     )
                 ),
                 (
                     'y_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.y_vel_limit, state_index=4, grad_len=6, alpha=PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
+                        limit_val=self.y_vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
                     )
                 ),
                 (
                     'z_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.z_vel_limit, state_index=5, grad_len=6, alpha=PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
+                        limit_val=self.z_vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
                     )
                 )
             ]
@@ -220,10 +221,16 @@ class InspectionRTA(ExplicitASIFModule):
         return next_state_vec
 
     def state_transition_system(self, state: RTAState) -> np.ndarray:
-        return self.A @ state.vector[0:6]
+        A = np.copy(self.A)
+        for _ in range(self.num_deputies - 1):
+            A = scipy.linalg.block_diag(A, np.copy(self.A))
+        return A @ state.vector
 
     def state_transition_input(self, state: RTAState) -> np.ndarray:
-        return np.copy(self.B)
+        B = np.copy(self.B)
+        for _ in range(self.num_deputies - 1):
+            B = np.vstack((B, np.zeros(self.B.shape)))
+        return B
 
 
 class ConstraintCWHRelativeVelocity(ConstraintModule):
@@ -255,13 +262,15 @@ class ConstraintCWHRelativeVelocity(ConstraintModule):
 
     def grad(self, state: RTAState) -> np.ndarray:
         state_vec = state.vector
+        g_full = np.zeros(len(state_vec))
         a = self.v1 / np.linalg.norm(state_vec[0:3])
         denom = np.linalg.norm(state_vec[3:6])
         if denom == 0:
             denom = 0.000001
         b = -1 / denom
         g = np.array([a * state_vec[0], a * state_vec[1], a * state_vec[2], b * state_vec[3], b * state_vec[4], b * state_vec[5]])
-        return g
+        g_full[0:6] = g
+        return g_full
 
 
 class ConstraintCWHChiefCollision(ConstraintModule):
@@ -296,12 +305,15 @@ class ConstraintCWHChiefCollision(ConstraintModule):
 
     def grad(self, state: RTAState) -> np.ndarray:
         x = state.vector
+        g_full = np.zeros(len(x))
         dp = x[0:3]
         dv = x[3:6]
         mdp = np.linalg.norm(x[0:3])
         mdv = dp.T @ dv
         a = self.a_max / (mdp * np.sqrt(2 * self.a_max * (mdp - self.collision_radius))) - mdv / mdp**3
-        return np.array([x[0] * a + x[3] / mdp, x[1] * a + x[4] / mdp, x[2] * a + x[5] / mdp, x[0] / mdp, x[1] / mdp, x[2] / mdp])
+        g = np.array([x[0] * a + x[3] / mdp, x[1] * a + x[4] / mdp, x[2] * a + x[5] / mdp, x[0] / mdp, x[1] / mdp, x[2] / mdp])
+        g_full[0:6] = g
+        return g_full
 
 
 class ConstraintCWHDeputyCollision(ConstraintModule):
@@ -339,6 +351,7 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
     def grad(self, state: RTAState) -> np.ndarray:
         i = self.deputy
         x = state.vector
+        g_full = np.zeros(len(x))
         dp = x[0:3] - x[int(i * 6):int(i * 6 + 3)]
         dv = x[3:6] - x[int(i * 6 + 3):int(i * 6 + 6)]
         mdp = np.linalg.norm(dp)
@@ -351,7 +364,9 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
                 (x[2] - x[6 * i + 2]) / mdp
             ]
         )
-        return g
+        g_full[0:6] = g
+        g_full[int(i * 6):int(i * 6 + 6)] = -g
+        return g_full
 
 
 class ConstraintCWHSunAvoidance(ConstraintModule):
@@ -382,10 +397,7 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
         super().__init__(alpha=alpha)
 
     def _compute(self, state: RTAState) -> float:
-        try:
-            state_vec = state.vector
-        except AttributeError:
-            state_vec = state
+        state_vec = state.vector
 
         p = state_vec[0:3]
         p_es = p - np.dot(p, self.e_hat) * self.e_hat
@@ -399,11 +411,14 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
 
     def grad(self, state: RTAState) -> np.ndarray:
         # Numerical approximation
-        x = state.vector[0:6]
+        state_vec = state.vector[0:6]
+        g_full = np.zeros(len(state.vector))
         gh = []
         delta = 10e-4
-        Delta = 0.5 * delta * np.eye(len(x))
-        for i in range(len(x)):
-            gh.append((self._compute(x + Delta[i]) - self._compute(x - Delta[i])) / delta)
-
-        return np.array(gh)
+        Delta = 0.5 * delta * np.eye(len(state_vec))
+        for i in range(len(state_vec)):
+            x1 = RTAState(state_vec + Delta[i])
+            x2 = RTAState(state_vec - Delta[i])
+            gh.append((self._compute(x1) - self._compute(x2)) / delta)
+        g_full[0:6] = np.array(gh)
+        return g_full

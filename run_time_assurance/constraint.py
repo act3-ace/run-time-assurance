@@ -123,17 +123,14 @@ class ConstraintMagnitudeStateLimit(ConstraintModule):
     state_index: int
         index/indices of state vector element to apply limit constraint to
         Currently only supports single indices
-    grad_len : float
-        length of gradient, defaults to length of state
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
     """
 
-    def __init__(self, limit_val: float, state_index: int, grad_len: int = None, alpha: ConstraintStrengthener = None):
+    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None):
         self.limit_val = limit_val
         self.state_index = state_index
-        self.grad_len = grad_len
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
@@ -146,13 +143,10 @@ class ConstraintMagnitudeStateLimit(ConstraintModule):
     def grad(self, state: RTAState) -> np.ndarray:
         state_vec = state.vector
 
-        if self.grad_len is None:
-            self.grad_len = state_vec.size
-
         gh = np.zeros((state_vec.size, state_vec.size), dtype=float)
         gh[self.state_index, self.state_index] = -2
         g = gh @ state_vec
-        return g[0:self.grad_len]
+        return g
 
 
 class ConstraintMaxStateLimit(ConstraintModule):
@@ -167,17 +161,14 @@ class ConstraintMaxStateLimit(ConstraintModule):
     state_index: int
         index/indices of state vector element to apply limit constraint to
         Currently only supports single indices
-    grad_len : float
-        length of gradient, defaults to length of state
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
     """
 
-    def __init__(self, limit_val: float, state_index: int, grad_len: int = None, alpha: ConstraintStrengthener = None):
+    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None):
         self.limit_val = limit_val
         self.state_index = state_index
-        self.grad_len = grad_len
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
@@ -190,12 +181,9 @@ class ConstraintMaxStateLimit(ConstraintModule):
     def grad(self, state: RTAState) -> np.ndarray:
         state_vec = state.vector
 
-        if self.grad_len is None:
-            self.grad_len = state_vec.size
-
         g = np.zeros(state_vec.size, dtype=float)
         g[self.state_index] = -1
-        return g[0:self.grad_len]
+        return g
 
 
 class ConstraintMinStateLimit(ConstraintModule):
@@ -210,17 +198,14 @@ class ConstraintMinStateLimit(ConstraintModule):
     state_index: int
         index/indices of state vector element to apply limit constraint to
         Currently only supports single indices
-    grad_len : float
-        length of gradient, defaults to length of state
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
     """
 
-    def __init__(self, limit_val: float, state_index: int, grad_len: int = None, alpha: ConstraintStrengthener = None):
+    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None):
         self.limit_val = limit_val
         self.state_index = state_index
-        self.grad_len = grad_len
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
@@ -233,12 +218,9 @@ class ConstraintMinStateLimit(ConstraintModule):
     def grad(self, state: RTAState) -> np.ndarray:
         state_vec = state.vector
 
-        if self.grad_len is None:
-            self.grad_len = state_vec.size
-
         g = np.zeros(state_vec.size, dtype=float)
         g[self.state_index] = 1
-        return g[0:self.grad_len]
+        return g
 
 
 class PolynomialConstraintStrengthener(ConstraintStrengthener):
