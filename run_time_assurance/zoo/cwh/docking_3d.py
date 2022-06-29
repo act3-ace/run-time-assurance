@@ -454,8 +454,8 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
     def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Docking3dState:
         return self.gen_rta_state(self._docking_pred_state(state, step_size, control))
 
-    def compute_jacobian(self, state: RTAState) -> np.ndarray:
-        return self.A + self.B @ self.backup_controller.compute_jacobian(state)
+    def compute_jacobian(self, state: RTAState, step_size: float) -> np.ndarray:
+        return self.A + self.B @ self.backup_controller.compute_jacobian(state, step_size)
 
     def state_transition_system(self, state: RTAState) -> np.ndarray:
         return self._docking_f_x(state)
@@ -497,7 +497,7 @@ class Docking3dStopLQRBackupController(RTABackupController):
 
         return backup_action
 
-    def compute_jacobian(self, state: RTAState):
+    def compute_jacobian(self, state: RTAState, step_size: float) -> np.ndarray:
         return -self.K
 
 
@@ -596,7 +596,7 @@ class Docking3dENMTTrackingBackupController(RTABackupController):
 
         return backup_action
 
-    def compute_jacobian(self, state: RTAState) -> np.ndarray:
+    def compute_jacobian(self, state: RTAState, step_size: float) -> np.ndarray:
         return -self.K_1
 
     def find_eNMT(self, state_vec: np.ndarray) -> np.ndarray:
