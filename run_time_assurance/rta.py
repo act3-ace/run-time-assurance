@@ -216,13 +216,15 @@ class RTABackupController(abc.ABC):
         """
         raise NotImplementedError()
 
-    def compute_jacobian(self, state: RTAState) -> np.ndarray:
+    def compute_jacobian(self, state: RTAState, step_size: float) -> np.ndarray:
         """Computes the Jacobian of the backup controller's control output wrt the state. Used by implicit asif methods.
 
         Parameters
         ----------
         state : RTAState
             Current rta state of the system at which to evaluate the jacobian
+        step_size : float
+            time duration over which backup control action will be applied
 
         Returns
         -------
@@ -863,7 +865,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         for _ in range(1, Nsteps):
             control = self.backup_control(state, step_size)
             state = self._pred_state(state, step_size, control)
-            sensitivity = sensitivity + (self.compute_jacobian(state) @ sensitivity) * step_size
+            sensitivity = sensitivity + (self.compute_jacobian(state, step_size) @ sensitivity) * step_size
 
             traj_states.append(state)
             traj_sensitivity.append(sensitivity)
@@ -873,13 +875,15 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         return traj_states, traj_sensitivity
 
     @abc.abstractmethod
-    def compute_jacobian(self, state: RTAState) -> np.ndarray:
+    def compute_jacobian(self, state: RTAState, step_size: float) -> np.ndarray:
         """Computes Jacobian of system state transition J(f(x) + g(x,u)) wrt x
 
         Parameters
         ----------
         state : RTAState
             Current RTAState of the system at which to evaluate Jacobian
+        step_size : float
+            simulation integration step size
 
         Returns
         -------
