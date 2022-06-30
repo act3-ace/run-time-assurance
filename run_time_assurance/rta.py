@@ -227,8 +227,7 @@ class CascadedRTA(RTAModule):
         np.ndarray
             safe filtered control vector
         """
-        for rta_object in self.rta_list:
-            rta = rta_object()
+        for rta in self.rta_list:
             control = np.copy(rta.filter_control(state, step_size, control))
             if rta.intervening:
                 self.intervening = True
