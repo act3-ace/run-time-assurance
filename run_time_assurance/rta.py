@@ -12,10 +12,12 @@ import abc
 from collections import OrderedDict
 from typing import Any, Optional, Union
 
+import jax.numpy as jnp
 import numpy as np
 import quadprog
 
-from run_time_assurance.state import RTAState
+from run_time_assurance.constraint import ConstraintModule
+from run_time_assurance.state import RTAStateWrapper
 
 
 class RTAModule(abc.ABC):
@@ -23,9 +25,9 @@ class RTAModule(abc.ABC):
 
     Parameters
     ----------
-    control_bounds_high : Union[float, int, list], optional
+    control_bounds_high : Union[float, int, list, np.ndarray], optional
         upper bound of allowable control. Pass a list for element specific limit. By default None
-    control_bounds_low : Union[float, int, list], optional
+    control_bounds_low : Union[float, int, list, np.ndarray], optional
         upper bound of allowable control. Pass a list for element specific limit. By default None
     """
 
@@ -42,8 +44,8 @@ class RTAModule(abc.ABC):
         if isinstance(control_bounds_low, list):
             control_bounds_low = np.array(control_bounds_low, float)
 
-        self.control_bounds_high = control_bounds_high
-        self.control_bounds_low = control_bounds_low
+        self.control_bounds_high = jnp.array(control_bounds_high)
+        self.control_bounds_low = jnp.array(control_bounds_low)
 
         self.enable = True
         self.intervening = False
@@ -68,7 +70,7 @@ class RTAModule(abc.ABC):
         but before constraint initialization"""
 
     @abc.abstractmethod
-    def _setup_constraints(self) -> OrderedDict:
+    def _setup_constraints(self) -> OrderedDict[str, ConstraintModule]:
         """Initializes and returns RTA constraints
 
         Returns
@@ -79,24 +81,24 @@ class RTAModule(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> RTAState:
+    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """predict the next state of the system given the current state, step size, and control vector"""
         raise NotImplementedError()
 
-    def _get_state(self, input_state) -> RTAState:
+    def _get_state(self, input_state) -> jnp.ndarray:
         """Converts the global state to an internal RTA state"""
 
-        assert isinstance(input_state, (RTAState, np.ndarray)), (
+        assert isinstance(input_state, (np.ndarray, jnp.ndarray)), (
             "input_state must be an RTAState or numpy array. "
             "If you are tying to use a custom state variable, make sure to implement a custom "
             "_get_state() method to translate your custom state to an RTAState")
 
-        if isinstance(input_state, RTAState):
+        if isinstance(input_state, jnp.ndarray):
             return input_state
 
-        return self.gen_rta_state(vector=input_state)
+        return jnp.array(input_state)
 
-    def filter_control(self, input_state, step_size: float, control: np.ndarray) -> np.ndarray:
+    def filter_control(self, input_state, step_size: float, control_desired: np.ndarray) -> np.ndarray:
         """filters desired control into safe action
 
         Parameters
@@ -107,7 +109,7 @@ class RTAModule(abc.ABC):
             If custom _get_state() method is not implemented, must be an RTAState or numpy.ndarray instance.
         step_size : float
             time duration over which filtered control will be applied to actuators
-        control : np.ndarray
+        control_desired : np.ndarray
             desired control vector
 
         Returns
@@ -115,32 +117,33 @@ class RTAModule(abc.ABC):
         np.ndarray
             safe filtered control vector
         """
-        self.control_desired = np.copy(control)
+        self.control_desired = np.copy(control_desired)
 
         if self.enable:
             state = self._get_state(input_state)
-            self.control_actual = np.copy(self._filter_control(state, step_size, control))
+            control_actual = self._clip_control(self._filter_control(state, step_size, jnp.array(control_desired)))
+            self.control_actual = np.array(control_actual)
         else:
-            self.control_actual = np.copy(control)
+            self.control_actual = np.copy(control_desired)
 
         return np.copy(self.control_actual)
 
     @abc.abstractmethod
-    def _filter_control(self, state: RTAState, step_size: float, control: np.ndarray) -> np.ndarray:
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """custom logic for filtering desired control into safe action
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             current rta state of the system
         step_size : float
             simulation step size
-        control : np.ndarray
+        control : jnp.ndarray
             desired control vector
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             safe filtered control vector
         """
         raise NotImplementedError()
@@ -162,36 +165,21 @@ class RTAModule(abc.ABC):
 
         return info
 
-    def _clip_control(self, control: np.ndarray) -> np.ndarray:
+    def _clip_control(self, control: jnp.ndarray) -> jnp.ndarray:
         """clip control vector values to specified upper and lower bounds
         Parameters
         ----------
-        control : np.ndarray
+        control : jnp.ndarray
             raw control vector
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             clipped control vector
         """
         if self.control_bounds_low is not None or self.control_bounds_high is not None:
-            control = np.clip(control, self.control_bounds_low, self.control_bounds_high)  # type: ignore
+            control = jnp.clip(control, self.control_bounds_low, self.control_bounds_high)  # type: ignore
         return control
-
-    def gen_rta_state(self, vector: np.ndarray) -> RTAState:
-        """Wraps a numpy array into an rta state
-
-        Parameters
-        ----------
-        vector : np.array
-            state vector
-
-        Returns
-        -------
-        RTAState
-            rta state derived from input state vector
-        """
-        return RTAState(vector=vector)
 
 
 class RTABackupController(abc.ABC):
