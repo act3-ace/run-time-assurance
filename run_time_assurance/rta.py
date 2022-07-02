@@ -187,37 +187,20 @@ class RTABackupController(abc.ABC):
     """
 
     @abc.abstractmethod
-    def generate_control(self, state: RTAState, step_size: float) -> np.ndarray:
+    def generate_control(self, state: jnp.ndarray, step_size: float) -> jnp.ndarray:
         """Generates safe backup control given the current state and step size
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             current rta state of the system
         step_size : float
             time duration over which backup control action will be applied
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             control vector
-        """
-        raise NotImplementedError()
-
-    def compute_jacobian(self, state: RTAState, step_size: float) -> np.ndarray:
-        """Computes the Jacobian of the backup controller's control output wrt the state. Used by implicit asif methods.
-
-        Parameters
-        ----------
-        state : RTAState
-            Current rta state of the system at which to evaluate the jacobian
-        step_size : float
-            time duration over which backup control action will be applied
-
-        Returns
-        -------
-        np.ndarray
-            Jacobian of the output control vector wrt the state input
         """
         raise NotImplementedError()
 
@@ -228,11 +211,15 @@ class RTABackupController(abc.ABC):
     def save(self):
         """Save the internal state of the backup controller
         Allows trajectory integration with a stateful backup controller
+
+        !!! Note stateful backup controllers are not compatible with jax jit compilation
         """
 
     def restore(self):
         """Restores the internal state of the backup controller from the last save
         Allows trajectory integration with a stateful backup controller
+
+        !!! Note stateful backup controllers are not compatible with jax jit compilation
         """
 
 
@@ -250,7 +237,7 @@ class BackupControlBasedRTA(RTAModule):
         self.backup_controller = backup_controller
         super().__init__(*args, **kwargs)
 
-    def backup_control(self, state: RTAState, step_size: float) -> np.ndarray:
+    def backup_control(self, state: jnp.ndarray, step_size: float) -> jnp.ndarray:
         """retrieve safe backup control given the current state
 
         Parameters
@@ -262,7 +249,7 @@ class BackupControlBasedRTA(RTAModule):
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             backup control vector
         """
         control = self.backup_controller.generate_control(state, step_size)
@@ -277,12 +264,16 @@ class BackupControlBasedRTA(RTAModule):
     def backup_controller_save(self):
         """Save the internal state of the backup controller
         Allows trajectory integration with a stateful backup controller
+
+        !!! Note stateful backup controllers are not compatible with jax jit compilation
         """
         self.backup_controller.save()
 
     def backup_controller_restore(self):
         """Restores the internal state of the backup controller from the last save
         Allows trajectory integration with a stateful backup controller
+
+        !!! Note stateful backup controllers are not compatible with jax jit compilation
         """
         self.backup_controller.restore()
 
