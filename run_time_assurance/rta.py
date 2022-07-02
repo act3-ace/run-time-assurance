@@ -15,6 +15,7 @@ from typing import Any, Optional, Union
 import jax.numpy as jnp
 import numpy as np
 import quadprog
+from jax import lax
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.state import RTAStateWrapper
@@ -242,7 +243,7 @@ class BackupControlBasedRTA(RTAModule):
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             current rta state of the system
         step_size : float
             time duration over which backup control action will be applied
@@ -296,7 +297,7 @@ class SimplexModule(BackupControlBasedRTA):
         super().reset()
         self.reset_backup_controller()
 
-    def _filter_control(self, state: RTAState, step_size: float, control: np.ndarray) -> np.ndarray:
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Simplex implementation of filter control
         Returns backup control if monitor returns True
         """
@@ -307,12 +308,12 @@ class SimplexModule(BackupControlBasedRTA):
 
         return control
 
-    def monitor(self, state: RTAState, step_size: float, control: np.ndarray) -> bool:
+    def monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> bool:
         """Detects if desired control will result in an unsafe state
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             Current rta state of the system
         step_size : float
             time duration over which filtered control will be applied to actuators
@@ -327,12 +328,12 @@ class SimplexModule(BackupControlBasedRTA):
         return self._monitor(state, step_size, control, self.intervening)
 
     @abc.abstractmethod
-    def _monitor(self, state: RTAState, step_size: float, control: np.ndarray, intervening: bool) -> bool:
+    def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         """custom monitor implementation
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             Current rta state of the system
         step_size : float
             time duration over which filtered control will be applied to actuators
@@ -355,13 +356,17 @@ class ExplicitSimplexModule(SimplexModule):
     Requires a backup controller which is known safe within the constraint set
     """
 
-    def _monitor(self, state: RTAState, step_size: float, control: np.ndarray, intervening: bool) -> bool:
+    def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         pred_state = self._pred_state(state, step_size, control)
-        for c in self.constraints.values():
-            if c(pred_state) < 0:
-                return True
 
-        return False
+        constraint_list = list(self.constraints.values())
+
+        def body_fun(i: int, val: bool):
+            return val or constraint_list[i](pred_state) < 0
+
+        constraint_violated = lax.fori_loop(0, len(constraint_list), body_fun, False)
+
+        return constraint_violated
 
 
 class ImplicitSimplexModule(SimplexModule):
@@ -383,12 +388,13 @@ class ImplicitSimplexModule(SimplexModule):
         self.backup_window = backup_window
         super().__init__(*args, backup_controller=backup_controller, **kwargs)
 
-    def _monitor(self, state: RTAState, step_size: float, control: np.ndarray, intervening: bool) -> bool:
+    def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         Nsteps = int(self.backup_window / step_size) + 1
 
         next_state = self._pred_state(state, step_size, control)
         traj_states = self.integrate(next_state, step_size, Nsteps)
 
+        # TODO vectorize
         for i in range(Nsteps):
             for c in self.constraints.values():
                 if c(traj_states[i]) < 0:
@@ -396,12 +402,12 @@ class ImplicitSimplexModule(SimplexModule):
 
         return False
 
-    def integrate(self, state: RTAState, step_size: float, Nsteps: int) -> list:
+    def integrate(self, state: jnp.ndarray, step_size: float, Nsteps: int) -> list:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             initial rta state of the system
         step_size : float
             simulation integration step size
@@ -417,6 +423,7 @@ class ImplicitSimplexModule(SimplexModule):
 
         self.backup_controller_save()
 
+        # TODO Vectorize
         for _ in range(1, Nsteps):
             control = self.backup_control(state, step_size)
             state = self._pred_state(state, step_size, control)
