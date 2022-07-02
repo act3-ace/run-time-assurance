@@ -18,7 +18,6 @@ import quadprog
 from jax import lax
 
 from run_time_assurance.constraint import ConstraintModule
-from run_time_assurance.state import RTAStateWrapper
 
 
 class RTAModule(abc.ABC):
@@ -452,40 +451,40 @@ class ASIFModule(RTAModule):
         self.epsilon = epsilon
         super().__init__(*args, **kwargs)
 
-    def _filter_control(self, state: RTAState, step_size: float, control: np.ndarray) -> np.ndarray:
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         obj_weight, obj_constant = self._generate_objective_function_mats(control)
 
         ineq_weight_actuation, ineq_constant_actuation = self._generate_actuation_constraint_mats(control.size)
         ineq_weight_barrier, ineq_constant_barrier = \
             self._generate_barrier_constraint_mats(state, step_size, control.size)
 
-        ineq_weight = np.concatenate((ineq_weight_actuation, ineq_weight_barrier))
-        ineq_constant = np.concatenate((ineq_constant_actuation, ineq_constant_barrier))
+        ineq_weight = jnp.concatenate((ineq_weight_actuation, ineq_weight_barrier))
+        ineq_constant = jnp.concatenate((ineq_constant_actuation, ineq_constant_barrier))
         actual_control = self._optimize(obj_weight, obj_constant, ineq_weight, ineq_constant)
         self.intervening = self.monitor(control, actual_control)
 
         return actual_control
 
-    def _generate_objective_function_mats(self, control: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _generate_objective_function_mats(self, control: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization objective function
 
         Parameters
         ----------
-        control : np.ndarray
+        control : jnp.ndarray
             desired control vector
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             matix G of quadprog objective 1/2 x^T G x - a^T x
-        np.ndarray
+        jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         """
-        obj_weight = np.eye(len(control))
-        obj_constant = np.reshape(control, len(control)).astype('float64')
+        obj_weight = jnp.eye(len(control))
+        obj_constant = jnp.reshape(control, len(control)).astype('float64')
         return obj_weight, obj_constant
 
-    def _generate_actuation_constraint_mats(self, dim: int) -> tuple[np.ndarray, np.ndarray]:
+    def _generate_actuation_constraint_mats(self, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices that impose actuator limits
         on optimized control vector
 
@@ -496,57 +495,59 @@ class ASIFModule(RTAModule):
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
-        np.ndarray
+        jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         """
-        ineq_weight = np.empty((0, dim))
-        ineq_constant = np.empty(0)
+        ineq_weight = jnp.empty((0, dim))
+        ineq_constant = jnp.empty(0)
 
         if self.control_bounds_low is not None:
             c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_low, dim)
-            ineq_weight = np.vstack((ineq_weight, c))
-            ineq_constant = np.concatenate((ineq_constant, b))
+            ineq_weight = jnp.vstack((ineq_weight, c))
+            ineq_constant = jnp.concatenate((ineq_constant, b))
 
         if self.control_bounds_high is not None:
             c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_high, dim)
             c *= -1
             b *= -1
-            ineq_weight = np.vstack((ineq_weight, c))
-            ineq_constant = np.concatenate((ineq_constant, b))
+            ineq_weight = jnp.vstack((ineq_weight, c))
+            ineq_constant = jnp.concatenate((ineq_constant, b))
 
         return ineq_weight, ineq_constant
 
-    def _optimize(self, obj_weight: np.ndarray, obj_constant: np.ndarray, ineq_weight: np.ndarray, ineq_constant: np.ndarray) -> np.ndarray:
+    def _optimize(
+        self, obj_weight: jnp.ndarray, obj_constant: jnp.ndarray, ineq_weight: jnp.ndarray, ineq_constant: jnp.ndarray
+    ) -> jnp.ndarray:
         """Solve ASIF optimization problem via quadratic program
 
         Parameters
         ----------
-        obj_weight : np.ndarray
+        obj_weight : jnp.ndarray
             matix G of quadprog objective 1/2 x^T G x - a^T x
-        obj_constant : np.ndarray
+        obj_constant : jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
-        ineq_weight : np.ndarray
+        ineq_weight : jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
-        ineq_constant : np.ndarray
+        ineq_constant : jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             _description_
         """
-        return quadprog.solve_qp(obj_weight, obj_constant, ineq_weight.T, ineq_constant, 0)[0]
+        return quadprog.solve_qp(obj_weight, obj_constant, ineq_weight.transpose(), ineq_constant, 0)[0]
 
-    def monitor(self, desired_control: np.ndarray, actual_control: np.ndarray) -> bool:
+    def monitor(self, desired_control: jnp.ndarray, actual_control: jnp.ndarray) -> bool:
         """Determines whether the ASIF RTA module is currently intervening
 
         Parameters
         ----------
-        desired_control : np.ndarray
+        desired_control : jnp.ndarray
             desired control vector
-        actual_control : np.ndarray
+        actual_control : jnp.ndarray
             actual control vector produced by ASIF optimization
 
         Returns
@@ -554,19 +555,19 @@ class ASIFModule(RTAModule):
         bool
             True if rta module is interveining
         """
-        if np.linalg.norm(desired_control - actual_control) <= self.epsilon:
+        if jnp.linalg.norm(desired_control - actual_control) <= self.epsilon:
             return False
 
         return True
 
     @abc.abstractmethod
-    def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int) -> tuple[np.ndarray, np.ndarray]:
+    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             current rta state of the system
         step_size : float
             duration of control step
@@ -575,45 +576,45 @@ class ASIFModule(RTAModule):
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
-        np.ndarray
+        jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         """
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def state_transition_system(self, state: RTAState) -> np.ndarray:
+    def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         """Computes the system state contribution to the system state's time derivative
 
         i.e. implements f(x) from dx/dt = f(x) + g(x)u
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             current rta state of the system
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             state time derivative contribution from the current system state
         """
         raise NotImplementedError
 
     @abc.abstractmethod
-    def state_transition_input(self, state: RTAState) -> np.ndarray:
+    def state_transition_input(self, state: jnp.ndarray) -> jnp.ndarray:
         """Computes the control input matrix contribution to the system state's time derivative
 
         i.e. implements g(x) from dx/dt = f(x) + g(x)u
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             current rta state of the system
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             input matrix in state space representation time derivative
         """
         raise NotImplementedError
@@ -636,7 +637,7 @@ class ExplicitASIFModule(ASIFModule):
         default 1e-2
     """
 
-    def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int) -> tuple[np.ndarray, np.ndarray]:
+    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -644,7 +645,7 @@ class ExplicitASIFModule(ASIFModule):
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             current rta state of the system
         step_size : float
             duration of control step
@@ -653,20 +654,20 @@ class ExplicitASIFModule(ASIFModule):
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
-        np.ndarray
+        jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         """
-        ineq_weight = np.empty((0, dim))
-        ineq_constant = np.empty(0)
+        ineq_weight = jnp.empty((0, dim))
+        ineq_constant = jnp.empty(0)
 
         for c in self.constraints.values():
             temp1 = c.grad(state) @ self.state_transition_input(state)
             temp2 = -c.grad(state) @ self.state_transition_system(state) - c.alpha(c(state))
 
-            ineq_weight = np.append(ineq_weight, [temp1], axis=0)
-            ineq_constant = np.append(ineq_constant, temp2)
+            ineq_weight = jnp.append(ineq_weight, [temp1], axis=0)
+            ineq_constant = jnp.append(ineq_constant, temp2)
 
         return ineq_weight, ineq_constant
 
@@ -726,7 +727,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         super().reset()
         self.reset_backup_controller()
 
-    def _generate_barrier_constraint_mats(self, state: RTAState, step_size: float, dim: int) -> tuple[np.ndarray, np.ndarray]:
+    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -735,7 +736,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             current rta state of the system
         step_size : float
             duration of control step
@@ -744,14 +745,14 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
-        np.ndarray
+        jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         """
 
-        ineq_weight = np.empty((0, dim))
-        ineq_constant = np.empty(0)
+        ineq_weight = jnp.empty((0, dim))
+        ineq_constant = jnp.empty(0)
 
         num_steps = int(self.backup_window / step_size) + 1
 
@@ -769,37 +770,37 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
                 constraint_val = min([c(traj_state) for c in self.constraints.values()])
                 constraint_vals.append(constraint_val)
 
-            constraint_sorted_idxs = np.argsort(constraint_vals)
+            constraint_sorted_idxs = jnp.argsort(constraint_vals)
             check_points = [check_points[i] for i in constraint_sorted_idxs[0:self.subsample_constraints_num_least]]
 
         for i in check_points:
             point_ineq_weight, point_ineq_constant = \
                 self.invariance_constraints(state, traj_states[i], traj_sensitivities[i], dim)
-            ineq_weight = np.concatenate((ineq_weight, point_ineq_weight), axis=0)
-            ineq_constant = np.concatenate((ineq_constant, point_ineq_constant), axis=0)
+            ineq_weight = jnp.concatenate((ineq_weight, point_ineq_weight), axis=0)
+            ineq_constant = jnp.concatenate((ineq_constant, point_ineq_constant), axis=0)
 
         return ineq_weight, ineq_constant
 
-    def invariance_constraints(self, initial_state: RTAState, traj_state: RTAState, traj_sensitivity: np.ndarray,
-                               dim: int) -> tuple[np.ndarray, np.ndarray]:
+    def invariance_constraints(self, initial_state: jnp.ndarray, traj_state: jnp.ndarray, traj_sensitivity: jnp.ndarray,
+                               dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Computes safety constraint invariance constraints via Nagumo's condition for a point in the backup trajectory
 
         Parameters
         ----------
-        initial_state : RTAState
+        initial_state : jnp.ndarray
             initial state of the backup trajectory
-        traj_state : RTAState
+        traj_state : jnp.ndarray
             arbitrary state in the backup trajectory
-        traj_sensitivity : np.ndarray
+        traj_sensitivity : jnp.ndarray
             backup trajectory state sensitivity (i.e. jacobian relative to the initial state)
         dim : int
             length of control vector
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
-        np.ndarray
+        jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         """
         f_x0 = self.state_transition_system(initial_state)
@@ -807,8 +808,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
         num_constraints = len(self.constraints)
 
-        ineq_weight = np.zeros((num_constraints, dim))
-        ineq_constant = np.zeros(num_constraints)
+        ineq_weight = jnp.zeros((num_constraints, dim))
+        ineq_constant = jnp.zeros(num_constraints)
 
         for i, constraint in enumerate(self.constraints.values()):
             a = constraint.grad(traj_state) @ (traj_sensitivity @ g_x0)
@@ -821,12 +822,12 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
         return ineq_weight, ineq_constant
 
-    def integrate(self, state: RTAState, step_size: float, Nsteps: int) -> tuple[list, list]:
+    def integrate(self, state: jnp.ndarray, step_size: float, Nsteps: int) -> tuple[list, list]:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             initial rta state of the system
         step_size : float
             simulation integration step size
@@ -839,9 +840,9 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             list of rta states from along the trajectory
         list
             list of trajectory state sensitivities (i.e. jacobian wrt initial trajectory state).
-            Elements are np.ndarrays with size (n, n) where n = state.size
+            Elements are jnp.ndarrays with size (n, n) where n = state.size
         """
-        sensitivity = np.eye(state.size)
+        sensitivity = jnp.eye(state.size)
 
         traj_states = [state.copy()]
         traj_sensitivity = [sensitivity]
@@ -861,49 +862,49 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         return traj_states, traj_sensitivity
 
     @abc.abstractmethod
-    def compute_jacobian(self, state: RTAState, step_size: float) -> np.ndarray:
+    def compute_jacobian(self, state: jnp.ndarray, step_size: float) -> jnp.ndarray:
         """Computes Jacobian of system state transition J(f(x) + g(x,u)) wrt x
 
         Parameters
         ----------
-        state : RTAState
-            Current RTAState of the system at which to evaluate Jacobian
+        state : jnp.ndarray
+            Current jnp.ndarray of the system at which to evaluate Jacobian
         step_size : float
             simulation integration step size
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             Jacobian matrix of state transition
         """
         raise NotImplementedError()
 
 
-def get_lower_bound_ineq_constraint_mats(bound: Union[np.ndarray, int, float], vec_len: int) -> tuple[np.ndarray, np.ndarray]:
+def get_lower_bound_ineq_constraint_mats(bound: Union[jnp.ndarray, int, float], vec_len: int) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Computes inequality constraint matrices for applying a lower bound to optimization var in quadprog
 
     Parameters
     ----------
-    bound : Union[np.ndarray, int, float]
+    bound : Union[jnp.ndarray, int, float]
         Lower bound for optimization variable.
-        If np.ndarray, must be same length as optimization variable. Will be applied elementwise.
+        If jnp.ndarray, must be same length as optimization variable. Will be applied elementwise.
         If number, will be applied to all elements.
     vec_len : int
         optimization variable vector length
 
     Returns
     -------
-    np.ndarray
+    jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
-    np.ndarray
+    jnp.ndarray
         vector a of quadprog objective 1/2 x^T G x - a^T x
     """
-    c = np.eye(vec_len)
+    c = jnp.eye(vec_len)
 
-    if isinstance(bound, np.ndarray):
+    if isinstance(bound, jnp.ndarray):
         assert bound.shape == (vec_len, ), f"the shape of bound must be ({vec_len},)"
-        b = np.copy(bound)
+        b = jnp.copy(bound)
     else:
-        b = bound * np.ones(vec_len)
+        b = bound * jnp.ones(vec_len)
 
     return c, b
