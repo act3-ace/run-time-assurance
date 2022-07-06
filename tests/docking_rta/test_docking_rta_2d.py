@@ -2,14 +2,19 @@ import numpy as np
 import scipy
 import matplotlib.pyplot as plt
 import time
+import os
 
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 from run_time_assurance.zoo.cwh.docking_2d import Docking2dExplicitSwitchingRTA, Docking2dImplicitSwitchingRTA, \
                                                  Docking2dExplicitOptimizationRTA, Docking2dImplicitOptimizationRTA
 
 
+theta_init = 4.298
+
 class Env():
-    def __init__(self):
+    def __init__(self, random_init=False):
+        self.random_init = random_init
+
         self.dt = 1  # Time step
         self.u_max = 1  # Actuation constraint
         self.docking_region = 1  # m
@@ -31,7 +36,11 @@ class Env():
 
     def reset(self):
         # Random point 10km away from origin
-        theta = np.random.rand()*2*np.pi
+        if self.random_init:
+            theta = np.random.rand()*2*np.pi
+        else:
+            theta = theta_init
+
         x = np.array([[10000*np.cos(theta)], [10000*np.sin(theta)], [0], [0]])
         return x, False
 
@@ -168,11 +177,22 @@ class Env():
         ax6.set_ylim([1, 2])
 
 
-env = Env()
-# rta = Docking2dExplicitSwitchingRTA()
-# rta = Docking2dImplicitSwitchingRTA()
-rta = Docking2dExplicitOptimizationRTA()
-# rta = Docking2dImplicitOptimizationRTA()
-env.run_episode(rta)
+plot_fig = True
+save_fig = True
+output_dir = 'figs/2d'
 
-plt.show()
+rtas = [Docking2dExplicitSwitchingRTA(), Docking2dImplicitSwitchingRTA(), 
+        Docking2dExplicitOptimizationRTA(), Docking2dImplicitOptimizationRTA()]
+output_names = ['rta_test_docking_2d_explicit_switching', 'rta_test_docking_2d_implicit_switching',
+                'rta_test_docking_2d_explicit_optimization', 'rta_test_docking_2d_implicit_optimization']
+
+env = Env()
+
+os.makedirs(output_dir, exist_ok=True)
+
+for rta, output_name in zip(rtas, output_names):
+    env.run_episode(rta)
+    if plot_fig:
+        plt.show()
+    if save_fig:
+        plt.savefig(os.path.join(output_dir, output_name))
