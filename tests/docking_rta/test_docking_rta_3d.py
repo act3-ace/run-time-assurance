@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import scipy
 import matplotlib.pyplot as plt
@@ -8,8 +9,12 @@ from run_time_assurance.zoo.cwh.docking_3d import Docking3dExplicitSwitchingRTA,
                                                  Docking3dExplicitOptimizationRTA, Docking3dImplicitOptimizationRTA
 
 
+theta_init = 5.829
+gamma_init = 1.24
+
 class Env():
-    def __init__(self):
+    def __init__(self, random_init=False):
+        self.random_init = random_init
         self.dt = 1  # Time step
         self.u_max = 1  # Actuation constraint
         self.docking_region = 1  # m
@@ -31,8 +36,12 @@ class Env():
 
     def reset(self):
         # Random point 10km away from origin
-        theta = np.random.rand()*2*np.pi
-        gamma = np.random.rand()*2*np.pi
+        if self.random_init:
+            theta = np.random.rand()*2*np.pi
+            gamma = np.random.rand()*2*np.pi
+        else:
+            theta = theta_init
+            gamma = gamma_init
         x = np.array([[10000*np.cos(theta)*np.cos(gamma)], [10000*np.sin(theta)*np.cos(gamma)], [10000*np.sin(gamma)], [0], [0], [0]])
         return x, False
 
@@ -182,11 +191,22 @@ class Env():
         ax6.set_ylim([1, 2])
 
 
-env = Env()
-# rta = Docking3dExplicitSwitchingRTA()
-# rta = Docking3dImplicitSwitchingRTA()
-rta = Docking3dExplicitOptimizationRTA()
-# rta = Docking3dImplicitOptimizationRTA()
-env.run_episode(rta)
+plot_fig = True
+save_fig = True
+output_dir = 'figs/3d'
 
-plt.show()
+rtas = [Docking3dExplicitSwitchingRTA(), Docking3dImplicitSwitchingRTA(), 
+        Docking3dExplicitOptimizationRTA(), Docking3dImplicitOptimizationRTA()]
+output_names = ['rta_test_docking_3d_explicit_switching', 'rta_test_docking_3d_implicit_switching',
+                'rta_test_docking_3d_explicit_optimization', 'rta_test_docking_3d_implicit_optimization']
+
+env = Env()
+
+os.makedirs(output_dir, exist_ok=True)
+
+for rta, output_name in zip(rtas, output_names):
+    env.run_episode(rta)
+    if plot_fig:
+        plt.show()
+    if save_fig:
+        plt.savefig(os.path.join(output_dir, output_name))
