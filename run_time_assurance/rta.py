@@ -15,7 +15,6 @@ from typing import Any, Optional, Union
 import jax.numpy as jnp
 import numpy as np
 import quadprog
-from jax import lax
 
 from run_time_assurance.constraint import ConstraintModule
 
@@ -25,27 +24,27 @@ class RTAModule(abc.ABC):
 
     Parameters
     ----------
-    control_bounds_high : Union[float, int, list, np.ndarray], optional
+    control_bounds_high : Union[float, int, list, np.ndarray, jnp.ndarray], optional
         upper bound of allowable control. Pass a list for element specific limit. By default None
-    control_bounds_low : Union[float, int, list, np.ndarray], optional
+    control_bounds_low : Union[float, int, list, np.ndarray, jnp.ndarray], optional
         upper bound of allowable control. Pass a list for element specific limit. By default None
     """
 
     def __init__(
         self,
         *args: Any,
-        control_bounds_high: Union[float, int, list, np.ndarray] = None,
-        control_bounds_low: Union[float, int, list, np.ndarray] = None,
+        control_bounds_high: Union[float, int, list, np.ndarray, jnp.ndarray] = None,
+        control_bounds_low: Union[float, int, list, np.ndarray, jnp.ndarray] = None,
         **kwargs: Any
     ):
-        if isinstance(control_bounds_high, list):
-            control_bounds_high = np.array(control_bounds_high, float)
+        if isinstance(control_bounds_high, (list, np.ndarray)):
+            control_bounds_high = jnp.array(control_bounds_high, float)
 
-        if isinstance(control_bounds_low, list):
-            control_bounds_low = np.array(control_bounds_low, float)
+        if isinstance(control_bounds_low, (list, np.ndarray)):
+            control_bounds_low = jnp.array(control_bounds_low, float)
 
-        self.control_bounds_high = jnp.array(control_bounds_high)
-        self.control_bounds_low = jnp.array(control_bounds_low)
+        self.control_bounds_high = control_bounds_high
+        self.control_bounds_low = control_bounds_low
 
         self.enable = True
         self.intervening = False
@@ -357,15 +356,11 @@ class ExplicitSimplexModule(SimplexModule):
 
     def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         pred_state = self._pred_state(state, step_size, control)
+        for c in self.constraints.values():
+            if c(pred_state) < 0:
+                return True
 
-        constraint_list = list(self.constraints.values())
-
-        def body_fun(i: int, val: bool):
-            return val or constraint_list[i](pred_state) < 0
-
-        constraint_violated = lax.fori_loop(0, len(constraint_list), body_fun, False)
-
-        return constraint_violated
+        return False
 
 
 class ImplicitSimplexModule(SimplexModule):
@@ -454,6 +449,7 @@ class ASIFModule(RTAModule):
     def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         obj_weight, obj_constant = self._generate_objective_function_mats(control)
 
+        # TODO precompue actuation constraint mats
         ineq_weight_actuation, ineq_constant_actuation = self._generate_actuation_constraint_mats(control.size)
         ineq_weight_barrier, ineq_constant_barrier = \
             self._generate_barrier_constraint_mats(state, step_size, control.size)
@@ -480,8 +476,8 @@ class ASIFModule(RTAModule):
         jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         """
-        obj_weight = jnp.eye(len(control))
-        obj_constant = jnp.reshape(control, len(control)).astype('float64')
+        obj_weight = jnp.eye(len(control))  # TODO remove dynamic sizing, control length shoudl be pre-determined
+        obj_constant = jnp.reshape(control, len(control))
         return obj_weight, obj_constant
 
     def _generate_actuation_constraint_mats(self, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -500,7 +496,7 @@ class ASIFModule(RTAModule):
         jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         """
-        ineq_weight = jnp.empty((0, dim))
+        ineq_weight = jnp.empty((0, dim))  # TODO remove dynamic sizing, control length shoudl be pre-determined
         ineq_constant = jnp.empty(0)
 
         if self.control_bounds_low is not None:
@@ -538,7 +534,15 @@ class ASIFModule(RTAModule):
         jnp.ndarray
             _description_
         """
-        return quadprog.solve_qp(obj_weight, obj_constant, ineq_weight.transpose(), ineq_constant, 0)[0]
+        opt = quadprog.solve_qp(
+            np.array(obj_weight, dtype=np.float64),
+            np.array(obj_constant, dtype=np.float64),
+            np.array(ineq_weight.transpose(), dtype=np.float64),
+            np.array(ineq_constant, dtype=np.float64),
+            0
+        )[0]
+
+        return jnp.array(opt)
 
     def monitor(self, desired_control: jnp.ndarray, actual_control: jnp.ndarray) -> bool:
         """Determines whether the ASIF RTA module is currently intervening
@@ -666,7 +670,7 @@ class ExplicitASIFModule(ASIFModule):
             temp1 = c.grad(state) @ self.state_transition_input(state)
             temp2 = -c.grad(state) @ self.state_transition_system(state) - c.alpha(c(state))
 
-            ineq_weight = jnp.append(ineq_weight, [temp1], axis=0)
+            ineq_weight = jnp.append(ineq_weight, temp1[None, :], axis=0)
             ineq_constant = jnp.append(ineq_constant, temp2)
 
         return ineq_weight, ineq_constant
