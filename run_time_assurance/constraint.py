@@ -6,9 +6,8 @@ from __future__ import annotations
 import abc
 import numbers
 
-import numpy as np
-
-from run_time_assurance.state import RTAState
+import jax.numpy as jnp
+from jax import grad
 
 
 class ConstraintModule(abc.ABC):
@@ -24,14 +23,15 @@ class ConstraintModule(abc.ABC):
     def __init__(self, alpha: ConstraintStrengthener = None):
         assert isinstance(alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         self._alpha = alpha
+        self._grad = grad(self._compute)
 
-    def __call__(self, state: RTAState) -> float:
+    def __call__(self, state: jnp.ndarray) -> float:
         """Evaluates constraint function h(x)
         Considered satisfied when h(x) >= 0
 
         Parameters
         ----------
-        state : np.ndarray
+        state : jnp.ndarray
             current rta state of the system
 
         Returns
@@ -42,12 +42,15 @@ class ConstraintModule(abc.ABC):
         return self._compute(state)
 
     @abc.abstractmethod
-    def _compute(self, state: RTAState) -> float:
+    def _compute(self, state: jnp.ndarray) -> float:
         """Custom implementation of constraint function
+
+        !!! Note: To be compatible with jax jit compilation, must not rely on external states that are overwritten here
+            or elsewhere after initialization
 
         Parameters
         ----------
-        state : np.ndarray
+        state : jnp.ndarray
             current rta state of the system
 
         Returns
@@ -57,22 +60,22 @@ class ConstraintModule(abc.ABC):
         """
         raise NotImplementedError()
 
-    def grad(self, state: RTAState) -> np.ndarray:
+    def grad(self, state: jnp.ndarray) -> jnp.ndarray:
         """
         Computes Gradient of Safety Constraint Function wrt x
         Required for ASIF methods
 
         Parameters
         ----------
-        state : np.ndarray
+        state : jnp.ndarray
             current rta state of the system
 
         Returns
         -------
-        np.ndarray:
+        jnp.ndarray:
             gradient of constraint function wrt x. Shape of (n, n) where n = state.vector.size.
         """
-        raise NotImplementedError()
+        return self._grad(state)
 
     def alpha(self, x: float) -> float:
         """Evaluates Strengthing function to soften Nagumo's condition outside of constraint set boundary
@@ -88,6 +91,9 @@ class ConstraintModule(abc.ABC):
         float
             Strengthening Function output
         """
+        if self._alpha is None:
+            return None
+
         return self._alpha(x)
 
 
@@ -102,6 +108,9 @@ class ConstraintStrengthener(abc.ABC):
         """
         Compute Strengthening Function (Required for ASIF):
         Must be monotonically decreasing with f(0) = 0
+
+        !!! Note: To be compatible with jax jit compilation, must not rely on external states that are overwritten here
+            or elsewhere after initialization
 
         Returns
         -------
@@ -136,17 +145,8 @@ class ConstraintMagnitudeStateLimit(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
         super().__init__(alpha=alpha)
 
-    def _compute(self, state: RTAState) -> float:
-        state_vec = state.vector
-        return self.limit_val**2 - state_vec[self.state_index]**2
-
-    def grad(self, state: RTAState) -> np.ndarray:
-        state_vec = state.vector
-
-        gh = np.zeros((state_vec.size, state_vec.size), dtype=float)
-        gh[self.state_index, self.state_index] = -2
-        g = gh @ state_vec
-        return g
+    def _compute(self, state: jnp.ndarray) -> float:
+        return self.limit_val**2 - state[self.state_index]**2
 
 
 class ConstraintMaxStateLimit(ConstraintModule):
@@ -174,16 +174,8 @@ class ConstraintMaxStateLimit(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
         super().__init__(alpha=alpha)
 
-    def _compute(self, state: RTAState) -> float:
-        state_vec = state.vector
-        return self.limit_val - state_vec[self.state_index]
-
-    def grad(self, state: RTAState) -> np.ndarray:
-        state_vec = state.vector
-
-        g = np.zeros(state_vec.size, dtype=float)
-        g[self.state_index] = -1
-        return g
+    def _compute(self, state: jnp.ndarray) -> float:
+        return self.limit_val - state[self.state_index]
 
 
 class ConstraintMinStateLimit(ConstraintModule):
@@ -211,16 +203,8 @@ class ConstraintMinStateLimit(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
         super().__init__(alpha=alpha)
 
-    def _compute(self, state: RTAState) -> float:
-        state_vec = state.vector
-        return state_vec[self.state_index] - self.limit_val
-
-    def grad(self, state: RTAState) -> np.ndarray:
-        state_vec = state.vector
-
-        g = np.zeros(state_vec.size, dtype=float)
-        g[self.state_index] = 1
-        return g
+    def _compute(self, state: jnp.ndarray) -> float:
+        return state[self.state_index] - self.limit_val
 
 
 class PolynomialConstraintStrengthener(ConstraintStrengthener):
