@@ -1,6 +1,7 @@
 """This module implements RTA methods for the docking problem with 3D CWH dynamics models
 """
 from collections import OrderedDict
+from typing import Dict, Tuple, Union
 
 import constraint
 import jax.numpy as jnp
@@ -483,14 +484,21 @@ class Docking3dStopLQRBackupController(RTABackupController):
         # Construct the constain gain matrix, K
         self.K = jnp.linalg.inv(self.R) @ (jnp.transpose(self.B) @ P)
 
-    def generate_control(self, state: jnp.ndarray, step_size) -> jnp.ndarray:
+        super().__init__()
+
+    def _generate_control(
+        self,
+        state: jnp.ndarray,
+        step_size: float,
+        controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray], None] = None
+    ) -> Tuple[jnp.ndarray, None]:
         state_des = jnp.copy(state)
         state_des = state_des.at[3:].set(0)
 
         error = state - state_des
         backup_action = -self.K @ error
 
-        return backup_action
+        return backup_action, None
 
 
 # class Docking3dENMTTrackingBackupController(RTABackupController):
