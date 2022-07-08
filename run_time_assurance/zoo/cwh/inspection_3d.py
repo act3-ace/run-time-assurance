@@ -1,8 +1,10 @@
 """This module implements RTA methods for the multiagent inspection problem with 3D CWH dynamics models
 """
 from collections import OrderedDict
+from typing import Union
 
 import numpy as np
+import jax.numpy as jnp
 import scipy
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
@@ -14,7 +16,7 @@ from run_time_assurance.constraint import (
     PolynomialConstraintStrengthener,
 )
 from run_time_assurance.rta import ExplicitASIFModule
-from run_time_assurance.state import RTAState
+from run_time_assurance.state import RTAStateWrapper
 
 NUM_DEPUTIES_DEFAULT = 5  # Number of deputies for inspection problem
 # (1. Communication) Doesn't apply here, attitude requirement for pointing at earth
@@ -24,7 +26,7 @@ V0_DEFAULT = 0.2  # maximum docking speed [m/s] (3. dynamic velocity constraint)
 V1_COEF_DEFAULT = 4  # velocity constraint slope [-] (3. dynamic velocity constraint)
 # (4. Fuel limit) Doesn't apply here, consider using latched RTA to travel to NMT
 R_MAX_DEFAULT = 1000  # max distance from chief [m] (5. translational keep out zone)
-THETA_DEFAULT = np.pi / 6  # sun avoidance angle [rad] (5. translational keep out zone)
+THETA_DEFAULT = jnp.pi / 6  # sun avoidance angle [rad] (5. translational keep out zone)
 # (6. Attitude keep out zone) Doesn't apply here, no attitude model
 # (7. Limited duration attitudes) Doesn't apply here, no attitude model
 # (8. Passively safe maneuvers) **??** Ensure if u=0 after safe action is taken, deputy would not colide with chief?
@@ -35,68 +37,68 @@ Y_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (11. Avoid aggressive ma
 Z_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (11. Avoid aggressive maneuvering)
 
 
-class Inspection3dState(RTAState):
+class Inspection3dState(RTAStateWrapper):
     """RTA state for inspection 3d RTA (only current deputy's state)"""
 
     @property
     def x(self) -> float:
         """Getter for x position"""
-        return self._vector[0]
+        return self.vector[0]
 
     @x.setter
     def x(self, val: float):
         """Setter for x position"""
-        self._vector[0] = val
+        self.vector[0] = val
 
     @property
     def y(self) -> float:
         """Getter for y position"""
-        return self._vector[1]
+        return self.vector[1]
 
     @y.setter
     def y(self, val: float):
         """Setter for y position"""
-        self._vector[1] = val
+        self.vector[1] = val
 
     @property
     def z(self) -> float:
         """Getter for z position"""
-        return self._vector[2]
+        return self.vector[2]
 
     @z.setter
     def z(self, val: float):
         """Setter for z position"""
-        self._vector[2] = val
+        self.vector[2] = val
 
     @property
     def x_dot(self) -> float:
         """Getter for x velocity component"""
-        return self._vector[3]
+        return self.vector[3]
 
     @x_dot.setter
     def x_dot(self, val: float):
         """Setter for x velocity component"""
-        self._vector[3] = val
+        self.vector[3] = val
 
     @property
     def y_dot(self) -> float:
         """Getter for y velocity component"""
-        return self._vector[4]
+        return self.vector[4]
 
     @y_dot.setter
     def y_dot(self, val: float):
         """Setter for y velocity component"""
-        self._vector[4] = val
+        self.vector[4] = val
 
     @property
     def z_dot(self) -> float:
         """Getter for z velocity component"""
-        return self._vector[5]
+        return self.vector[5]
 
     @z_dot.setter
     def z_dot(self, val: float):
         """Setter for z velocity component"""
-        self._vector[5] = val
+        self.vector[5] = val
 
 
 class InspectionRTA(ExplicitASIFModule):
@@ -154,8 +156,8 @@ class InspectionRTA(ExplicitASIFModule):
         x_vel_limit: float = X_VEL_LIMIT_DEFAULT,
         y_vel_limit: float = Y_VEL_LIMIT_DEFAULT,
         z_vel_limit: float = Z_VEL_LIMIT_DEFAULT,
-        control_bounds_high: float = U_MAX_DEFAULT,
-        control_bounds_low: float = -U_MAX_DEFAULT,
+        control_bounds_high: Union[float, list, np.ndarray, jnp.ndarray] = U_MAX_DEFAULT,
+        control_bounds_low: Union[float, list, np.ndarray, jnp.ndarray] = -U_MAX_DEFAULT,
         **kwargs
     ):
         self.num_deputies = num_deputies
@@ -172,12 +174,14 @@ class InspectionRTA(ExplicitASIFModule):
         self.y_vel_limit = y_vel_limit
         self.z_vel_limit = z_vel_limit
 
-        self.e_hat = np.array([1, 0, 0])
+        self.e_hat = jnp.array([1, 0, 0])
         self.u_max = control_bounds_high
         self.a_max = self.u_max / self.m - (3 * self.n**2 + 2 * self.n * self.v1) * self.r_max - 2 * self.n * self.v0
+        A, B = generate_cwh_matrices(self.m, self.n, mode="3d")
+        self.A = jnp.array(A)
+        self.B = jnp.array(B)
 
-        self.A, self.B = generate_cwh_matrices(self.m, self.n, mode="3d")
-        self.dynamics = BaseLinearODESolverDynamics(A=self.A, B=self.B, integration_method="RK45")
+        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method="RK45")
 
         super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
 
@@ -213,23 +217,20 @@ class InspectionRTA(ExplicitASIFModule):
             )
         return OD
 
-    def gen_rta_state(self, vector: np.ndarray) -> Inspection3dState:
-        return Inspection3dState(vector=vector)
+    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        pass
 
-    def _pred_state(self, state: RTAState, step_size: float, control: np.ndarray) -> Inspection3dState:
-        next_state_vec, _ = self.dynamics.step(step_size, state.vector, control)
-        return next_state_vec
-
-    def state_transition_system(self, state: RTAState) -> np.ndarray:
-        A = np.copy(self.A)
+    def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
+        A = jnp.copy(self.A)
         for _ in range(self.num_deputies - 1):
-            A = scipy.linalg.block_diag(A, np.copy(self.A))
-        return A @ state.vector
+            A = scipy.linalg.block_diag(A, jnp.copy(self.A))
+        A = jnp.array(A)
+        return A @ state
 
-    def state_transition_input(self, state: RTAState) -> np.ndarray:
-        B = np.copy(self.B)
+    def state_transition_input(self, state: jnp.ndarray) -> jnp.ndarray:
+        B = jnp.copy(self.B)
         for _ in range(self.num_deputies - 1):
-            B = np.vstack((B, np.zeros(self.B.shape)))
+            B = jnp.vstack((B, jnp.zeros(self.B.shape)))
         return B
 
 
@@ -256,21 +257,9 @@ class ConstraintCWHRelativeVelocity(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 0.05, 0, 0.5])
         super().__init__(alpha=alpha)
 
-    def _compute(self, state: RTAState) -> float:
-        state_vec = state.vector
-        return float((self.v0 + self.v1 * np.linalg.norm(state_vec[0:3])) - np.linalg.norm(state_vec[3:6]))
-
-    def grad(self, state: RTAState) -> np.ndarray:
-        state_vec = state.vector
-        g_full = np.zeros(len(state_vec))
-        a = self.v1 / np.linalg.norm(state_vec[0:3])
-        denom = np.linalg.norm(state_vec[3:6])
-        if denom == 0:
-            denom = 0.000001
-        b = -1 / denom
-        g = np.array([a * state_vec[0], a * state_vec[1], a * state_vec[2], b * state_vec[3], b * state_vec[4], b * state_vec[5]])
-        g_full[0:6] = g
-        return g_full
+    def _compute(self, state: jnp.ndarray) -> float:
+        h = (self.v0 + self.v1 * jnp.linalg.norm(state[0:3])) - jnp.linalg.norm(state[3:6])
+        return h
 
 
 class ConstraintCWHChiefCollision(ConstraintModule):
@@ -295,25 +284,12 @@ class ConstraintCWHChiefCollision(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 0.005, 0, 0.05])
         super().__init__(alpha=alpha)
 
-    def _compute(self, state: RTAState) -> float:
-        state_vec = state.vector
-        delta_p = state_vec[0:3]
-        delta_v = state_vec[3:6]
-        mag_delta_p = np.linalg.norm(delta_p)
-        h = np.sqrt(2 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
-        return float(h)
-
-    def grad(self, state: RTAState) -> np.ndarray:
-        x = state.vector
-        g_full = np.zeros(len(x))
-        dp = x[0:3]
-        dv = x[3:6]
-        mdp = np.linalg.norm(x[0:3])
-        mdv = dp.T @ dv
-        a = self.a_max / (mdp * np.sqrt(2 * self.a_max * (mdp - self.collision_radius))) - mdv / mdp**3
-        g = np.array([x[0] * a + x[3] / mdp, x[1] * a + x[4] / mdp, x[2] * a + x[5] / mdp, x[0] / mdp, x[1] / mdp, x[2] / mdp])
-        g_full[0:6] = g
-        return g_full
+    def _compute(self, state: jnp.ndarray) -> float:
+        delta_p = state[0:3]
+        delta_v = state[3:6]
+        mag_delta_p = jnp.linalg.norm(delta_p)
+        h = jnp.sqrt(2 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
+        return h
 
 
 class ConstraintCWHDeputyCollision(ConstraintModule):
@@ -339,34 +315,12 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 0.005, 0, 0.05])
         super().__init__(alpha=alpha)
 
-    def _compute(self, state: RTAState) -> float:
-        state_vec = state.vector
-
-        delta_p = state_vec[0:3] - state_vec[int(self.deputy * 6):int(self.deputy * 6 + 3)]
-        delta_v = state_vec[3:6] - state_vec[int(self.deputy * 6 + 3):int(self.deputy * 6 + 6)]
-        mag_delta_p = np.linalg.norm(delta_p)
-        h = np.sqrt(4 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
-        return float(h)
-
-    def grad(self, state: RTAState) -> np.ndarray:
-        i = self.deputy
-        x = state.vector
-        g_full = np.zeros(len(x))
-        dp = x[0:3] - x[int(i * 6):int(i * 6 + 3)]
-        dv = x[3:6] - x[int(i * 6 + 3):int(i * 6 + 6)]
-        mdp = np.linalg.norm(dp)
-        mdv = dp.T @ dv
-        a = self.a_max / (mdp * np.sqrt(self.a_max * (mdp - self.collision_radius))) - mdv / mdp**3
-        g = np.array(
-            [
-                (x[0] - x[6 * i]) * a + (x[3] - x[6 * i + 3]) / mdp, (x[1] - x[6 * i + 1]) * a + (x[4] - x[6 * i + 4]) / mdp,
-                (x[2] - x[6 * i + 2]) * a + (x[5] - x[6 * i + 5]) / mdp, (x[0] - x[6 * i]) / mdp, (x[1] - x[6 * i + 1]) / mdp,
-                (x[2] - x[6 * i + 2]) / mdp
-            ]
-        )
-        g_full[0:6] = g
-        g_full[int(i * 6):int(i * 6 + 6)] = -g
-        return g_full
+    def _compute(self, state: jnp.ndarray) -> float:
+        delta_p = state[0:3] - state[int(self.deputy * 6):int(self.deputy * 6 + 3)]
+        delta_v = state[3:6] - state[int(self.deputy * 6 + 3):int(self.deputy * 6 + 6)]
+        mag_delta_p = jnp.linalg.norm(delta_p)
+        h = jnp.sqrt(4 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
+        return h
 
 
 class ConstraintCWHSunAvoidance(ConstraintModule):
@@ -386,39 +340,23 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.05])
     """
 
-    def __init__(self, a_max: float, theta: float, e_hat: np.ndarray, alpha: ConstraintStrengthener = None):
+    def __init__(self, a_max: float, theta: float, e_hat: jnp.ndarray, alpha: ConstraintStrengthener = None):
         self.a_max = a_max
         self.theta = theta
         self.e_hat = e_hat
-        self.e_hat_vel = np.array([0, 0, 0])
+        self.e_hat_vel = jnp.array([0, 0, 0])
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.05])
         super().__init__(alpha=alpha)
 
-    def _compute(self, state: RTAState) -> float:
-        state_vec = state.vector
+    def _compute(self, state: jnp.ndarray) -> float:
+        p = state[0:3]
+        p_es = p - jnp.dot(p, self.e_hat) * self.e_hat
+        a = jnp.cos(self.theta) * (jnp.linalg.norm(p_es) - jnp.tan(self.theta) * jnp.dot(p, self.e_hat))
+        p_pr = p + a * jnp.sin(self.theta) * self.e_hat + a * jnp.cos(self.theta
+                                                                    ) * (jnp.dot(p, self.e_hat) * self.e_hat - p) / jnp.linalg.norm(p_es)
 
-        p = state_vec[0:3]
-        p_es = p - np.dot(p, self.e_hat) * self.e_hat
-        a = np.cos(self.theta) * (np.linalg.norm(p_es) - np.tan(self.theta) * np.dot(p, self.e_hat))
-        p_pr = p + a * np.sin(self.theta) * self.e_hat + a * np.cos(self.theta
-                                                                    ) * (np.dot(p, self.e_hat) * self.e_hat - p) / np.linalg.norm(p_es)
-
-        h = np.sqrt(2 * self.a_max * np.linalg.norm(p - p_pr)
-                    ) + np.dot(p - p_pr, state_vec[3:6] - self.e_hat_vel) / np.linalg.norm(p - p_pr)
-        return float(h)
-
-    def grad(self, state: RTAState) -> np.ndarray:
-        # Numerical approximation
-        state_vec = state.vector[0:6]
-        g_full = np.zeros(len(state.vector))
-        gh = []
-        delta = 10e-4
-        Delta = 0.5 * delta * np.eye(len(state_vec))
-        for i in range(len(state_vec)):
-            x1 = RTAState(state_vec + Delta[i])
-            x2 = RTAState(state_vec - Delta[i])
-            gh.append((self._compute(x1) - self._compute(x2)) / delta)
-        g_full[0:6] = np.array(gh)
-        return g_full
+        h = jnp.sqrt(2 * self.a_max * jnp.linalg.norm(p - p_pr)
+                    ) + jnp.dot(p - p_pr, state[3:6] - self.e_hat_vel) / jnp.linalg.norm(p - p_pr)
+        return h
