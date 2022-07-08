@@ -68,18 +68,6 @@ class RTAModule(abc.ABC):
         """Additional initialization function to allow custom initialization to run after baseclass initialization,
         but before constraint initialization"""
 
-    @abc.abstractmethod
-    def _setup_constraints(self) -> OrderedDict[str, ConstraintModule]:
-        """Initializes and returns RTA constraints
-
-        Returns
-        -------
-        OrderedDict
-            OrderedDict of rta contraints with name string keys and ConstraintModule object values
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """predict the next state of the system given the current state, step size, and control vector"""
         raise NotImplementedError()
@@ -190,7 +178,7 @@ class ConstraintBasedRTA(RTAModule):
         self.constraints = self._setup_constraints()
 
     @abc.abstractmethod
-    def _setup_constraints(self) -> OrderedDict:
+    def _setup_constraints(self) -> OrderedDict[str, ConstraintModule]:
         """Initializes and returns RTA constraints
 
         Returns
@@ -209,22 +197,22 @@ class CascadedRTA(RTAModule):
         self.rta_list = self._setup_rta_list()
         super().__init__(*args, **kwargs)
 
-    def _filter_control(self, state: RTAState, step_size: float, control: np.ndarray) -> np.ndarray:
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Filters desired control into safe action using multiple RTA objects
         Note: Satisfaction of all constraints ("safety") is not guaranteed when constraints are conflicting
 
         Parameters
         ----------
-        state : RTAState
+        state : jnp.ndarray
             current rta state of the system
         step_size : float
             simulation step size
-        control : np.ndarray
+        control : jnp.ndarray
             desired control vector
 
         Returns
         -------
-        np.ndarray
+        jnp.ndarray
             safe filtered control vector
         """
         for rta in self.rta_list:
