@@ -49,6 +49,22 @@ class Env():
             x1[i, :] = (np.vstack(x[i, :]) + xd * self.dt).flatten()
         return x1
 
+    def run_one_step(self, rta):
+        self.rta = rta
+        x = np.zeros((self.deputies, 6))
+        for i in range(self.deputies):
+            x[i, :] = self.reset()
+        u_safe = np.zeros((self.deputies, 3))
+        for i in range(self.deputies):
+            x_i = x[i, :]
+            u_des = self.u_des(np.vstack(x_i))
+            x_old = np.delete(x, i, 0)
+            x_new = np.row_stack((x_i, x_old))
+            # Use RTA
+            u_safe[i, :] = self.rta.filter_control(x_new.flatten(), self.dt, u_des)
+        # Take step using safe action
+        x = self.step(x, u_safe)
+
     def run_episode(self, rta):
         self.rta = rta
         # Track time
@@ -264,6 +280,7 @@ class Env():
 # Setup env, RTA, then run episode
 env = Env()
 rta = InspectionRTA()
-env.run_episode(rta)
+# env.run_episode(rta)
+env.run_one_step(rta)
 
-plt.show()
+# plt.show()
