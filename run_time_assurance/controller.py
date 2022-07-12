@@ -8,7 +8,7 @@ import abc
 from typing import Dict, Union
 
 import jax.numpy as jnp
-from jax import jacfwd
+from jax import jacfwd, jit
 
 
 class RTABackupController(abc.ABC):
@@ -20,16 +20,17 @@ class RTABackupController(abc.ABC):
         self.controller_state_saved = None
 
         self.controller_state = self._copy_controller_state(self.controller_state_initial)
-        self._compile()
+        self._compose()
 
-    def _compile(self):
+    def _compose(self):
         self._jacobian = jacfwd(self._generate_control, has_aux=True)
+        self._generate_control_fn = jit(self._generate_control)
 
     def reset(self):
         """Resets the backup controller to its initial state for a new episode
         """
         self.controller_state = self._copy_controller_state(self.controller_state_initial)
-        self._compile()
+        self._compose()
 
     def _copy_controller_state(self, controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray], None]):
         if controller_state is None:
@@ -58,7 +59,7 @@ class RTABackupController(abc.ABC):
         jnp.ndarray
             control vector
         """
-        controller_output = self._generate_control(state, step_size, self.controller_state)
+        controller_output = self._generate_control_fn(state, step_size, self.controller_state)
         if (not isinstance(controller_output, tuple)) or len(controller_output) != 2:
             raise ValueError('_generate_control should return 2 values: the control vector and the updated controller state')
         control, self.controller_state = controller_output
@@ -95,7 +96,7 @@ class RTABackupController(abc.ABC):
             Updated controller_state modified by the control algorithm
             If no internal controller_state is used, return None
         """
-        return self._generate_control(state, step_size, controller_state)
+        return self._generate_control_fn(state, step_size, controller_state)
 
     @abc.abstractmethod
     def _generate_control(
