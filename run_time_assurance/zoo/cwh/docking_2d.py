@@ -14,7 +14,8 @@ from run_time_assurance.constraint import (
     ConstraintStrengthener,
     PolynomialConstraintStrengthener,
 )
-from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule, RTABackupController
+from run_time_assurance.controller import RTABackupController
+from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule
 from run_time_assurance.state import RTAStateWrapper
 
 X_VEL_LIMIT_DEFAULT = 10

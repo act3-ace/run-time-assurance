@@ -15,9 +15,10 @@ from typing import Any, Dict, Optional, Union
 import jax.numpy as jnp
 import numpy as np
 import quadprog
-from jax import jacfwd
+from jax import jacfwd, jit
 
 from run_time_assurance.constraint import ConstraintModule
+from run_time_assurance.controller import RTABackupController
 
 
 class RTAModule(abc.ABC):
@@ -56,6 +57,7 @@ class RTAModule(abc.ABC):
 
         self._setup_properties()
         self.constraints = self._setup_constraints()
+        self._compose()
 
     def reset(self):
         """Resets the rta module to the initial state at the beginning of an episode
@@ -79,6 +81,9 @@ class RTAModule(abc.ABC):
             OrderedDict of rta contraints with name string keys and ConstraintModule object values
         """
         raise NotImplementedError()
+
+    def _compose(self):
+        """applies jax composition transformations (grad, jit, jacobian etc.)"""
 
     @abc.abstractmethod
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
@@ -180,123 +185,6 @@ class RTAModule(abc.ABC):
         if self.control_bounds_low is not None or self.control_bounds_high is not None:
             control = jnp.clip(control, self.control_bounds_low, self.control_bounds_high)  # type: ignore
         return control
-
-
-class RTABackupController(abc.ABC):
-    """Base Class for backup controllers used by backup control based RTA methods
-    """
-
-    def __init__(self, controller_state_initial: Union[jnp.ndarray, Dict[str, jnp.ndarray], None] = None):
-        self.controller_state_initial = self._copy_controller_state(controller_state_initial)
-        self.controller_state_saved = None
-
-        self.controller_state = self._copy_controller_state(self.controller_state_initial)
-        self._compile()
-
-    def _compile(self):
-        self._jacobian = jacfwd(self._generate_control, has_aux=True)
-
-    def reset(self):
-        """Resets the backup controller to its initial state for a new episode
-        """
-        self.controller_state = self._copy_controller_state(self.controller_state_initial)
-        self._compile()
-
-    def _copy_controller_state(self, controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray], None]):
-        if controller_state is None:
-            copied_state = None
-        elif isinstance(controller_state, jnp.ndarray):
-            copied_state = jnp.copy(controller_state)
-        elif isinstance(controller_state, dict):
-            copied_state = {k: jnp.copy(v) for k, v in controller_state.items()}
-        else:
-            raise TypeError("controller_state to copy must be one of (jnp.ndarray, Dict[str,jnp.ndarray], None)")
-
-        return copied_state
-
-    def generate_control(self, state: jnp.ndarray, step_size: float) -> jnp.ndarray:
-        """Generates safe backup control given the current state and step size
-
-        Parameters
-        ----------
-        state : jnp.ndarray
-            current rta state of the system
-        step_size : float
-            time duration over which backup control action will be applied
-
-        Returns
-        -------
-        jnp.ndarray
-            control vector
-        """
-        controller_output = self._generate_control(state, step_size, self.controller_state)
-        if (not isinstance(controller_output, tuple)) or len(controller_output) != 2:
-            raise ValueError('_generate_control should return 2 values: the control vector and the updated controller state')
-        control, self.controller_state = controller_output
-        return control
-
-    @abc.abstractmethod
-    def _generate_control(
-        self,
-        state: jnp.ndarray,
-        step_size: float,
-        controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray]] = None
-    ) -> tuple[jnp.ndarray, Union[jnp.ndarray, Dict[str, jnp.ndarray], None]]:
-        """Generates safe backup control given the current state, step_size, and internal controller state
-
-        Note that in order to be compatible with jax differentiation and jit compiler, all states that are modified by
-            generating control must be contained within the controller_state
-
-        Parameters
-        ----------
-        state : jnp.ndarray
-            current rta state of the system
-        step_size : float
-            time duration over which backup control action will be applied
-        controller_state: jnp.ndarray or Dict[str, jnp.ndarray] or None
-            internal controller state. For stateful controllers, all states that are modified in the control computation
-                (e.g. integral control error buffers) must be contained within controller_state
-
-        Returns
-        -------
-        jnp.ndarray
-            control vector
-        jnp.ndarray or Dict[str, jnp.ndarray] or None
-            Updated controller_state modified by the control algorithm
-            If no internal controller_state is used, return None
-        """
-        raise NotImplementedError()
-
-    def jacobian(self, state: jnp.ndarray, step_size: float):
-        """Computes the jacobian of the of the backup controller control output with respect to the input state
-
-        Parameters
-        ----------
-        state : jnp.ndarray
-            current rta state of the system
-        step_size : float
-            time duration over which backup control action will be applied
-
-        Returns
-        -------
-        jnp.ndarray
-            jacobian matrix
-        """
-        return self._jacobian(state, step_size, self.controller_state)[0]
-
-    def save(self):
-        """Save the internal state of the backup controller
-        Allows trajectory integration with a stateful backup controller
-        """
-        self.controller_state_saved = self._copy_controller_state(self.controller_state)
-
-    def restore(self):
-        """Restores the internal state of the backup controller from the last save
-        Allows trajectory integration with a stateful backup controller
-
-        !!! Note stateful backup controllers are not compatible with jax jit compilation
-        """
-        self.controller_state = self.controller_state_saved
 
 
 class BackupControlBasedRTA(RTAModule):
@@ -427,13 +315,25 @@ class ExplicitSimplexModule(SimplexModule):
     Requires a backup controller which is known safe within the constraint set
     """
 
+    def _compose(self):
+        super()._compose()
+        self._constraint_helper_jit = jit(self._constraint_helper)
+
     def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         pred_state = self._pred_state(state, step_size, control)
-        for c in self.constraints.values():
-            if c(pred_state) < 0:
-                return True
+        return bool(self._constraint_helper_jit(pred_state))
 
-        return False
+    def _constraint_helper(self, pred_state):
+
+        constraint_list = list(self.constraints.values())
+        num_constraints = len(self.constraints)
+        constraint_violations = jnp.zeros(num_constraints)
+
+        for i in range(num_constraints):
+            c = constraint_list[i]
+            constraint_violations = constraint_violations.at[i].set(c(pred_state) < 0)
+
+        return jnp.any(constraint_violations)
 
 
 class ImplicitSimplexModule(SimplexModule):
@@ -804,6 +704,37 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         super().reset()
         self.reset_backup_controller()
 
+    def _compose(self):
+        super()._compose()
+        self._jacobian = jacfwd(self._backup_state_transition)
+
+    def jacobian(self, state: jnp.ndarray, step_size: float, controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray]] = None):
+        """Computes Jacobian of system state transition J(f(x) + g(x,u)) wrt x
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            Current jnp.ndarray of the system at which to evaluate Jacobian
+        step_size : float
+            simulation integration step size
+        controller_state: jnp.ndarray or Dict[str, jnp.ndarray] or None
+            internal controller state. For stateful controllers, all states that are modified in the control computation
+                (e.g. integral control error buffers) must be contained within controller_state
+
+        Returns
+        -------
+        jnp.ndarray
+            Jacobian matrix of state transition
+        """
+        return self._jacobian(state, step_size, controller_state)
+
+    def _backup_state_transition(
+        self, state: jnp.ndarray, step_size: float, controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray]] = None
+    ):
+        return self.state_transition_system(state) + self.state_transition_input(state) @ (
+            self.backup_controller.generate_control_with_controller_state(state, step_size, controller_state)[0]
+        )
+
     def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
@@ -894,8 +825,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             b = constraint.grad(traj_state) @ (traj_sensitivity @ f_x0) \
                 + constraint.alpha(constraint(traj_state))
 
-            ineq_weight[i, :] = a
-            ineq_constant[i] = -b
+            ineq_weight = ineq_weight.at[i, :].set(a)
+            ineq_constant = ineq_constant.at[i].set(-b)
 
         return ineq_weight, ineq_constant
 
@@ -929,7 +860,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         for _ in range(1, Nsteps):
             control = self.backup_control(state, step_size)
             state = self._pred_state(state, step_size, control)
-            sensitivity = sensitivity + (self.compute_jacobian(state, step_size) @ sensitivity) * step_size
+            traj_jac = self.jacobian(state, step_size, self.backup_controller.controller_state)
+            sensitivity = sensitivity + (traj_jac @ sensitivity) * step_size
 
             traj_states.append(state)
             traj_sensitivity.append(sensitivity)
@@ -937,24 +869,6 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         self.backup_controller_restore()
 
         return traj_states, traj_sensitivity
-
-    @abc.abstractmethod
-    def compute_jacobian(self, state: jnp.ndarray, step_size: float) -> jnp.ndarray:
-        """Computes Jacobian of system state transition J(f(x) + g(x,u)) wrt x
-
-        Parameters
-        ----------
-        state : jnp.ndarray
-            Current jnp.ndarray of the system at which to evaluate Jacobian
-        step_size : float
-            simulation integration step size
-
-        Returns
-        -------
-        jnp.ndarray
-            Jacobian matrix of state transition
-        """
-        raise NotImplementedError()
 
 
 def get_lower_bound_ineq_constraint_mats(bound: Union[jnp.ndarray, int, float], vec_len: int) -> tuple[jnp.ndarray, jnp.ndarray]:
