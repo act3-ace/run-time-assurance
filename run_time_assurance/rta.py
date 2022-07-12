@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional, Union
 import jax.numpy as jnp
 import numpy as np
 import quadprog
-from jax import jacfwd
+from jax import jacfwd, jit
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
@@ -57,7 +57,7 @@ class RTAModule(abc.ABC):
 
         self._setup_properties()
         self.constraints = self._setup_constraints()
-        self._compile()
+        self._compose()
 
     def reset(self):
         """Resets the rta module to the initial state at the beginning of an episode
@@ -82,8 +82,8 @@ class RTAModule(abc.ABC):
         """
         raise NotImplementedError()
 
-    def _compile(self):
-        """Compiles jax functions including derivatives and/or jit"""
+    def _compose(self):
+        """applies jax composition transformations (grad, jit, jacobian etc.)"""
 
     @abc.abstractmethod
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
@@ -315,13 +315,25 @@ class ExplicitSimplexModule(SimplexModule):
     Requires a backup controller which is known safe within the constraint set
     """
 
+    def _compose(self):
+        super()._compose()
+        self._constraint_helper_jit = jit(self._constraint_helper)
+
     def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         pred_state = self._pred_state(state, step_size, control)
-        for c in self.constraints.values():
-            if c(pred_state) < 0:
-                return True
+        return bool(self._constraint_helper_jit(pred_state))
 
-        return False
+    def _constraint_helper(self, pred_state):
+
+        constraint_list = list(self.constraints.values())
+        num_constraints = len(self.constraints)
+        constraint_violations = jnp.zeros(num_constraints)
+
+        for i in range(num_constraints):
+            c = constraint_list[i]
+            constraint_violations = constraint_violations.at[i].set(c(pred_state) < 0)
+
+        return jnp.any(constraint_violations)
 
 
 class ImplicitSimplexModule(SimplexModule):
@@ -692,8 +704,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         super().reset()
         self.reset_backup_controller()
 
-    def _compile(self):
-        super()._compile()
+    def _compose(self):
+        super()._compose()
         self._jacobian = jacfwd(self._backup_state_transition)
 
     def jacobian(self, state: jnp.ndarray, step_size: float, controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray]] = None):
