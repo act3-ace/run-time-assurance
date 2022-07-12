@@ -1,5 +1,8 @@
 """Provides util functions for the run-time-assurance library"""
+from functools import partial
+
 import jax.numpy as jnp
+import numpy as np
 from jax import jit
 
 
@@ -22,3 +25,41 @@ def norm_with_delta(x: jnp.ndarray, delta: float):
         vector norm value
     """
     return jnp.sqrt(jnp.sum(jnp.square(x)) + delta)
+
+
+@jit
+def to_jnp_array_jit(x: np.ndarray) -> jnp.ndarray:
+    """
+    Converts a numpy array to a jax numpy array with a jit compiled function
+    Allows significantly faster jax numpy array conversion when called repeatedly with an input of the same shape
+
+    Parameters
+    ----------
+    x : np.ndarray
+        input numpy array to be converted
+
+    Returns
+    -------
+    jnp.ndarray
+        jax numpy version of the input array
+    """
+    return jnp.array(x)
+
+
+@partial(jit, static_argnames=['axis'])
+def jnp_stack_jit(arrays, axis: int = 0) -> jnp.ndarray:
+    """Apples a jit compiled version of jax numpy stack
+
+    Parameters
+    ----------
+    arrays : Sequence of array_likes
+        Array to be stacked together into a single jnp ndarray
+    axis : int, optional
+        axis across which to stack arrays, by default 0
+
+    Returns
+    -------
+    jnp.ndarray
+        stack array of input array sequence
+    """
+    return jnp.stack(arrays, axis=axis)
