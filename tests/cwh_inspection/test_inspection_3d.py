@@ -72,6 +72,7 @@ class Env():
         x = np.zeros((self.deputies, 6))
         for i in range(self.deputies):
             x[i, :] = self.reset()
+        print(repr(x))
         # Desired state is opposite of initial state
         x_des = -x
         # Data tracking arrays
@@ -156,7 +157,7 @@ class Env():
         ax3.set_ylabel(r'Relative Distance ($r_H$) [m]')
         ax3.set_title('Chief Collision Constraint')
         ax3.set_yscale('log')
-        ax3.set_ylim([0, ymax])
+        ax3.set_ylim([7, ymax])
         ax3.grid(True)
 
         ax4 = fig.add_subplot(335)
@@ -202,7 +203,7 @@ class Env():
             ax8.set_ylabel('Relative Distance to Closest Deputy [m]')
             ax8.set_title('Deputy Collision Constraint')
             ax8.set_yscale('log')
-            ax8.set_ylim([0, ymax])
+            ax8.set_ylim([3, ymax])
             ax8.grid(True)
 
         ax9 = fig.add_subplot(336)

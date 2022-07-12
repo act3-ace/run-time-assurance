@@ -193,7 +193,9 @@ class InspectionRTA(ExplicitASIFModule):
             B_n = jnp.vstack((B_n, jnp.zeros(self.B.shape)))
         self.B_n = jnp.array(B_n)
 
-        super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
+        self.control_dim = self.B.shape[1]
+
+        super().__init__(*args, control_dim=self.control_dim, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
 
     def _setup_constraints(self) -> OrderedDict:
         OD = OrderedDict(
@@ -257,7 +259,7 @@ class ConstraintCWHRelativeVelocity(ConstraintModule):
         self.v1 = v1
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.05, 0, 0.5])
+            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.1])
         super().__init__(alpha=alpha)
 
     def _compute(self, state: jnp.ndarray) -> float:
@@ -284,7 +286,7 @@ class ConstraintCWHChiefCollision(ConstraintModule):
         self.a_max = a_max
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.005, 0, 0.05])
+            alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.01])
         super().__init__(alpha=alpha)
 
     def _compute(self, state: jnp.ndarray) -> float:
@@ -315,7 +317,7 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
         self.deputy = deputy
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.005, 0, 0.05])
+            alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.01])
         super().__init__(alpha=alpha)
 
     def _compute(self, state: jnp.ndarray) -> float:
@@ -350,7 +352,7 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
         self.e_hat_vel = jnp.array([0, 0, 0])
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.05])
+            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.01])
         super().__init__(alpha=alpha)
 
     def _compute(self, state: jnp.ndarray) -> float:
