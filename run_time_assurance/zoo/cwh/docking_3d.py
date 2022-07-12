@@ -4,6 +4,7 @@ from collections import OrderedDict
 from typing import Dict, Tuple, Union
 
 import jax.numpy as jnp
+import numpy as np
 import scipy
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
@@ -117,7 +118,7 @@ class Docking3dRTAMixin:
 
     def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Predicts the next state given the current state and control action"""
-        next_state_vec, _ = self.dynamics.step(step_size, state, control)
+        next_state_vec, _ = self.dynamics.step(step_size, np.array(state), np.array(control))
         return jnp.array(next_state_vec)
 
     def _docking_f_x(self, state: jnp.ndarray) -> jnp.ndarray:
