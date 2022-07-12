@@ -259,7 +259,7 @@ class ConstraintCWHRelativeVelocity(ConstraintModule):
         self.v1 = v1
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.1])
+            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
         super().__init__(alpha=alpha)
 
     def _compute(self, state: jnp.ndarray) -> float:
@@ -286,7 +286,7 @@ class ConstraintCWHChiefCollision(ConstraintModule):
         self.a_max = a_max
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.01])
+            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
         super().__init__(alpha=alpha)
 
     def _compute(self, state: jnp.ndarray) -> float:
@@ -317,7 +317,7 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
         self.deputy = deputy
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.01])
+            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
         super().__init__(alpha=alpha)
 
     def _compute(self, state: jnp.ndarray) -> float:
@@ -352,7 +352,7 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
         self.e_hat_vel = jnp.array([0, 0, 0])
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.01])
+            alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.001])
         super().__init__(alpha=alpha)
 
     def _compute(self, state: jnp.ndarray) -> float:
