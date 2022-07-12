@@ -85,6 +85,7 @@ class RTAModule(abc.ABC):
 
     def _compose(self):
         """applies jax composition transformations (grad, jit, jacobian etc.)"""
+        self._compile_numpy_to_jax = jit(self._convert_numpy_to_jax)
 
     @abc.abstractmethod
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
@@ -102,7 +103,11 @@ class RTAModule(abc.ABC):
         if isinstance(input_state, jnp.ndarray):
             return input_state
 
-        return jnp.array(input_state)
+        return self._compile_numpy_to_jax(input_state)
+
+    def _convert_numpy_to_jax(self, array: np.ndarray) -> jnp.ndarray:
+        """Converts numpy array to jax array, compiles using jit"""
+        return jnp.array(array)
 
     def filter_control(self, input_state, step_size: float, control_desired: np.ndarray) -> np.ndarray:
         """filters desired control into safe action
@@ -127,7 +132,7 @@ class RTAModule(abc.ABC):
 
         if self.enable:
             state = self._get_state(input_state)
-            control_actual = self._clip_control(self._filter_control(state, step_size, jnp.array(control_desired)))
+            control_actual = self._clip_control(self._filter_control(state, step_size, self._compile_numpy_to_jax(control_desired)))
             self.control_actual = np.array(control_actual)
         else:
             self.control_actual = np.copy(control_desired)
@@ -429,16 +434,16 @@ class ASIFModule(RTAModule):
     def _compose(self):
         super()._compose()
         self._generate_ineq_mats_fn = jit(self._generate_ineq_mats)
-        self._post_optimization_fn = jit(self._post_optimization)
 
-    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> np.ndarray:
         ineq_weight, ineq_constant = self._generate_ineq_mats_fn(state, step_size)
+        desired_control = np.array(control, dtype=np.float64)
         try:
-            actual_control = self._optimize(self.obj_weight, control, ineq_weight, ineq_constant)
+            actual_control = self._optimize(self.obj_weight, desired_control, ineq_weight, ineq_constant)
         except ValueError:
-            actual_control = control
+            actual_control = desired_control
             warnings.warn("**Warning! QuadProg could not find a solution, passing desired control**")
-        self.intervening = self.monitor(control, actual_control)
+        self.intervening = self.monitor(desired_control, actual_control)
 
         return actual_control
 
@@ -463,22 +468,7 @@ class ASIFModule(RTAModule):
         ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
         ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
 
-        return ineq_weight, ineq_constant
-
-    def _post_optimization(self, opt_control: np.ndarray) -> jnp.ndarray:
-        """converts numpy optimal control array into jax array
-
-        Parameters
-        ----------
-        opt_control : np.ndarray
-            control from quadprog solver
-
-        Returns
-        -------
-        jnp.ndarray
-            jax conversion of control
-        """
-        return jnp.array(opt_control)
+        return ineq_weight.transpose(), ineq_constant
 
     def _generate_actuation_constraint_mats(self) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices that impose actuator limits
@@ -509,7 +499,7 @@ class ASIFModule(RTAModule):
         return ineq_weight, ineq_constant
 
     def _optimize(
-        self, obj_weight: np.ndarray, obj_constant: jnp.ndarray, ineq_weight: jnp.ndarray, ineq_constant: jnp.ndarray
+        self, obj_weight: np.ndarray, obj_constant: np.ndarray, ineq_weight: jnp.ndarray, ineq_constant: jnp.ndarray
     ) -> np.ndarray:
         """Solve ASIF optimization problem via quadratic program
 
@@ -517,7 +507,7 @@ class ASIFModule(RTAModule):
         ----------
         obj_weight : np.ndarray
             matix G of quadprog objective 1/2 x^T G x - a^T x
-        obj_constant : jnp.ndarray
+        obj_constant : np.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         ineq_weight : jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
@@ -526,29 +516,27 @@ class ASIFModule(RTAModule):
 
         Returns
         -------
-        jnp.ndarray
+        np.ndarray
             Actual control solved by QP
         """
         opt = quadprog.solve_qp(
             obj_weight,
-            np.array(obj_constant, dtype=np.float64),
-            np.array(ineq_weight.transpose(), dtype=np.float64),
+            obj_constant,
+            np.array(ineq_weight, dtype=np.float64),
             np.array(ineq_constant, dtype=np.float64),
             0
         )[0]
 
-        control = self._post_optimization_fn(opt)
+        return opt
 
-        return control
-
-    def monitor(self, desired_control: jnp.ndarray, actual_control: jnp.ndarray) -> bool:
+    def monitor(self, desired_control: np.ndarray, actual_control: np.ndarray) -> bool:
         """Determines whether the ASIF RTA module is currently intervening
 
         Parameters
         ----------
-        desired_control : jnp.ndarray
+        desired_control : np.ndarray
             desired control vector
-        actual_control : jnp.ndarray
+        actual_control : np.ndarray
             actual control vector produced by ASIF optimization
 
         Returns
@@ -556,10 +544,7 @@ class ASIFModule(RTAModule):
         bool
             True if rta module is interveining
         """
-        if jnp.linalg.norm(desired_control - actual_control) <= self.epsilon:
-            return False
-
-        return True
+        return np.linalg.norm(desired_control - actual_control) > self.epsilon
 
     @abc.abstractmethod
     def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
