@@ -317,11 +317,11 @@ class ExplicitSimplexModule(SimplexModule):
 
     def _compose(self):
         super()._compose()
-        self._constraint_helper_jit = jit(self._constraint_helper)
+        self._constraint_helper_fn = jit(self._constraint_helper)
 
     def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         pred_state = self._pred_state(state, step_size, control)
-        return bool(self._constraint_helper_jit(pred_state))
+        return bool(self._constraint_helper_fn(pred_state))
 
     def _constraint_helper(self, pred_state):
 
