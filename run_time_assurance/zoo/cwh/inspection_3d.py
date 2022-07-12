@@ -183,6 +183,16 @@ class InspectionRTA(ExplicitASIFModule):
 
         self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method="RK45")
 
+        A_n = jnp.copy(self.A)
+        for _ in range(self.num_deputies - 1):
+            A_n = scipy.linalg.block_diag(A_n, jnp.copy(self.A))
+        self.A_n = jnp.array(A_n)
+
+        B_n = jnp.copy(self.B)
+        for _ in range(self.num_deputies - 1):
+            B_n = jnp.vstack((B_n, jnp.zeros(self.B.shape)))
+        self.B_n = jnp.array(B_n)
+
         super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
 
     def _setup_constraints(self) -> OrderedDict:
@@ -221,17 +231,10 @@ class InspectionRTA(ExplicitASIFModule):
         pass
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
-        A = jnp.copy(self.A)
-        for _ in range(self.num_deputies - 1):
-            A = scipy.linalg.block_diag(A, jnp.copy(self.A))
-        A = jnp.array(A)
-        return A @ state
+        return self.A_n @ state
 
     def state_transition_input(self, state: jnp.ndarray) -> jnp.ndarray:
-        B = jnp.copy(self.B)
-        for _ in range(self.num_deputies - 1):
-            B = jnp.vstack((B, jnp.zeros(self.B.shape)))
-        return B
+        return self.B_n
 
 
 class ConstraintCWHRelativeVelocity(ConstraintModule):

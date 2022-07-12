@@ -49,8 +49,7 @@ class Env():
             x1[i, :] = (np.vstack(x[i, :]) + xd * self.dt).flatten()
         return x1
 
-    def run_one_step(self, rta):
-        self.rta = rta
+    def run_one_step(self):
         x = np.zeros((self.deputies, 6))
         for i in range(self.deputies):
             x[i, :] = self.reset()
@@ -280,7 +279,15 @@ class Env():
 # Setup env, RTA, then run episode
 env = Env()
 rta = InspectionRTA()
-# env.run_episode(rta)
-env.run_one_step(rta)
+env.run_episode(rta)
+# env.rta = rta
+# env.run_one_step()
+# env.run_one_step()
+# env.run_one_step()
+# env.run_one_step()
 
-# plt.show()
+# import cProfile
+
+# cProfile.run('env.run_one_step()', filename='program2.prof')
+
+plt.show()
