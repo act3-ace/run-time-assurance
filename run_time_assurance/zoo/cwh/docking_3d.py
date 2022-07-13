@@ -18,7 +18,7 @@ from run_time_assurance.constraint import (
 from run_time_assurance.controller import RTABackupController
 from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule
 from run_time_assurance.state import RTAStateWrapper
-from run_time_assurance.utils import norm_with_delta
+from run_time_assurance.utils import norm_with_delta, to_jnp_array_jit
 from run_time_assurance.zoo.cwh.docking_2d import V0_DEFAULT, X_VEL_LIMIT_DEFAULT, Y_VEL_LIMIT_DEFAULT
 
 Z_VEL_LIMIT_DEFAULT = 10
@@ -119,7 +119,7 @@ class Docking3dRTAMixin:
     def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Predicts the next state given the current state and control action"""
         next_state_vec, _ = self.dynamics.step(step_size, np.array(state), np.array(control))
-        return jnp.array(next_state_vec)
+        return to_jnp_array_jit(next_state_vec)
 
     def _docking_f_x(self, state: jnp.ndarray) -> jnp.ndarray:
         """Computes the system contribution to the state transition: f(x) of dx/dt = f(x) + g(x)u"""

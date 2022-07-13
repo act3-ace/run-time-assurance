@@ -15,11 +15,11 @@ from typing import Any, Dict, Optional, Union
 import jax.numpy as jnp
 import numpy as np
 import quadprog
-from jax import jacfwd, jit
-import warnings
+from jax import jacfwd, jit, vmap
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
+from run_time_assurance.utils import jnp_stack_jit, to_jnp_array_jit
 
 
 class RTAModule(abc.ABC):
@@ -103,22 +103,7 @@ class RTAModule(abc.ABC):
         if isinstance(input_state, jnp.ndarray):
             return input_state
 
-        return self._compile_numpy_to_jax(input_state)
-
-    def _convert_numpy_to_jax(self, array: np.ndarray) -> jnp.ndarray:
-        """Converts numpy array to jax array, compiles using jit
-        
-        Parameters
-        ----------
-        array: np.ndarray
-            numpy array to convert to jax
-
-        Returns
-        -------
-        jnp.ndarray
-            jax array
-        """
-        return jnp.array(array)
+        return to_jnp_array_jit(input_state)
 
     def filter_control(self, input_state, step_size: float, control_desired: np.ndarray) -> np.ndarray:
         """filters desired control into safe action
@@ -372,21 +357,45 @@ class ImplicitSimplexModule(SimplexModule):
         self.backup_window = backup_window
         super().__init__(*args, backup_controller=backup_controller, **kwargs)
 
+    def _compose(self):
+        super()._compose()
+        self._constraint_helper_fn = jit(self._constraint_helper)
+
     def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
-        Nsteps = int(self.backup_window / step_size) + 1
 
-        next_state = self._pred_state(state, step_size, control)
-        traj_states = self.integrate(next_state, step_size, Nsteps)
+        traj_states = self.integrate(state, step_size, control)
 
-        # TODO vectorize
-        for i in range(Nsteps):
-            for c in self.constraints.values():
-                if c(traj_states[i]) < 0:
-                    return True
+        return bool(self._constraint_helper_fn(traj_states))
 
-        return False
+    def _constraint_helper(self, traj_states):
 
-    def integrate(self, state: jnp.ndarray, step_size: float, Nsteps: int) -> list:
+        constraint_list = list(self.constraints.values())
+        num_constraints = len(self.constraints)
+        constraint_violations = jnp.zeros(num_constraints)
+
+        for i in range(num_constraints):
+            c = constraint_list[i]
+
+            constraint_vmapped = vmap(c.compute, 0, 0)
+            traj_constraint_vals = constraint_vmapped(traj_states)
+
+            constraint_violations = constraint_violations.at[i].set(jnp.any(traj_constraint_vals < 0))
+
+        return jnp.any(constraint_violations)
+
+    # def _constraint_helper(self, traj_states):
+
+    #     constraint_list = list(self.constraints.values())
+    #     num_constraints = len(self.constraints)
+    #     constraint_violations = jnp.zeros(num_constraints)
+
+    #     for i in range(num_constraints):
+    #         c = constraint_list[i]
+    #         constraint_violations = constraint_violations.at[i].set(c(pred_state) < 0)
+
+    #     return jnp.any(constraint_violations)
+
+    def integrate(self, state: jnp.ndarray, step_size: float, desired_control: jnp.ndarray) -> jnp.ndarray:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
 
         Parameters
@@ -395,27 +404,30 @@ class ImplicitSimplexModule(SimplexModule):
             initial rta state of the system
         step_size : float
             simulation integration step size
-        Nsteps : int
-            number of simulation integration steps
+        desired_control : jnp.ndarray
+            control desired by the primary controller
 
         Returns
         -------
-        list
-            list of rta states from along the trajectory
+        jnp.ndarray
+            jax array of implict backup trajectory states.
+            Shape (M, N) where M is number of states and N is the dimension of the state vector
         """
-        traj_states = [state.copy()]
+        Nsteps = int(self.backup_window / step_size)
+
+        state = self._pred_state(state, step_size, desired_control)
+        traj_states = [state]
 
         self.backup_controller_save()
 
-        # TODO Vectorize
-        for _ in range(1, Nsteps):
+        for _ in range(Nsteps):
             control = self.backup_control(state, step_size)
             state = self._pred_state(state, step_size, control)
             traj_states.append(state)
 
         self.backup_controller_restore()
 
-        return traj_states
+        return jnp_stack_jit(traj_states, axis=0)
 
 
 class ASIFModule(RTAModule):
