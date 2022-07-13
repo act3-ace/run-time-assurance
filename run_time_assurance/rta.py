@@ -16,6 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import quadprog
 from jax import jacfwd, jit, vmap
+import warnings
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
@@ -85,7 +86,6 @@ class RTAModule(abc.ABC):
 
     def _compose(self):
         """applies jax composition transformations (grad, jit, jacobian etc.)"""
-        self._compile_numpy_to_jax = jit(self._convert_numpy_to_jax)
 
     @abc.abstractmethod
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
@@ -128,7 +128,7 @@ class RTAModule(abc.ABC):
 
         if self.enable:
             state = self._get_state(input_state)
-            control_actual = self._clip_control(self._filter_control(state, step_size, self._compile_numpy_to_jax(control_desired)))
+            control_actual = self._clip_control(self._filter_control(state, step_size, to_jnp_array_jit(control_desired)))
             self.control_actual = np.array(control_actual)
         else:
             self.control_actual = np.copy(control_desired)

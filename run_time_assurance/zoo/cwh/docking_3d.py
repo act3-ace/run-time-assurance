@@ -337,7 +337,7 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         self.y_vel_limit = y_vel_limit
         self.z_vel_limit = z_vel_limit
 
-        super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
+        super().__init__(*args, control_dim=3, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
 
     def _setup_properties(self):
         self._setup_docking_properties(self.m, self.n, self.v1_coef)
