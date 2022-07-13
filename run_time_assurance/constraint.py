@@ -45,6 +45,22 @@ class ConstraintModule(abc.ABC):
         """
         return self._compute_fn(state)
 
+    def compute(self, state: jnp.ndarray) -> float:
+        """Evaluates constraint function h(x)
+        Considered satisfied when h(x) >= 0
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            current rta state of the system
+
+        Returns
+        -------
+        float:
+            result of inequality constraint function
+        """
+        return self._compute_fn(state)
+
     @abc.abstractmethod
     def _compute(self, state: jnp.ndarray) -> float:
         """Custom implementation of constraint function
