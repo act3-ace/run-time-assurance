@@ -431,6 +431,7 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
 
         super().__init__(
             *args,
+            control_dim=3,
             backup_window=backup_window,
             num_check_all=num_check_all,
             skip_length=skip_length,
@@ -447,7 +448,9 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control)
+        # return self._docking_pred_state(state, step_size, control)
+        state_dot = self._docking_f_x(state) + (self._docking_g_x(state) @ jnp.vstack(control)).flatten()
+        return state + state_dot * step_size
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         return self._docking_f_x(state)
