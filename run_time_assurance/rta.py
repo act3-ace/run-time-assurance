@@ -9,14 +9,14 @@ Inlcudes base implementations for the following RTA algorithms:
 from __future__ import annotations
 
 import abc
+import warnings
 from collections import OrderedDict
 from typing import Any, Dict, Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
 import quadprog
-from jax import jacfwd, jit, vmap, lax
-import warnings
+from jax import jacfwd, jit, vmap
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
@@ -442,11 +442,11 @@ class ASIFModule(RTAModule):
     epsilon : float
         threshold distance between desired action and actual safe action at which the rta is said to be intervening
         default 1e-2
-    control_dim : float
+    control_dim : int
         length of control vector
     """
 
-    def __init__(self, *args: Any, epsilon: float = 1e-2, control_dim: float, **kwargs: Any):
+    def __init__(self, *args: Any, epsilon: float = 1e-2, control_dim: int, **kwargs: Any):
         self.epsilon = epsilon
         super().__init__(*args, **kwargs)
 
@@ -520,11 +520,7 @@ class ASIFModule(RTAModule):
             Actual control solved by QP
         """
         opt = quadprog.solve_qp(
-            obj_weight,
-            obj_constant,
-            np.array(ineq_weight, dtype=np.float64),
-            np.array(ineq_constant, dtype=np.float64),
-            0
+            obj_weight, obj_constant, np.array(ineq_weight, dtype=np.float64), np.array(ineq_constant, dtype=np.float64), 0
         )[0]
 
         return opt
@@ -619,7 +615,7 @@ class ExplicitASIFModule(ASIFModule):
     epislon : float
         threshold distance between desired action and actual safe action at which the rta is said to be intervening
         default 1e-2
-    control_dim : float
+    control_dim : int
         length of control vector
     """
 
@@ -775,8 +771,12 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
         traj_states, traj_sensitivities = self.integrate(state, step_size, num_steps)
 
-        check_points = jnp.hstack((jnp.array(range(0, self.num_check_all + 1)),
-            jnp.array(range(self.num_check_all + self.skip_length, num_steps, self.skip_length)))).astype(int)
+        check_points = jnp.hstack(
+            (
+                jnp.array(range(0, self.num_check_all + 1)),
+                jnp.array(range(self.num_check_all + self.skip_length, num_steps, self.skip_length))
+            )
+        ).astype(int)
 
         # **Needs rework such that check point can be different for each constraint?
         # resample checkpoints to the trajectory points with the min constraint values
@@ -797,7 +797,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         constraint_list = list(self.constraints.values())
         num_constraints = len(self.constraints)
         for i in range(num_constraints):
-            constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0) , (0, 0))
+            constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0), (0, 0))
             point_ineq_weight, point_ineq_constant = constraint_vmapped(constraint_list[i], state, traj_states, traj_sensitivities)
             ineq_weight_barrier = jnp.concatenate((ineq_weight_barrier, point_ineq_weight), axis=0)
             ineq_constant_barrier = jnp.concatenate((ineq_constant_barrier, point_ineq_constant), axis=0)
@@ -806,7 +806,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
         return ineq_weight.transpose(), ineq_constant
 
-    def invariance_constraints(self, constraint: ConstraintModule, initial_state: jnp.ndarray, traj_state: jnp.ndarray, traj_sensitivity: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+    def invariance_constraints(self, constraint: ConstraintModule, initial_state: jnp.ndarray, traj_state: list,
+                               traj_sensitivity: list) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Computes safety constraint invariance constraints via Nagumo's condition for a point in the backup trajectory
 
         Parameters
@@ -815,9 +816,9 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             constraint to create cbf for
         initial_state : jnp.ndarray
             initial state of the backup trajectory
-        traj_state : jnp.ndarray
+        traj_state : list
             arbitrary state in the backup trajectory
-        traj_sensitivity : jnp.ndarray
+        traj_sensitivity : list
             backup trajectory state sensitivity (i.e. jacobian relative to the initial state)
 
         Returns
@@ -827,14 +828,17 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         jnp.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         """
+        traj_state_array = jnp.array(traj_state)
+        traj_sensitivity_array = jnp.array(traj_sensitivity)
+
         f_x0 = self.state_transition_system(initial_state)
         g_x0 = self.state_transition_input(initial_state)
 
-        grad_x = constraint.grad(traj_state)
-        ineq_weight = grad_x @ (traj_sensitivity @ g_x0)
+        grad_x = constraint.grad(traj_state_array)
+        ineq_weight = grad_x @ (traj_sensitivity_array @ g_x0)
 
-        ineq_constant = grad_x @ (traj_sensitivity @ f_x0) \
-            + constraint.alpha(constraint(traj_state))
+        ineq_constant = grad_x @ (traj_sensitivity_array @ f_x0) \
+            + constraint.alpha(constraint(traj_state_array))
 
         return ineq_weight, -ineq_constant
 
