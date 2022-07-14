@@ -31,6 +31,10 @@ class RTAModule(abc.ABC):
         upper bound of allowable control. Pass a list for element specific limit. By default None
     control_bounds_low : Union[float, int, list, np.ndarray, jnp.ndarray], optional
         upper bound of allowable control. Pass a list for element specific limit. By default None
+    jit_compile_dict: Dict[str, bool], optional
+        Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
+        Useful for implementing versions methods that can't be jit compiled
+        Each RTA class will have custom default behavior if not passed
     """
 
     def __init__(
@@ -38,6 +42,7 @@ class RTAModule(abc.ABC):
         *args: Any,
         control_bounds_high: Union[float, int, list, np.ndarray, jnp.ndarray] = None,
         control_bounds_low: Union[float, int, list, np.ndarray, jnp.ndarray] = None,
+        jit_compile_dict: Dict[str, bool] = None,
         **kwargs: Any
     ):
         if isinstance(control_bounds_high, (list, np.ndarray)):
@@ -49,6 +54,11 @@ class RTAModule(abc.ABC):
         self.control_bounds_high = control_bounds_high
         self.control_bounds_low = control_bounds_low
 
+        if jit_compile_dict is None:
+            self.jit_compile_dict = {}
+        else:
+            self.jit_compile_dict = jit_compile_dict
+
         self.enable = True
         self.intervening = False
         self.control_desired: Optional[np.ndarray] = None
@@ -58,7 +68,7 @@ class RTAModule(abc.ABC):
 
         self._setup_properties()
         self.constraints = self._setup_constraints()
-        self._compose()
+        self.compose()
 
     def reset(self):
         """Resets the rta module to the initial state at the beginning of an episode
@@ -83,8 +93,12 @@ class RTAModule(abc.ABC):
         """
         raise NotImplementedError()
 
-    def _compose(self):
-        """applies jax composition transformations (grad, jit, jacobian etc.)"""
+    def compose(self):
+        """
+        applies jax composition transformations (grad, jit, jacobian etc.)
+
+        jit complilation is determined by the jit_compile_dict constructor parameter
+        """
 
     @abc.abstractmethod
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
@@ -257,6 +271,28 @@ class SimplexModule(BackupControlBasedRTA):
         super().reset()
         self.reset_backup_controller()
 
+    def compose(self):
+        """
+        applies jax composition transformations (grad, jit, jacobian etc.)
+
+        jit complilation is determined by the jit_compile_dict constructor parameter
+        jit compilation settings:
+            constraint_violation:
+                default True
+            pred_state:
+                default False
+        """
+        super().compose()
+        if self.jit_compile_dict.get('constraint_violation', True):
+            self._constraint_violation_fn = jit(self._constraint_violation)
+        else:
+            self._constraint_violation_fn = self._constraint_violation
+
+        if self.jit_compile_dict.get('pred_state', False):
+            self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
+        else:
+            self._pred_state_fn = self._pred_state
+
     def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Simplex implementation of filter control
         Returns backup control if monitor returns True
@@ -309,22 +345,7 @@ class SimplexModule(BackupControlBasedRTA):
         """
         raise NotImplementedError()
 
-
-class ExplicitSimplexModule(SimplexModule):
-    """Base implementation for Explicit Simplex RTA module
-    Switches to backup controller if desired control would evaluate safety constraint at next timestep
-    Requires a backup controller which is known safe within the constraint set
-    """
-
-    def _compose(self):
-        super()._compose()
-        self._constraint_helper_fn = jit(self._constraint_helper)
-
-    def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
-        pred_state = self._pred_state(state, step_size, control)
-        return bool(self._constraint_helper_fn(pred_state))
-
-    def _constraint_helper(self, pred_state):
+    def _constraint_violation(self, states: jnp.ndarray) -> bool:
 
         constraint_list = list(self.constraints.values())
         num_constraints = len(self.constraints)
@@ -332,9 +353,24 @@ class ExplicitSimplexModule(SimplexModule):
 
         for i in range(num_constraints):
             c = constraint_list[i]
-            constraint_violations = constraint_violations.at[i].set(c(pred_state) < 0)
+
+            constraint_vmapped = vmap(c.compute, 0, 0)
+            traj_constraint_vals = constraint_vmapped(states)
+
+            constraint_violations = constraint_violations.at[i].set(jnp.any(traj_constraint_vals < 0))
 
         return jnp.any(constraint_violations)
+
+
+class ExplicitSimplexModule(SimplexModule):
+    """Base implementation for Explicit Simplex RTA module
+    Switches to backup controller if desired control would evaluate safety constraint at next timestep
+    Requires a backup controller which is known safe within the constraint set
+    """
+
+    def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
+        pred_state = self._pred_state_fn(state, step_size, control)
+        return bool(self._constraint_violation_fn(pred_state[None, :]))
 
 
 class ImplicitSimplexModule(SimplexModule):
@@ -356,43 +392,29 @@ class ImplicitSimplexModule(SimplexModule):
         self.backup_window = backup_window
         super().__init__(*args, backup_controller=backup_controller, **kwargs)
 
-    def _compose(self):
-        super()._compose()
-        self._constraint_helper_fn = jit(self._constraint_helper)
+    def compose(self):
+        """
+        applies jax composition transformations (grad, jit, jacobian etc.)
+
+        jit complilation is determined by the jit_compile_dict constructor parameter
+        jit compilation settings:
+            integrate:
+                Backup controller trajectory integration
+                default True
+
+        See parent class for additional options
+        """
+        super().compose()
+        if self.jit_compile_dict.get('integrate', False):
+            self._integrate_fn = jit(self.integrate, static_argnames=['step_size'])
+        else:
+            self._integrate_fn = self.integrate
 
     def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
 
-        traj_states = self.integrate(state, step_size, control)
+        traj_states = self._integrate_fn(state, step_size, control)
 
-        return bool(self._constraint_helper_fn(traj_states))
-
-    def _constraint_helper(self, traj_states):
-
-        constraint_list = list(self.constraints.values())
-        num_constraints = len(self.constraints)
-        constraint_violations = jnp.zeros(num_constraints)
-
-        for i in range(num_constraints):
-            c = constraint_list[i]
-
-            constraint_vmapped = vmap(c.compute, 0, 0)
-            traj_constraint_vals = constraint_vmapped(traj_states)
-
-            constraint_violations = constraint_violations.at[i].set(jnp.any(traj_constraint_vals < 0))
-
-        return jnp.any(constraint_violations)
-
-    # def _constraint_helper(self, traj_states):
-
-    #     constraint_list = list(self.constraints.values())
-    #     num_constraints = len(self.constraints)
-    #     constraint_violations = jnp.zeros(num_constraints)
-
-    #     for i in range(num_constraints):
-    #         c = constraint_list[i]
-    #         constraint_violations = constraint_violations.at[i].set(c(pred_state) < 0)
-
-    #     return jnp.any(constraint_violations)
+        return bool(self._constraint_violation_fn(traj_states))
 
     def integrate(self, state: jnp.ndarray, step_size: float, desired_control: jnp.ndarray) -> jnp.ndarray:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
@@ -414,14 +436,14 @@ class ImplicitSimplexModule(SimplexModule):
         """
         Nsteps = int(self.backup_window / step_size)
 
-        state = self._pred_state(state, step_size, desired_control)
+        state = self._pred_state_fn(state, step_size, desired_control)
         traj_states = [state]
 
         self.backup_controller_save()
 
         for _ in range(Nsteps):
             control = self.backup_control(state, step_size)
-            state = self._pred_state(state, step_size, control)
+            state = self._pred_state_fn(state, step_size, control)
             traj_states.append(state)
 
         self.backup_controller_restore()
@@ -732,8 +754,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         super().reset()
         self.reset_backup_controller()
 
-    def _compose(self):
-        super()._compose()
+    def compose(self):
+        super().compose()
         self._jacobian = jacfwd(self._backup_state_transition)
 
     def jacobian(self, state: jnp.ndarray, step_size: float, controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray]] = None):
