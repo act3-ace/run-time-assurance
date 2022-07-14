@@ -411,7 +411,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         # return self._docking_pred_state(state, step_size, control)
-        state_dot = self._docking_f_x(state) + (self._docking_g_x(state) @ jnp.vstack(control)).flatten()
+        state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
         return state + state_dot * step_size
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
