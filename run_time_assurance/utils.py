@@ -1,4 +1,5 @@
 """Provides util functions for the run-time-assurance library"""
+import warnings
 from functools import partial
 
 import jax.numpy as jnp
@@ -63,3 +64,30 @@ def jnp_stack_jit(arrays, axis: int = 0) -> jnp.ndarray:
         stack array of input array sequence
     """
     return jnp.stack(arrays, axis=axis)
+
+
+class SolverError(Exception):
+    """Exception for when solver does not find a solution
+
+    Parameters
+    ----------
+    e : Exception
+        Exception raised by solver
+    """
+
+    def __init__(self, e: Exception):
+        if e.args[0] == "constraints are inconsistent, no solution":
+            super().__init__("SolverError: Solver could not find a solution")
+        else:
+            raise e
+
+
+class SolverWarning():
+    """Warning for when solver does not find a solution
+    """
+
+    def __init__(self, e: Exception):
+        if e.args[0] == "constraints are inconsistent, no solution":
+            warnings.warn("**Warning! Solver could not find a solution, passing desired control**")
+        else:
+            raise e

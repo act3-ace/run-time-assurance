@@ -9,7 +9,6 @@ Inlcudes base implementations for the following RTA algorithms:
 from __future__ import annotations
 
 import abc
-import warnings
 from collections import OrderedDict
 from typing import Any, Dict, Optional, Union
 
@@ -20,7 +19,7 @@ from jax import jacfwd, jit, vmap
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
-from run_time_assurance.utils import jnp_stack_jit, to_jnp_array_jit
+from run_time_assurance.utils import SolverError, SolverWarning, jnp_stack_jit, to_jnp_array_jit
 
 
 class RTAModule(abc.ABC):
@@ -444,13 +443,16 @@ class ASIFModule(RTAModule):
         default 1e-2
     control_dim : int
         length of control vector
+    solver_exception : bool
+        When the solver cannot find a solution, True for an exception and False for a warning
     """
 
-    def __init__(self, *args: Any, epsilon: float = 1e-2, control_dim: int, **kwargs: Any):
+    def __init__(self, *args: Any, epsilon: float = 1e-2, control_dim: int, solver_exception: bool = False, **kwargs: Any):
         self.epsilon = epsilon
         super().__init__(*args, **kwargs)
 
         self.control_dim = control_dim
+        self.solver_exception = solver_exception
         self.obj_weight = np.eye(self.control_dim)
         self.ineq_weight_actuation, self.ineq_constant_actuation = self._generate_actuation_constraint_mats()
 
@@ -463,9 +465,13 @@ class ASIFModule(RTAModule):
         desired_control = np.array(control, dtype=np.float64)
         try:
             actual_control = self._optimize(self.obj_weight, desired_control, ineq_weight, ineq_constant)
-        except ValueError:
-            actual_control = desired_control
-            warnings.warn("**Warning! QuadProg could not find a solution, passing desired control**")
+        except ValueError as e:
+            if not self.solver_exception:
+                SolverWarning(e)
+                actual_control = desired_control
+            else:
+                raise SolverError(e) from e
+
         self.intervening = self.monitor(desired_control, actual_control)
 
         return actual_control
