@@ -540,7 +540,7 @@ class ASIFModule(RTAModule):
         bool
             True if rta module is interveining
         """
-        return np.linalg.norm(desired_control - actual_control) > self.epsilon
+        return bool(np.linalg.norm(desired_control - actual_control) > self.epsilon)
 
     @abc.abstractmethod
     def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
