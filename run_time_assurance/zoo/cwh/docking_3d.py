@@ -116,10 +116,15 @@ class Docking3dRTAMixin:
             ]
         )
 
-    def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+    def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, jax_compile: bool) -> jnp.ndarray:
         """Predicts the next state given the current state and control action"""
-        next_state_vec, _ = self.dynamics.step(step_size, np.array(state), np.array(control))
-        return to_jnp_array_jit(next_state_vec)
+        if jax_compile:
+            state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
+            out = state + state_dot * step_size
+        else:
+            next_state_vec, _ = self.dynamics.step(step_size, np.array(state), np.array(control))
+            out = to_jnp_array_jit(next_state_vec)
+        return out
 
     def _docking_f_x(self, state: jnp.ndarray) -> jnp.ndarray:
         """Computes the system contribution to the state transition: f(x) of dx/dt = f(x) + g(x)u"""
@@ -158,6 +163,8 @@ class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
     backup_controller : RTABackupController, optional
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
+    jit_compile_dict: Dict[str, bool], optional
+        Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     """
 
     def __init__(
@@ -173,6 +180,7 @@ class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
         control_bounds_high: float = 1,
         control_bounds_low: float = -1,
         backup_controller: RTABackupController = None,
+        jit_compile_dict: Dict[str, bool] = None,
         **kwargs
     ):
         self.m = m
@@ -187,11 +195,15 @@ class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
         if backup_controller is None:
             backup_controller = Docking3dStopLQRBackupController(m=self.m, n=self.n)
 
+        if jit_compile_dict is None:
+            jit_compile_dict = {'constraint_violation': True, 'pred_state': False}
+
         super().__init__(
             *args,
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
             backup_controller=backup_controller,
+            jit_compile_dict=jit_compile_dict,
             **kwargs
         )
 
@@ -202,7 +214,7 @@ class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control)
+        return self._docking_pred_state(state, step_size, control, self.jit_compile_dict.get('pred_state', False))
 
 
 class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
@@ -235,6 +247,8 @@ class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
     backup_controller : RTABackupController, optional
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
+    jit_compile_dict: Dict[str, bool], optional
+        Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     """
 
     def __init__(
@@ -251,6 +265,7 @@ class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
         control_bounds_high: float = 1,
         control_bounds_low: float = -1,
         backup_controller: RTABackupController = None,
+        jit_compile_dict: Dict[str, bool] = None,
         **kwargs
     ):
         self.m = m
@@ -265,12 +280,16 @@ class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
         if backup_controller is None:
             backup_controller = Docking3dStopLQRBackupController(m=self.m, n=self.n)
 
+        if jit_compile_dict is None:
+            jit_compile_dict = {'constraint_violation': True, 'pred_state': False, 'integrate': False}
+
         super().__init__(
             *args,
             backup_window=backup_window,
             backup_controller=backup_controller,
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
+            jit_compile_dict=jit_compile_dict,
             **kwargs
         )
 
@@ -281,7 +300,7 @@ class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control)
+        return self._docking_pred_state(state, step_size, control, self.jit_compile_dict.get('pred_state', False))
 
 
 class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
@@ -312,6 +331,8 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         upper bound of allowable control. Pass a list for element specific limit. By default 1
     control_bounds_low : Union[float, np.ndarray], optional
         lower bound of allowable control. Pass a list for element specific limit. By default -1
+    jit_compile_dict: Dict[str, bool], optional
+        Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     """
 
     def __init__(
@@ -326,6 +347,7 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         z_vel_limit: float = Z_VEL_LIMIT_DEFAULT,
         control_bounds_high: float = 1,
         control_bounds_low: float = -1,
+        jit_compile_dict: Dict[str, bool] = None,
         **kwargs
     ):
         self.m = m
@@ -337,7 +359,17 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         self.y_vel_limit = y_vel_limit
         self.z_vel_limit = z_vel_limit
 
-        super().__init__(*args, control_dim=3, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
+        if jit_compile_dict is None:
+            jit_compile_dict = {'generate_barrier_constraint_mats': True}
+
+        super().__init__(
+            *args,
+            control_dim=3,
+            control_bounds_high=control_bounds_high,
+            control_bounds_low=control_bounds_low,
+            jit_compile_dict=jit_compile_dict,
+            **kwargs
+        )
 
     def _setup_properties(self):
         self._setup_docking_properties(self.m, self.n, self.v1_coef)
@@ -346,7 +378,7 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control)
+        return self._docking_pred_state(state, step_size, control, False)
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         return self._docking_f_x(state)
@@ -397,6 +429,8 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
     backup_controller : RTABackupController, optional
         backup controller object utilized by rta module to generate backup control.
         By default Docking2dStopLQRBackupController
+    jit_compile_dict: Dict[str, bool], optional
+        Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     """
 
     def __init__(
@@ -415,6 +449,7 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
         control_bounds_high: float = 1,
         control_bounds_low: float = -1,
         backup_controller: RTABackupController = None,
+        jit_compile_dict: Dict[str, bool] = None,
         **kwargs
     ):
         self.m = m
@@ -429,6 +464,11 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
         if backup_controller is None:
             backup_controller = Docking3dStopLQRBackupController(m=self.m, n=self.n)
 
+        if jit_compile_dict is None:
+            jit_compile_dict = {
+                'generate_barrier_constraint_mats': False, 'generate_ineq_constraint_mats': True, 'pred_state': False, 'integrate': False
+            }
+
         super().__init__(
             *args,
             control_dim=3,
@@ -438,6 +478,7 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
             backup_controller=backup_controller,
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
+            jit_compile_dict=jit_compile_dict,
             **kwargs
         )
 
@@ -448,9 +489,7 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        # return self._docking_pred_state(state, step_size, control)
-        state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
-        return state + state_dot * step_size
+        return self._docking_pred_state(state, step_size, control, self.jit_compile_dict.get('pred_state', False))
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         return self._docking_f_x(state)
