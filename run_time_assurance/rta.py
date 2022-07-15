@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import abc
 from collections import OrderedDict
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -47,9 +47,11 @@ class RTAModule(abc.ABC):
     ):
         if isinstance(control_bounds_high, (list, np.ndarray)):
             control_bounds_high = jnp.array(control_bounds_high, float)
+            control_bounds_high = cast(jnp.ndarray, control_bounds_high)
 
         if isinstance(control_bounds_low, (list, np.ndarray)):
             control_bounds_low = jnp.array(control_bounds_low, float)
+            control_bounds_low = cast(jnp.ndarray, control_bounds_low)
 
         self.control_bounds_high = control_bounds_high
         self.control_bounds_low = control_bounds_low
