@@ -63,3 +63,37 @@ def jnp_stack_jit(arrays, axis: int = 0) -> jnp.ndarray:
         stack array of input array sequence
     """
     return jnp.stack(arrays, axis=axis)
+
+
+@jit
+def add_dim_jit(x: jnp.ndarray) -> jnp.ndarray:
+    """
+    Add a dimension to a 1d jax array
+
+    Parameters
+    ----------
+    x : np.ndarray
+        input array of shape (N,)
+
+    Returns
+    -------
+    jnp.ndarray
+        output array of shape (1, N)
+    """
+    return x[None, :]
+
+
+class SolverError(Exception):
+    """Exception for when solver does not find a solution
+    """
+
+    def __str__(self):
+        return "SolverError: Solver could not find a solution"
+
+
+class SolverWarning(UserWarning):
+    """Warning for when solver does not find a solution
+    """
+
+    def __str__(self):
+        return "**Warning! Solver could not find a solution, passing desired control**"
