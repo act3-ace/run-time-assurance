@@ -152,7 +152,7 @@ class RTAModule(abc.ABC):
         return np.copy(self.control_actual)
 
     @abc.abstractmethod
-    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> Union[np.ndarray, jnp.ndarray]:
         """custom logic for filtering desired control into safe action
 
         Parameters
@@ -166,7 +166,7 @@ class RTAModule(abc.ABC):
 
         Returns
         -------
-        jnp.ndarray
+        Union[np.ndarray, jnp.ndarray]
             safe filtered control vector
         """
         raise NotImplementedError()
