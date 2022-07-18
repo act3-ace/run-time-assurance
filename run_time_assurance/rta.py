@@ -152,7 +152,7 @@ class RTAModule(abc.ABC):
         return np.copy(self.control_actual)
 
     @abc.abstractmethod
-    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> Union[np.ndarray, jnp.ndarray]:
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """custom logic for filtering desired control into safe action
 
         Parameters
@@ -166,7 +166,7 @@ class RTAModule(abc.ABC):
 
         Returns
         -------
-        Union[np.ndarray, jnp.ndarray]
+        jnp.ndarray
             safe filtered control vector
         """
         raise NotImplementedError()
@@ -501,7 +501,7 @@ class ASIFModule(RTAModule):
         actual_control = self._optimize(self.obj_weight, desired_control, ineq_weight, ineq_constant)
         self.intervening = self.monitor(desired_control, actual_control)
 
-        return actual_control
+        return to_jnp_array_jit(actual_control)
 
     def _generate_actuation_constraint_mats(self) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices that impose actuator limits
