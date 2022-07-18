@@ -495,7 +495,7 @@ class ASIFModule(RTAModule):
         else:
             self._generate_barrier_constraint_mats_fn = self._generate_barrier_constraint_mats
 
-    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> np.ndarray:
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         ineq_weight, ineq_constant = self._generate_barrier_constraint_mats_fn(state, step_size)
         desired_control = np.array(control, dtype=np.float64)
         actual_control = self._optimize(self.obj_weight, desired_control, ineq_weight, ineq_constant)
