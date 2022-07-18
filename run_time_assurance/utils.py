@@ -1,5 +1,4 @@
 """Provides util functions for the run-time-assurance library"""
-import warnings
 from functools import partial
 
 import jax.numpy as jnp
@@ -88,14 +87,13 @@ class SolverError(Exception):
     """Exception for when solver does not find a solution
     """
 
-    def __init__(self):
-        super().__init__("SolverError: Solver could not find a solution")
+    def __str__(self):
+        return "SolverError: Solver could not find a solution"
 
 
 class SolverWarning(UserWarning):
     """Warning for when solver does not find a solution
     """
 
-    def __init__(self):
-        super().__init__()
-        warnings.warn("**Warning! Solver could not find a solution, passing desired control**")
+    def __str__(self):
+        return "**Warning! Solver could not find a solution, passing desired control**"

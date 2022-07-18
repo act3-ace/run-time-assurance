@@ -9,6 +9,7 @@ Inlcudes base implementations for the following RTA algorithms:
 from __future__ import annotations
 
 import abc
+import warnings
 from collections import OrderedDict
 from typing import Any, Dict, Optional, Union, cast
 
@@ -437,7 +438,6 @@ class ImplicitSimplexModule(SimplexModule):
             Shape (M, N) where M is number of states and N is the dimension of the state vector
         """
         Nsteps = int(self.backup_window / step_size)
-
         state = self._pred_state_fn(state, step_size, desired_control)
         traj_states = [state]
 
@@ -559,7 +559,7 @@ class ASIFModule(RTAModule):
         except ValueError as e:
             if e.args[0] == "constraints are inconsistent, no solution":
                 if not self.solver_exception:
-                    SolverWarning()
+                    warnings.warn(SolverWarning())
                     opt = obj_constant
                 else:
                     raise SolverError() from e
