@@ -92,7 +92,7 @@ class Docking2dRTAMixin:
                 raise ValueError('pred_state uses RK45 integration and can not be compiled using jit')
             if jit_compile_dict.get('integrate'):
                 raise ValueError('integrate uses RK45 integration and can not be compiled using jit')
-        else:
+        elif integration_method == 'Euler':
             jit_compile_dict.setdefault('pred_state', True)
             jit_compile_dict.setdefault('integrate', True)
 
@@ -111,7 +111,7 @@ class Docking2dRTAMixin:
         if integration_method == 'RK45':
             next_state_vec, _ = self.dynamics.step(step_size, np.array(state), np.array(control))
             out = to_jnp_array_jit(next_state_vec)
-        else:
+        elif integration_method == 'Euler':
             state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
             out = state + state_dot * step_size
         return out
@@ -188,14 +188,12 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         if jit_compile_dict is None:
             jit_compile_dict = {'constraint_violation': True}
 
-        self.jit_compile_dict = jit_compile_dict
-
         super().__init__(
             *args,
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
             backup_controller=backup_controller,
-            jit_compile_dict=self.jit_compile_dict,
+            jit_compile_dict=jit_compile_dict,
             **kwargs
         )
 
@@ -276,15 +274,13 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         if jit_compile_dict is None:
             jit_compile_dict = {'constraint_violation': True}
 
-        self.jit_compile_dict = jit_compile_dict
-
         super().__init__(
             *args,
             backup_window=backup_window,
             backup_controller=backup_controller,
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
-            jit_compile_dict=self.jit_compile_dict,
+            jit_compile_dict=jit_compile_dict,
             **kwargs
         )
 
@@ -354,14 +350,12 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
         if jit_compile_dict is None:
             jit_compile_dict = {'generate_barrier_constraint_mats': True}
 
-        self.jit_compile_dict = jit_compile_dict
-
         super().__init__(
             *args,
             control_dim=2,
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
-            jit_compile_dict=self.jit_compile_dict,
+            jit_compile_dict=jit_compile_dict,
             **kwargs
         )
 
@@ -461,8 +455,6 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         if jit_compile_dict is None:
             jit_compile_dict = {'generate_barrier_constraint_mats': False, 'generate_ineq_constraint_mats': True}
 
-        self.jit_compile_dict = jit_compile_dict
-
         super().__init__(
             *args,
             control_dim=2,
@@ -472,7 +464,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
             backup_controller=backup_controller,
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
-            jit_compile_dict=self.jit_compile_dict,
+            jit_compile_dict=jit_compile_dict,
             **kwargs
         )
 
