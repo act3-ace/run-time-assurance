@@ -95,6 +95,8 @@ class Docking2dRTAMixin:
         elif integration_method == 'Euler':
             jit_compile_dict.setdefault('pred_state', True)
             jit_compile_dict.setdefault('integrate', True)
+        else:
+            raise ValueError('integration_method must be either RK45 or Euler')
 
     def _setup_docking_constraints(self, v0: float, v1: float, x_vel_limit: float, y_vel_limit: float) -> OrderedDict:
         """generates constraints used in the docking problem"""
@@ -114,6 +116,8 @@ class Docking2dRTAMixin:
         elif integration_method == 'Euler':
             state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
             out = state + state_dot * step_size
+        else:
+            raise ValueError('integration_method must be either RK45 or Euler')
         return out
 
     def _docking_f_x(self, state: jnp.ndarray) -> jnp.ndarray:
@@ -360,7 +364,7 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
         )
 
     def _setup_properties(self):
-        self._setup_docking_properties(self.m, self.n, self.v1_coef, self.jit_compile_dict, 'None')
+        self._setup_docking_properties(self.m, self.n, self.v1_coef, self.jit_compile_dict, 'RK45')
 
     def _setup_constraints(self) -> OrderedDict:
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
