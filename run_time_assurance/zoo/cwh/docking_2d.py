@@ -95,14 +95,14 @@ class Docking2dRTAMixin:
             ]
         )
 
-    def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, jax_compile: bool) -> jnp.ndarray:
+    def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, integration_method: str) -> jnp.ndarray:
         """Predicts the next state given the current state and control action"""
-        if jax_compile:
-            state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
-            out = state + state_dot * step_size
-        else:
+        if integration_method == 'rk45':
             next_state_vec, _ = self.dynamics.step(step_size, np.array(state), np.array(control))
             out = to_jnp_array_jit(next_state_vec)
+        else:
+            state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
+            out = state + state_dot * step_size
         return out
 
     def _docking_f_x(self, state: jnp.ndarray) -> jnp.ndarray:
@@ -142,6 +142,8 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         By default Docking2dStopLQRBackupController
     jit_compile_dict: Dict[str, bool], optional
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
+    integration_method: str, optional
+        Integration method to use, either 'rk45' or 'euler'
     """
 
     def __init__(
@@ -157,6 +159,7 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         control_bounds_low: Union[float, np.ndarray] = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
+        integration_method: str = 'rk45',
         **kwargs
     ):
         self.m = m
@@ -166,12 +169,20 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
 
         self.x_vel_limit = x_vel_limit
         self.y_vel_limit = y_vel_limit
+        self.integration_method = integration_method
 
         if backup_controller is None:
             backup_controller = Docking2dStopLQRBackupController(m=self.m, n=self.n)
 
         if jit_compile_dict is None:
-            jit_compile_dict = {'constraint_violation': True, 'pred_state': False}
+            jit_compile_dict = {'constraint_violation': True}
+
+        if self.integration_method == 'rk45':
+            jit_compile_dict.setdefault('pred_state', False)
+            if jit_compile_dict.get('pred_state'):
+                raise ValueError('pred_state uses rk45 integration and can not be compiled using jit')
+        else:
+            jit_compile_dict.setdefault('pred_state', True)
 
         super().__init__(
             *args,
@@ -189,7 +200,7 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control, self.jit_compile_dict.get('pred_state', False))
+        return self._docking_pred_state(state, step_size, control, self.integration_method)
 
 
 class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
@@ -222,6 +233,8 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         By default Docking2dStopLQRBackupController
     jit_compile_dict: Dict[str, bool], optional
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
+    integration_method: str, optional
+        Integration method to use, either 'rk45' or 'euler'
     """
 
     def __init__(
@@ -238,6 +251,7 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         control_bounds_low: Union[float, np.ndarray] = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
+        integration_method: str = 'rk45',
         **kwargs
     ):
 
@@ -248,6 +262,8 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
 
         self.x_vel_limit = x_vel_limit
         self.y_vel_limit = y_vel_limit
+        self.integration_method = integration_method
+
         if backup_controller is None:
             backup_controller = Docking2dStopLQRBackupController(m=self.m, n=self.n)
 
@@ -271,7 +287,7 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control, self.jit_compile_dict.get('pred_state', False))
+        return self._docking_pred_state(state, step_size, control, self.integration_method)
 
 
 class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
@@ -346,7 +362,7 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control, False)
+        pass
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         return self._docking_f_x(state)
@@ -397,6 +413,8 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         By default Docking2dStopLQRBackupController
     jit_compile_dict: Dict[str, bool], optional
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
+    integration_method: str, optional
+        Integration method to use, either 'rk45' or 'euler'
     """
 
     def __init__(
@@ -415,6 +433,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         control_bounds_low: Union[float, np.ndarray] = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
+        integration_method: str = 'rk45',
         **kwargs
     ):
         self.m = m
@@ -424,6 +443,8 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
 
         self.x_vel_limit = x_vel_limit
         self.y_vel_limit = y_vel_limit
+        self.integration_method = integration_method
+
         if backup_controller is None:
             backup_controller = Docking2dStopLQRBackupController(m=self.m, n=self.n)
 
@@ -452,7 +473,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control, self.jit_compile_dict.get('pred_state', False))
+        return self._docking_pred_state(state, step_size, control, self.integration_method)
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         return self._docking_f_x(state)

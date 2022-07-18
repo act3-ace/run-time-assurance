@@ -66,28 +66,36 @@ def jnp_stack_jit(arrays, axis: int = 0) -> jnp.ndarray:
     return jnp.stack(arrays, axis=axis)
 
 
-class SolverError(Exception):
-    """Exception for when solver does not find a solution
+@jit
+def add_dim_jit(x: jnp.ndarray) -> jnp.ndarray:
+    """
+    Add a dimension to a 1d jax array
 
     Parameters
     ----------
-    e : Exception
-        Exception raised by solver
+    x : np.ndarray
+        input array of shape (N,)
+
+    Returns
+    -------
+    jnp.ndarray
+        output array of shape (1, N)
+    """
+    return x[None, :]
+
+
+class SolverError(Exception):
+    """Exception for when solver does not find a solution
     """
 
-    def __init__(self, e: Exception):
-        if e.args[0] == "constraints are inconsistent, no solution":
-            super().__init__("SolverError: Solver could not find a solution")
-        else:
-            raise e
+    def __init__(self):
+        super().__init__("SolverError: Solver could not find a solution")
 
 
-class SolverWarning():
+class SolverWarning(UserWarning):
     """Warning for when solver does not find a solution
     """
 
-    def __init__(self, e: Exception):
-        if e.args[0] == "constraints are inconsistent, no solution":
-            warnings.warn("**Warning! Solver could not find a solution, passing desired control**")
-        else:
-            raise e
+    def __init__(self):
+        super().__init__()
+        warnings.warn("**Warning! Solver could not find a solution, passing desired control**")

@@ -19,7 +19,7 @@ from jax import jacfwd, jit, vmap
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
-from run_time_assurance.utils import SolverError, SolverWarning, jnp_stack_jit, to_jnp_array_jit
+from run_time_assurance.utils import SolverError, SolverWarning, add_dim_jit, jnp_stack_jit, to_jnp_array_jit
 
 
 class RTAModule(abc.ABC):
@@ -372,7 +372,7 @@ class ExplicitSimplexModule(SimplexModule):
 
     def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         pred_state = self._pred_state_fn(state, step_size, control)
-        return bool(self._constraint_violation_fn(to_jnp_array_jit([pred_state])))
+        return bool(self._constraint_violation_fn(add_dim_jit(pred_state)))
 
 
 class ImplicitSimplexModule(SimplexModule):
@@ -498,15 +498,7 @@ class ASIFModule(RTAModule):
     def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> np.ndarray:
         ineq_weight, ineq_constant = self._generate_barrier_constraint_mats_fn(state, step_size)
         desired_control = np.array(control, dtype=np.float64)
-        try:
-            actual_control = self._optimize(self.obj_weight, desired_control, ineq_weight, ineq_constant)
-        except ValueError as e:
-            if not self.solver_exception:
-                SolverWarning(e)
-                actual_control = desired_control
-            else:
-                raise SolverError(e) from e
-
+        actual_control = self._optimize(self.obj_weight, desired_control, ineq_weight, ineq_constant)
         self.intervening = self.monitor(desired_control, actual_control)
 
         return actual_control
@@ -560,10 +552,19 @@ class ASIFModule(RTAModule):
         np.ndarray
             Actual control solved by QP
         """
-        opt = quadprog.solve_qp(
-            obj_weight, obj_constant, np.array(ineq_weight, dtype=np.float64), np.array(ineq_constant, dtype=np.float64), 0
-        )[0]
-
+        try:
+            opt = quadprog.solve_qp(
+                obj_weight, obj_constant, np.array(ineq_weight, dtype=np.float64), np.array(ineq_constant, dtype=np.float64), 0
+            )[0]
+        except ValueError as e:
+            if e.args[0] == "constraints are inconsistent, no solution":
+                if not self.solver_exception:
+                    SolverWarning()
+                    opt = obj_constant
+                else:
+                    raise SolverError() from e
+            else:
+                raise e
         return opt
 
     def monitor(self, desired_control: np.ndarray, actual_control: np.ndarray) -> bool:

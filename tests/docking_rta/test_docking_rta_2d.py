@@ -56,6 +56,12 @@ class Env():
 
         return x1, done
 
+    def run_one_step(self):
+        x, _ = self.reset()
+        u_des = self.u_des(x)
+        u_safe = np.vstack(self.rta.filter_control(x.flatten(), self.dt, u_des.flatten()))
+        x, _ = self.step(x, u_safe)
+
     def run_episode(self, rta):
         self.rta = rta
         # Track time
@@ -196,3 +202,9 @@ for rta, output_name in zip(rtas, output_names):
         plt.show()
     if save_fig:
         plt.savefig(os.path.join(output_dir, output_name))
+
+# env = Env()
+# env.rta = Docking2dExplicitOptimizationRTA()
+# env.run_one_step()
+# import cProfile
+# cProfile.run('env.run_one_step()', filename='docking2d.prof')
