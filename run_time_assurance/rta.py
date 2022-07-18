@@ -9,6 +9,7 @@ Inlcudes base implementations for the following RTA algorithms:
 from __future__ import annotations
 
 import abc
+import warnings
 from collections import OrderedDict
 from typing import Any, Dict, Optional, Union, cast
 
@@ -19,7 +20,7 @@ from jax import jacfwd, jit, vmap
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
-from run_time_assurance.utils import jnp_stack_jit, to_jnp_array_jit
+from run_time_assurance.utils import SolverError, SolverWarning, add_dim_jit, jnp_stack_jit, to_jnp_array_jit
 
 
 class RTAModule(abc.ABC):
@@ -143,7 +144,7 @@ class RTAModule(abc.ABC):
 
         if self.enable:
             state = self._get_state(input_state)
-            control_actual = self._clip_control(self._filter_control(state, step_size, jnp.array(control_desired)))
+            control_actual = self._clip_control(self._filter_control(state, step_size, to_jnp_array_jit(control_desired)))
             self.control_actual = np.array(control_actual)
         else:
             self.control_actual = np.copy(control_desired)
@@ -372,7 +373,7 @@ class ExplicitSimplexModule(SimplexModule):
 
     def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         pred_state = self._pred_state_fn(state, step_size, control)
-        return bool(self._constraint_violation_fn(pred_state[None, :]))
+        return bool(self._constraint_violation_fn(add_dim_jit(pred_state)))
 
 
 class ImplicitSimplexModule(SimplexModule):
@@ -402,7 +403,7 @@ class ImplicitSimplexModule(SimplexModule):
         jit compilation settings:
             integrate:
                 Backup controller trajectory integration
-                default True
+                default False
 
         See parent class for additional options
         """
@@ -437,7 +438,6 @@ class ImplicitSimplexModule(SimplexModule):
             Shape (M, N) where M is number of states and N is the dimension of the state vector
         """
         Nsteps = int(self.backup_window / step_size)
-
         state = self._pred_state_fn(state, step_size, desired_control)
         traj_states = [state]
 
@@ -462,75 +462,68 @@ class ASIFModule(RTAModule):
 
     Parameters
     ----------
-    epislon : float
+    epsilon : float
         threshold distance between desired action and actual safe action at which the rta is said to be intervening
         default 1e-2
+    control_dim : int
+        length of control vector
+    solver_exception : bool
+        When the solver cannot find a solution, True for an exception and False for a warning
     """
 
-    def __init__(self, *args: Any, epsilon: float = 1e-2, **kwargs: Any):
+    def __init__(self, *args: Any, epsilon: float = 1e-2, control_dim: int, solver_exception: bool = False, **kwargs: Any):
         self.epsilon = epsilon
         super().__init__(*args, **kwargs)
 
-    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        obj_weight, obj_constant = self._generate_objective_function_mats(control)
+        self.control_dim = control_dim
+        self.solver_exception = solver_exception
+        self.obj_weight = np.eye(self.control_dim)
+        self.ineq_weight_actuation, self.ineq_constant_actuation = self._generate_actuation_constraint_mats()
 
-        # TODO precompue actuation constraint mats
-        ineq_weight_actuation, ineq_constant_actuation = self._generate_actuation_constraint_mats(control.size)
-        ineq_weight_barrier, ineq_constant_barrier = \
-            self._generate_barrier_constraint_mats(state, step_size, control.size)
-
-        ineq_weight = jnp.concatenate((ineq_weight_actuation, ineq_weight_barrier))
-        ineq_constant = jnp.concatenate((ineq_constant_actuation, ineq_constant_barrier))
-        actual_control = self._optimize(obj_weight, obj_constant, ineq_weight, ineq_constant)
-        self.intervening = self.monitor(control, actual_control)
-
-        return actual_control
-
-    def _generate_objective_function_mats(self, control: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """generates matrices for quadratic program optimization objective function
-
-        Parameters
-        ----------
-        control : jnp.ndarray
-            desired control vector
-
-        Returns
-        -------
-        jnp.ndarray
-            matix G of quadprog objective 1/2 x^T G x - a^T x
-        jnp.ndarray
-            vector a of quadprog objective 1/2 x^T G x - a^T x
+    def compose(self):
         """
-        obj_weight = jnp.eye(len(control))  # TODO remove dynamic sizing, control length shoudl be pre-determined
-        obj_constant = jnp.reshape(control, len(control))
-        return obj_weight, obj_constant
+        applies jax composition transformations (grad, jit, jacobian etc.)
 
-    def _generate_actuation_constraint_mats(self, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
+        jit complilation is determined by the jit_compile_dict constructor parameter
+        jit compilation settings:
+            generate_barrier_constraint_mats:
+                default True
+        """
+        super().compose()
+        if self.jit_compile_dict.get('generate_barrier_constraint_mats', True):
+            self._generate_barrier_constraint_mats_fn = jit(self._generate_barrier_constraint_mats)
+        else:
+            self._generate_barrier_constraint_mats_fn = self._generate_barrier_constraint_mats
+
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        ineq_weight, ineq_constant = self._generate_barrier_constraint_mats_fn(state, step_size)
+        desired_control = np.array(control, dtype=np.float64)
+        actual_control = self._optimize(self.obj_weight, desired_control, ineq_weight, ineq_constant)
+        self.intervening = self.monitor(desired_control, actual_control)
+
+        return to_jnp_array_jit(actual_control)
+
+    def _generate_actuation_constraint_mats(self) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices that impose actuator limits
         on optimized control vector
-
-        Parameters
-        ----------
-        dim : int
-            length of control vector, corresponds to number of columns in ineq weight matrix
 
         Returns
         -------
         jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
         jnp.ndarray
-            vector a of quadprog objective 1/2 x^T G x - a^T x
+            vector b of quadprog inequality constraint C.T x >= b
         """
-        ineq_weight = jnp.empty((0, dim))  # TODO remove dynamic sizing, control length shoudl be pre-determined
+        ineq_weight = jnp.empty((0, self.control_dim))
         ineq_constant = jnp.empty(0)
 
         if self.control_bounds_low is not None:
-            c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_low, dim)
+            c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_low, self.control_dim)
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
 
         if self.control_bounds_high is not None:
-            c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_high, dim)
+            c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_high, self.control_dim)
             c *= -1
             b *= -1
             ineq_weight = jnp.vstack((ineq_weight, c))
@@ -539,44 +532,49 @@ class ASIFModule(RTAModule):
         return ineq_weight, ineq_constant
 
     def _optimize(
-        self, obj_weight: jnp.ndarray, obj_constant: jnp.ndarray, ineq_weight: jnp.ndarray, ineq_constant: jnp.ndarray
-    ) -> jnp.ndarray:
+        self, obj_weight: np.ndarray, obj_constant: np.ndarray, ineq_weight: jnp.ndarray, ineq_constant: jnp.ndarray
+    ) -> np.ndarray:
         """Solve ASIF optimization problem via quadratic program
 
         Parameters
         ----------
-        obj_weight : jnp.ndarray
+        obj_weight : np.ndarray
             matix G of quadprog objective 1/2 x^T G x - a^T x
-        obj_constant : jnp.ndarray
+        obj_constant : np.ndarray
             vector a of quadprog objective 1/2 x^T G x - a^T x
         ineq_weight : jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
         ineq_constant : jnp.ndarray
-            vector a of quadprog objective 1/2 x^T G x - a^T x
+            vector b of quadprog inequality constraint C.T x >= b
 
         Returns
         -------
-        jnp.ndarray
-            _description_
+        np.ndarray
+            Actual control solved by QP
         """
-        opt = quadprog.solve_qp(
-            np.array(obj_weight, dtype=np.float64),
-            np.array(obj_constant, dtype=np.float64),
-            np.array(ineq_weight.transpose(), dtype=np.float64),
-            np.array(ineq_constant, dtype=np.float64),
-            0
-        )[0]
+        try:
+            opt = quadprog.solve_qp(
+                obj_weight, obj_constant, np.array(ineq_weight, dtype=np.float64), np.array(ineq_constant, dtype=np.float64), 0
+            )[0]
+        except ValueError as e:
+            if e.args[0] == "constraints are inconsistent, no solution":
+                if not self.solver_exception:
+                    warnings.warn(SolverWarning())
+                    opt = obj_constant
+                else:
+                    raise SolverError() from e
+            else:
+                raise e
+        return opt
 
-        return jnp.array(opt)
-
-    def monitor(self, desired_control: jnp.ndarray, actual_control: jnp.ndarray) -> bool:
+    def monitor(self, desired_control: np.ndarray, actual_control: np.ndarray) -> bool:
         """Determines whether the ASIF RTA module is currently intervening
 
         Parameters
         ----------
-        desired_control : jnp.ndarray
+        desired_control : np.ndarray
             desired control vector
-        actual_control : jnp.ndarray
+        actual_control : np.ndarray
             actual control vector produced by ASIF optimization
 
         Returns
@@ -584,13 +582,10 @@ class ASIFModule(RTAModule):
         bool
             True if rta module is interveining
         """
-        if jnp.linalg.norm(desired_control - actual_control) <= self.epsilon:
-            return False
-
-        return True
+        return bool(np.linalg.norm(desired_control - actual_control) > self.epsilon)
 
     @abc.abstractmethod
-    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
+    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -600,15 +595,13 @@ class ASIFModule(RTAModule):
             current rta state of the system
         step_size : float
             duration of control step
-        dim : int
-            length of control vector, corresponds to number of columns in ineq weight matrix
 
         Returns
         -------
         jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
         jnp.ndarray
-            vector a of quadprog objective 1/2 x^T G x - a^T x
+            vector b of quadprog inequality constraint C.T x >= b
         """
         raise NotImplementedError()
 
@@ -664,9 +657,11 @@ class ExplicitASIFModule(ASIFModule):
     epislon : float
         threshold distance between desired action and actual safe action at which the rta is said to be intervening
         default 1e-2
+    control_dim : int
+        length of control vector
     """
 
-    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
+    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -678,27 +673,29 @@ class ExplicitASIFModule(ASIFModule):
             current rta state of the system
         step_size : float
             duration of control step
-        dim : int
-            length of control vector, corresponds to number of columns in ineq weight matrix
 
         Returns
         -------
         jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
         jnp.ndarray
-            vector a of quadprog objective 1/2 x^T G x - a^T x
+            vector b of quadprog inequality constraint C.T x >= b
         """
-        ineq_weight = jnp.empty((0, dim))
-        ineq_constant = jnp.empty(0)
+        ineq_weight_barrier = jnp.empty((0, self.control_dim))
+        ineq_constant_barrier = jnp.empty(0)
 
         for c in self.constraints.values():
-            temp1 = c.grad(state) @ self.state_transition_input(state)
-            temp2 = -c.grad(state) @ self.state_transition_system(state) - c.alpha(c(state))
+            grad_x = c.grad(state)
+            temp1 = grad_x @ self.state_transition_input(state)
+            temp2 = -grad_x @ self.state_transition_system(state) - c.alpha(c(state))
 
-            ineq_weight = jnp.append(ineq_weight, temp1[None, :], axis=0)
-            ineq_constant = jnp.append(ineq_constant, temp2)
+            ineq_weight_barrier = jnp.append(ineq_weight_barrier, temp1[None, :], axis=0)
+            ineq_constant_barrier = jnp.append(ineq_constant_barrier, temp2)
 
-        return ineq_weight, ineq_constant
+        ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
+        ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
+
+        return ineq_weight.transpose(), ineq_constant
 
 
 class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
@@ -757,8 +754,32 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         self.reset_backup_controller()
 
     def compose(self):
+        """
+        applies jax composition transformations (grad, jit, jacobian etc.)
+
+        jit complilation is determined by the jit_compile_dict constructor parameter
+        jit compilation settings:
+            generate_ineq_constraint_mats:
+                default True
+            pred_state:
+                default False
+            integrate:
+                default False
+        """
         super().compose()
         self._jacobian = jacfwd(self._backup_state_transition)
+        if self.jit_compile_dict.get('generate_ineq_constraint_mats', True):
+            self._generate_ineq_constraint_mats_fn = jit(self._generate_ineq_constraint_mats, static_argnames=['num_steps'])
+        else:
+            self._generate_ineq_constraint_mats_fn = self._generate_ineq_constraint_mats
+        if self.jit_compile_dict.get('pred_state', False):
+            self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
+        else:
+            self._pred_state_fn = self._pred_state
+        if self.jit_compile_dict.get('integrate', False):
+            self._integrate_fn = jit(self.integrate, static_argnames=['step_size', 'Nsteps'])
+        else:
+            self._integrate_fn = self.integrate
 
     def jacobian(self, state: jnp.ndarray, step_size: float, controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray]] = None):
         """Computes Jacobian of system state transition J(f(x) + g(x,u)) wrt x
@@ -787,7 +808,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             self.backup_controller.generate_control_with_controller_state(state, step_size, controller_state)[0]
         )
 
-    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
+    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -800,26 +821,50 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             current rta state of the system
         step_size : float
             duration of control step
-        dim : int
-            length of control vector, corresponds to number of columns in ineq weight matrix
 
         Returns
         -------
         jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
         jnp.ndarray
-            vector a of quadprog objective 1/2 x^T G x - a^T x
+            vector b of quadprog inequality constraint C.T x >= b
         """
-
-        ineq_weight = jnp.empty((0, dim))
-        ineq_constant = jnp.empty(0)
-
         num_steps = int(self.backup_window / step_size) + 1
+        traj_states, traj_sensitivities = self._integrate_fn(state, step_size, num_steps)
+        return self._generate_ineq_constraint_mats_fn(state, num_steps, traj_states, traj_sensitivities)
 
-        traj_states, traj_sensitivities = self.integrate(state, step_size, num_steps)
+    def _generate_ineq_constraint_mats(self, state: jnp.ndarray, num_steps: int, traj_states: jnp.ndarray,
+                                       traj_sensitivities: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """generates quadratic program optimization inequality constraint matrices corresponding to safety
 
-        check_points = list(range(0, self.num_check_all + 1)) + \
-            list(range(self.num_check_all + self.skip_length, num_steps, self.skip_length))
+        Parameters
+        ----------
+        state : jnp.ndarray
+            current rta state of the system
+        num_steps : int
+            number of trajectory steps
+        traj_states : jnp.ndarray
+            list of rta states from along the trajectory
+        traj_sensitivities: jnp.ndarray
+            list of trajectory state sensitivities (i.e. jacobian wrt initial trajectory state).
+            Elements are jnp.ndarrays with size (n, n) where n = state.size
+
+        Returns
+        -------
+        jnp.ndarray
+            matix C.T of quadprog inequality constraint C.T x >= b
+        jnp.ndarray
+            vector b of quadprog inequality constraint C.T x >= b
+        """
+        ineq_weight_barrier = jnp.empty((0, self.control_dim))
+        ineq_constant_barrier = jnp.empty(0)
+
+        check_points = jnp.hstack(
+            (
+                jnp.array(range(0, self.num_check_all + 1)),
+                jnp.array(range(self.num_check_all + self.skip_length, num_steps, self.skip_length))
+            )
+        ).astype(int)
 
         # resample checkpoints to the trajectory points with the min constraint values
         if self.subsample_constraints_num_least is not None:
@@ -833,54 +878,57 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             constraint_sorted_idxs = jnp.argsort(constraint_vals)
             check_points = [check_points[i] for i in constraint_sorted_idxs[0:self.subsample_constraints_num_least]]
 
-        for i in check_points:
-            point_ineq_weight, point_ineq_constant = \
-                self.invariance_constraints(state, traj_states[i], traj_sensitivities[i], dim)
-            ineq_weight = jnp.concatenate((ineq_weight, point_ineq_weight), axis=0)
-            ineq_constant = jnp.concatenate((ineq_constant, point_ineq_constant), axis=0)
+        traj_states = jnp.array(traj_states)[check_points, :]
+        traj_sensitivities = jnp.array(traj_sensitivities)[check_points, :]
 
-        return ineq_weight, ineq_constant
+        constraint_list = list(self.constraints.values())
+        num_constraints = len(self.constraints)
+        for i in range(num_constraints):
+            constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0), (0, 0))
+            point_ineq_weight, point_ineq_constant = constraint_vmapped(constraint_list[i], state, traj_states, traj_sensitivities)
+            ineq_weight_barrier = jnp.concatenate((ineq_weight_barrier, point_ineq_weight), axis=0)
+            ineq_constant_barrier = jnp.concatenate((ineq_constant_barrier, point_ineq_constant), axis=0)
 
-    def invariance_constraints(self, initial_state: jnp.ndarray, traj_state: jnp.ndarray, traj_sensitivity: jnp.ndarray,
-                               dim: int) -> tuple[jnp.ndarray, jnp.ndarray]:
+        ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
+        ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
+        return ineq_weight.transpose(), ineq_constant
+
+    def invariance_constraints(
+        self, constraint: ConstraintModule, initial_state: jnp.ndarray, traj_state: jnp.ndarray, traj_sensitivity: jnp.ndarray
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Computes safety constraint invariance constraints via Nagumo's condition for a point in the backup trajectory
 
         Parameters
         ----------
+        constraint : ConstraintModule
+            constraint to create cbf for
         initial_state : jnp.ndarray
             initial state of the backup trajectory
-        traj_state : jnp.ndarray
+        traj_state : list
             arbitrary state in the backup trajectory
-        traj_sensitivity : jnp.ndarray
+        traj_sensitivity : list
             backup trajectory state sensitivity (i.e. jacobian relative to the initial state)
-        dim : int
-            length of control vector
 
         Returns
         -------
         jnp.ndarray
             matix C.T of quadprog inequality constraint C.T x >= b
         jnp.ndarray
-            vector a of quadprog objective 1/2 x^T G x - a^T x
+            vector b of quadprog inequality constraint C.T x >= b
         """
+        traj_state_array = jnp.array(traj_state)
+        traj_sensitivity_array = jnp.array(traj_sensitivity)
+
         f_x0 = self.state_transition_system(initial_state)
         g_x0 = self.state_transition_input(initial_state)
 
-        num_constraints = len(self.constraints)
+        grad_x = constraint.grad(traj_state_array)
+        ineq_weight = grad_x @ (traj_sensitivity_array @ g_x0)
 
-        ineq_weight = jnp.zeros((num_constraints, dim))
-        ineq_constant = jnp.zeros(num_constraints)
+        ineq_constant = grad_x @ (traj_sensitivity_array @ f_x0) \
+            + constraint.alpha(constraint(traj_state_array))
 
-        for i, constraint in enumerate(self.constraints.values()):
-            a = constraint.grad(traj_state) @ (traj_sensitivity @ g_x0)
-
-            b = constraint.grad(traj_state) @ (traj_sensitivity @ f_x0) \
-                + constraint.alpha(constraint(traj_state))
-
-            ineq_weight = ineq_weight.at[i, :].set(a)
-            ineq_constant = ineq_constant.at[i].set(-b)
-
-        return ineq_weight, ineq_constant
+        return ineq_weight, -ineq_constant
 
     def integrate(self, state: jnp.ndarray, step_size: float, Nsteps: int) -> tuple[list, list]:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
@@ -899,8 +947,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         list
             list of rta states from along the trajectory
         list
-            list of trajectory state sensitivities (i.e. jacobian wrt initial trajectory state).
-            Elements are jnp.ndarrays with size (n, n) where n = state.size
+            list of trajectory state sensitivities (i.e. jacobian wrt initial trajectory state)
         """
         sensitivity = jnp.eye(state.size)
 
@@ -911,7 +958,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
         for _ in range(1, Nsteps):
             control = self.backup_control(state, step_size)
-            state = self._pred_state(state, step_size, control)
+            state = self._pred_state_fn(state, step_size, control)
             traj_jac = self.jacobian(state, step_size, self.backup_controller.controller_state)
             sensitivity = sensitivity + (traj_jac @ sensitivity) * step_size
 
@@ -938,9 +985,9 @@ def get_lower_bound_ineq_constraint_mats(bound: Union[jnp.ndarray, int, float], 
     Returns
     -------
     jnp.ndarray
-            matix C.T of quadprog inequality constraint C.T x >= b
+        matix C.T of quadprog inequality constraint C.T x >= b
     jnp.ndarray
-        vector a of quadprog objective 1/2 x^T G x - a^T x
+        vector b of quadprog inequality constraint C.T x >= b
     """
     c = jnp.eye(vec_len)
 
