@@ -7,7 +7,7 @@ import abc
 import numbers
 
 import jax.numpy as jnp
-from jax import grad
+from jax import grad, jit
 
 
 class ConstraintModule(abc.ABC):
@@ -23,7 +23,11 @@ class ConstraintModule(abc.ABC):
     def __init__(self, alpha: ConstraintStrengthener = None):
         assert isinstance(alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         self._alpha = alpha
-        self._grad = grad(self._compute)
+        self._compose()
+
+    def _compose(self):
+        self._compute_fn = jit(self._compute)
+        self._grad_fn = jit(grad(self._compute))
 
     def __call__(self, state: jnp.ndarray) -> float:
         """Evaluates constraint function h(x)
@@ -39,7 +43,23 @@ class ConstraintModule(abc.ABC):
         float:
             result of inequality constraint function
         """
-        return self._compute(state)
+        return self._compute_fn(state)
+
+    def compute(self, state: jnp.ndarray) -> float:
+        """Evaluates constraint function h(x)
+        Considered satisfied when h(x) >= 0
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            current rta state of the system
+
+        Returns
+        -------
+        float:
+            result of inequality constraint function
+        """
+        return self._compute_fn(state)
 
     @abc.abstractmethod
     def _compute(self, state: jnp.ndarray) -> float:
@@ -75,7 +95,7 @@ class ConstraintModule(abc.ABC):
         jnp.ndarray:
             gradient of constraint function wrt x. Shape of (n, n) where n = state.vector.size.
         """
-        return self._grad(state)
+        return self._grad_fn(state)
 
     def alpha(self, x: float) -> float:
         """Evaluates Strengthing function to soften Nagumo's condition outside of constraint set boundary
