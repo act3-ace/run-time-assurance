@@ -334,20 +334,24 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             integrate:
                 default False
         """
-        super().compose()
-        self._jacobian = jacfwd(self._backup_state_transition)
+        self._jacobian = jit(jacfwd(self._backup_state_transition), static_argnums=[1], static_argnames=['step_size'])
+
         if self.jit_compile_dict.get('generate_ineq_constraint_mats', True):
             self._generate_ineq_constraint_mats_fn = jit(self._generate_ineq_constraint_mats, static_argnames=['num_steps'])
         else:
             self._generate_ineq_constraint_mats_fn = self._generate_ineq_constraint_mats
+
         if self.jit_compile_dict.get('pred_state', False):
             self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
         else:
             self._pred_state_fn = self._pred_state
+
         if self.jit_compile_dict.get('integrate', False):
             self._integrate_fn = jit(self.integrate, static_argnames=['step_size', 'Nsteps'])
         else:
             self._integrate_fn = self.integrate
+
+        super().compose()
 
     def jacobian(self, state: jnp.ndarray, step_size: float, controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray]] = None):
         """Computes Jacobian of system state transition J(f(x) + g(x,u)) wrt x
