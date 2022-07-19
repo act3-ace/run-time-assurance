@@ -62,7 +62,6 @@ class RTAModule(abc.ABC):
         super().__init__(*args, **kwargs)
 
         self._setup_properties()
-        self.constraints = self._setup_constraints()
         self.compose()
 
     def reset(self):
@@ -77,28 +76,12 @@ class RTAModule(abc.ABC):
         """Additional initialization function to allow custom initialization to run after baseclass initialization,
         but before constraint initialization"""
 
-    @abc.abstractmethod
-    def _setup_constraints(self) -> OrderedDict[str, ConstraintModule]:
-        """Initializes and returns RTA constraints
-
-        Returns
-        -------
-        OrderedDict
-            OrderedDict of rta contraints with name string keys and ConstraintModule object values
-        """
-        raise NotImplementedError()
-
     def compose(self):
         """
         applies jax composition transformations (grad, jit, jacobian etc.)
 
         jit complilation is determined by the jit_compile_dict constructor parameter
         """
-
-    @abc.abstractmethod
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        """predict the next state of the system given the current state, step size, and control vector"""
-        raise NotImplementedError()
 
     def _get_state(self, input_state) -> jnp.ndarray:
         """Converts the global state to an internal RTA state"""
@@ -197,7 +180,79 @@ class RTAModule(abc.ABC):
         return control
 
 
-class BackupControlBasedRTA(RTAModule):
+class ConstraintBasedRTA(RTAModule):
+    """Base class for constraint-based RTA systems
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.constraints = self._setup_constraints()
+
+    @abc.abstractmethod
+    def _setup_constraints(self) -> OrderedDict[str, ConstraintModule]:
+        """Initializes and returns RTA constraints
+
+        Returns
+        -------
+        OrderedDict
+            OrderedDict of rta contraints with name string keys and ConstraintModule object values
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """predict the next state of the system given the current state, step size, and control vector"""
+        raise NotImplementedError()
+
+
+class CascadedRTA(RTAModule):
+    """Base class for cascaded RTA systems
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        self.rta_list = self._setup_rta_list()
+        super().__init__(*args, **kwargs)
+
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """Filters desired control into safe action using multiple RTA objects
+        Note: Satisfaction of all constraints ("safety") is not guaranteed when constraints are conflicting
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            current rta state of the system
+        step_size : float
+            simulation step size
+        control : jnp.ndarray
+            desired control vector
+
+        Returns
+        -------
+        jnp.ndarray
+            safe filtered control vector
+        """
+        self.intervening = False
+        for rta in self.rta_list:
+            control = np.copy(rta.filter_control(state, step_size, control))
+            if rta.intervening:
+                self.intervening = True
+
+        return control
+
+    @abc.abstractmethod
+    def _setup_rta_list(self) -> list:
+        """Setup list of RTA objects
+
+        Returns
+        -------
+        list
+            list of RTA objects in order from lowest to highest priority
+            for list of length N, where {i = 1, ..., N}, output of RTA {i} is passed as input RTA {i+1}
+        """
+        raise NotImplementedError()
+
+
+class BackupControlBasedRTA(ConstraintBasedRTA):
     """Base class for backup control based RTA algorithms
     Adds iterfaces for backup controller member
 
