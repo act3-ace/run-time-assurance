@@ -6,7 +6,7 @@ import numpy as np
 from jax import jit
 
 
-@jit
+@partial(jit, static_argnames=['delta'])
 def norm_with_delta(x: jnp.ndarray, delta: float):
     """
     Computes the norm of the vector with a small positive delta factor added inside the square root.

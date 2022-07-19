@@ -59,7 +59,7 @@ class ASIFModule(ConstraintBasedRTA):
         """
         super().compose()
         if self.jit_compile_dict.get('generate_barrier_constraint_mats', True):
-            self._generate_barrier_constraint_mats_fn = jit(self._generate_barrier_constraint_mats)
+            self._generate_barrier_constraint_mats_fn = jit(self._generate_barrier_constraint_mats, static_argnames=['step_size'])
         else:
             self._generate_barrier_constraint_mats_fn = self._generate_barrier_constraint_mats
 

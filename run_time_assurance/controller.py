@@ -23,8 +23,10 @@ class RTABackupController(abc.ABC):
         self._compose()
 
     def _compose(self):
-        self._jacobian = jacfwd(self._generate_control, has_aux=True)
-        self._generate_control_fn = jit(self._generate_control)
+        self._jacobian = jit(
+            jacfwd(self._generate_control, has_aux=True), static_argnums=[1, 2], static_argnames=['step_size', 'controller_state']
+        )
+        self._generate_control_fn = jit(self._generate_control, static_argnames=['step_size', 'controller_state'])
 
     def reset(self):
         """Resets the backup controller to its initial state for a new episode
