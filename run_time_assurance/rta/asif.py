@@ -17,11 +17,11 @@ from jax import jacfwd, jit, vmap
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
-from run_time_assurance.rta.base import BackupControlBasedRTA, RTAModule
+from run_time_assurance.rta.base import BackupControlBasedRTA, ConstraintBasedRTA
 from run_time_assurance.utils import SolverError, SolverWarning, to_jnp_array_jit
 
 
-class ASIFModule(RTAModule):
+class ASIFModule(ConstraintBasedRTA):
     """
     Base class for Active Set Invariance Filter Optimization RTA
 
