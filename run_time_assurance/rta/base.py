@@ -83,10 +83,6 @@ class RTAModule(abc.ABC):
         jit complilation is determined by the jit_compile_dict constructor parameter
         """
 
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        """predict the next state of the system given the current state, step size, and control vector"""
-        raise NotImplementedError()
-
     def _get_state(self, input_state) -> jnp.ndarray:
         """Converts the global state to an internal RTA state"""
 
@@ -201,6 +197,11 @@ class ConstraintBasedRTA(RTAModule):
         OrderedDict
             OrderedDict of rta contraints with name string keys and ConstraintModule object values
         """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """predict the next state of the system given the current state, step size, and control vector"""
         raise NotImplementedError()
 
 
