@@ -3,47 +3,25 @@ This module defines the base RTAState class for wrapping state vectors with cust
 """
 from __future__ import annotations
 
-import numpy as np
+import jax.numpy as jnp
 
 
-class RTAState:
-    """rta state used by rta algorithms to determine safety and compute safe actions
-    wraps a 1d numpy vector providing an access point for getters/setters
+class RTAStateWrapper:
+    """rta state wrapper used by rta algorithms to access/modify jax ndarray elements via named getter/setters
 
     Parameters
     ----------
-    vector : np.ndarray
+    vector : jnp.ndarray
         numpy vector representation of state to copy into an RTA state
     """
 
-    def __init__(self, vector: np.ndarray):
-        self._vector = np.copy(vector)
-
-    def copy(self) -> RTAState:
-        """Returns a deep copy of itself
-
-        Returns
-        -------
-        RTAState
-            deep copy of the object
-        """
-        cls = self.__class__
-        return cls(vector=np.copy(self._vector))
-
-    @property
-    def vector(self) -> np.ndarray:
-        """getter for raw rta state numpy vector. Provides a deep copy"""
-        return np.copy(self._vector)
-
-    @vector.setter
-    def vector(self, val):
-        """sets rta state with a raw numpy vector"""
-        self._vector = np.copy(val)
+    def __init__(self, vector: jnp.ndarray):
+        self.vector = jnp.copy(vector)
 
     @property
     def size(self) -> int:
         """returns size of state vector"""
-        return self._vector.size
+        return self.vector.size
 
     def __len__(self) -> int:
         return self.size
