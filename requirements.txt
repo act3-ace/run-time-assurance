@@ -3,6 +3,7 @@ quadprog
 python-constraint
 scipy
 safe-autonomy-dynamics
+jax[cpu]
 
 ## tests
 # linters
