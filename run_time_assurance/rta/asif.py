@@ -542,7 +542,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         return traj_states, traj_sensitivity
 
 
-def get_lower_bound_ineq_constraint_mats(bound: Union[jnp.ndarray, int, float], vec_len: int) -> tuple[jnp.ndarray, jnp.ndarray]:
+def get_lower_bound_ineq_constraint_mats(bound: Union[int, float, np.ndarray, jnp.ndarray],
+                                         vec_len: int) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Computes inequality constraint matrices for applying a lower bound to optimization var in quadprog
 
     Parameters

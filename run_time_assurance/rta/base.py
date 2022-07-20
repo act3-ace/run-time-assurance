@@ -336,7 +336,7 @@ class BackupControlBasedRTA(ConstraintBasedRTA):
         """
         control = self.backup_controller.generate_control(state, step_size)
 
-        return self._clip_control(control)
+        return self._clip_control_jax(control)
 
     def reset_backup_controller(self):
         """Resets the backup controller to the initial state at the beginning of an episode
