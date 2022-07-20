@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import abc
 from collections import OrderedDict
-from typing import Any, Dict, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -20,39 +20,27 @@ class RTAModule(abc.ABC):
 
     Parameters
     ----------
-    control_bounds_high : Union[float, int, list, np.ndarray, jnp.ndarray], optional
+    control_bounds_high : Union[float, int, list, np.ndarray], optional
         upper bound of allowable control. Pass a list for element specific limit. By default None
-    control_bounds_low : Union[float, int, list, np.ndarray, jnp.ndarray], optional
+    control_bounds_low : Union[float, int, list, np.ndarray], optional
         upper bound of allowable control. Pass a list for element specific limit. By default None
-    jit_compile_dict: Dict[str, bool], optional
-        Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
-        Useful for implementing versions methods that can't be jit compiled
-        Each RTA class will have custom default behavior if not passed
     """
 
     def __init__(
         self,
         *args: Any,
-        control_bounds_high: Union[float, int, list, np.ndarray, jnp.ndarray] = None,
-        control_bounds_low: Union[float, int, list, np.ndarray, jnp.ndarray] = None,
-        jit_compile_dict: Dict[str, bool] = None,
+        control_bounds_high: Union[float, int, list, np.ndarray] = None,
+        control_bounds_low: Union[float, int, list, np.ndarray] = None,
         **kwargs: Any
     ):
-        if isinstance(control_bounds_high, (list, np.ndarray)):
-            control_bounds_high = jnp.array(control_bounds_high, float)
-            control_bounds_high = cast(jnp.ndarray, control_bounds_high)
+        if isinstance(control_bounds_high, (list)):
+            control_bounds_high = np.array(control_bounds_high, float)
 
-        if isinstance(control_bounds_low, (list, np.ndarray)):
-            control_bounds_low = jnp.array(control_bounds_low, float)
-            control_bounds_low = cast(jnp.ndarray, control_bounds_low)
+        if isinstance(control_bounds_low, (list)):
+            control_bounds_low = np.array(control_bounds_low, float)
 
         self.control_bounds_high = control_bounds_high
         self.control_bounds_low = control_bounds_low
-
-        if jit_compile_dict is None:
-            self.jit_compile_dict = {}
-        else:
-            self.jit_compile_dict = jit_compile_dict
 
         self.enable = True
         self.intervening = False
@@ -60,9 +48,6 @@ class RTAModule(abc.ABC):
         self.control_actual: Optional[np.ndarray] = None
 
         super().__init__(*args, **kwargs)
-
-        self._setup_properties()
-        self.compose()
 
     def reset(self):
         """Resets the rta module to the initial state at the beginning of an episode
@@ -72,39 +57,13 @@ class RTAModule(abc.ABC):
         self.control_desired: np.ndarray = None
         self.control_actual: np.ndarray = None
 
-    def _setup_properties(self):
-        """Additional initialization function to allow custom initialization to run after baseclass initialization,
-        but before constraint initialization"""
-
-    def compose(self):
-        """
-        applies jax composition transformations (grad, jit, jacobian etc.)
-
-        jit complilation is determined by the jit_compile_dict constructor parameter
-        """
-
-    def _get_state(self, input_state) -> jnp.ndarray:
-        """Converts the global state to an internal RTA state"""
-
-        assert isinstance(input_state, (np.ndarray, jnp.ndarray)), (
-            "input_state must be an RTAState or numpy array. "
-            "If you are tying to use a custom state variable, make sure to implement a custom "
-            "_get_state() method to translate your custom state to an RTAState")
-
-        if isinstance(input_state, jnp.ndarray):
-            return input_state
-
-        return to_jnp_array_jit(input_state)
-
-    def filter_control(self, input_state, step_size: float, control_desired: np.ndarray) -> np.ndarray:
+    def filter_control(self, input_state: Any, step_size: float, control_desired: np.ndarray) -> np.ndarray:
         """filters desired control into safe action
 
         Parameters
         ----------
         input_state
             input state of environment to RTA module. May be any custom state type.
-            If using a custom state type, make sure to implement _get_state to traslate into an RTA state.
-            If custom _get_state() method is not implemented, must be an RTAState or numpy.ndarray instance.
         step_size : float
             time duration over which filtered control will be applied to actuators
         control_desired : np.ndarray
@@ -118,8 +77,7 @@ class RTAModule(abc.ABC):
         self.control_desired = np.copy(control_desired)
 
         if self.enable:
-            state = self._get_state(input_state)
-            control_actual = self._clip_control(self._filter_control(state, step_size, to_jnp_array_jit(control_desired)))
+            control_actual = self._clip_control(self.compute_filtered_control(input_state, step_size, control_desired))
             self.control_actual = np.array(control_actual)
         else:
             self.control_actual = np.copy(control_desired)
@@ -127,21 +85,21 @@ class RTAModule(abc.ABC):
         return np.copy(self.control_actual)
 
     @abc.abstractmethod
-    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+    def compute_filtered_control(self, input_state: Any, step_size: float, control_desired: np.ndarray) -> np.ndarray:
         """custom logic for filtering desired control into safe action
 
         Parameters
         ----------
-        state : jnp.ndarray
-            current rta state of the system
+        input_state : Any
+            input state of environment to RTA module. May be any custom state type.
         step_size : float
             simulation step size
-        control : jnp.ndarray
+        control_desired : np.ndarray
             desired control vector
 
         Returns
         -------
-        jnp.ndarray
+        np.ndarray
             safe filtered control vector
         """
         raise NotImplementedError()
@@ -163,30 +121,112 @@ class RTAModule(abc.ABC):
 
         return info
 
-    def _clip_control(self, control: jnp.ndarray) -> jnp.ndarray:
+    def _clip_control(self, control: np.ndarray) -> np.ndarray:
         """clip control vector values to specified upper and lower bounds
         Parameters
         ----------
-        control : jnp.ndarray
+        control : np.ndarray
             raw control vector
 
         Returns
         -------
-        jnp.ndarray
+        np.ndarray
             clipped control vector
         """
         if self.control_bounds_low is not None or self.control_bounds_high is not None:
-            control = jnp.clip(control, self.control_bounds_low, self.control_bounds_high)  # type: ignore
+            control = np.clip(control, self.control_bounds_low, self.control_bounds_high)  # type: ignore
         return control
 
 
 class ConstraintBasedRTA(RTAModule):
     """Base class for constraint-based RTA systems
+
+    Parameters
+    ----------
+    control_bounds_high : Union[float, int, list, np.ndarray], optional
+        upper bound of allowable control. Pass a list for element specific limit. By default None
+    control_bounds_low : Union[float, int, list, np.ndarray], optional
+        upper bound of allowable control. Pass a list for element specific limit. By default None
+    jit_compile_dict: Dict[str, bool], optional
+        Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
+        Useful for implementing versions methods that can't be jit compiled
+        Each RTA class will have custom default behavior if not passed
     """
 
-    def __init__(self, *args: Any, **kwargs: Any):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        *args: Any,
+        control_bounds_high: Union[float, int, list, np.ndarray] = None,
+        control_bounds_low: Union[float, int, list, np.ndarray] = None,
+        jit_compile_dict: Dict[str, bool] = None,
+        **kwargs: Any
+    ):
+        super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
+
+        if jit_compile_dict is None:
+            self.jit_compile_dict = {}
+        else:
+            self.jit_compile_dict = jit_compile_dict
+
+        self._setup_properties()
         self.constraints = self._setup_constraints()
+        self.compose()
+
+    def compute_filtered_control(self, input_state: Any, step_size: float, control_desired: np.ndarray) -> np.ndarray:
+        """filters desired control into safe action
+
+        Parameters
+        ----------
+        input_state : Any
+            input state of environment to RTA module. May be any custom state type.
+            If using a custom state type, make sure to implement _get_state to traslate into an RTA state.
+            If custom _get_state() method is not implemented, must be an RTAState or numpy.ndarray instance.
+        step_size : float
+            time duration over which filtered control will be applied to actuators
+        control_desired : np.ndarray
+            desired control vector
+
+        Returns
+        -------
+        np.ndarray
+            safe filtered control vector
+        """
+        state = self._get_state(input_state)
+        control_actual = self._filter_control(state, step_size, to_jnp_array_jit(control_desired))
+        self.control_actual = np.array(control_actual)
+
+        return np.copy(control_actual)
+
+    @abc.abstractmethod
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """custom logic for filtering desired control into safe action
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            current rta state of the system
+        step_size : float
+            simulation step size
+        control : jnp.ndarray
+            desired control vector
+
+        Returns
+        -------
+        jnp.ndarray
+            safe filtered control vector
+        """
+        raise NotImplementedError()
+
+    def _setup_properties(self):
+        """Additional initialization function to allow custom initialization to run after baseclass initialization,
+        but before constraint initialization"""
+
+    def compose(self):
+        """
+        applies jax composition transformations (grad, jit, jacobian etc.)
+
+        jit complilation is determined by the jit_compile_dict constructor parameter
+        """
 
     @abc.abstractmethod
     def _setup_constraints(self) -> OrderedDict[str, ConstraintModule]:
@@ -204,6 +244,35 @@ class ConstraintBasedRTA(RTAModule):
         """predict the next state of the system given the current state, step size, and control vector"""
         raise NotImplementedError()
 
+    def _clip_control_jax(self, control: jnp.ndarray) -> jnp.ndarray:
+        """jax version of clip control for clipping control vector values to specified upper and lower bounds
+        Parameters
+        ----------
+        control : jnp.ndarray
+            raw control vector
+
+        Returns
+        -------
+        jnp.ndarray
+            clipped control vector
+        """
+        if self.control_bounds_low is not None or self.control_bounds_high is not None:
+            control = jnp.clip(control, self.control_bounds_low, self.control_bounds_high)  # type: ignore
+        return control
+
+    def _get_state(self, input_state) -> jnp.ndarray:
+        """Converts the global state to an internal RTA state"""
+
+        assert isinstance(input_state, (np.ndarray, jnp.ndarray)), (
+            "input_state must be an RTAState or numpy array. "
+            "If you are tying to use a custom state variable, make sure to implement a custom "
+            "_get_state() method to translate your custom state to an RTAState")
+
+        if isinstance(input_state, jnp.ndarray):
+            return input_state
+
+        return to_jnp_array_jit(input_state)
+
 
 class CascadedRTA(RTAModule):
     """Base class for cascaded RTA systems
@@ -213,34 +282,18 @@ class CascadedRTA(RTAModule):
         self.rta_list = self._setup_rta_list()
         super().__init__(*args, **kwargs)
 
-    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        """Filters desired control into safe action using multiple RTA objects
-        Note: Satisfaction of all constraints ("safety") is not guaranteed when constraints are conflicting
-
-        Parameters
-        ----------
-        state : jnp.ndarray
-            current rta state of the system
-        step_size : float
-            simulation step size
-        control : jnp.ndarray
-            desired control vector
-
-        Returns
-        -------
-        jnp.ndarray
-            safe filtered control vector
-        """
+    def compute_filtered_control(self, input_state: Any, step_size: float, control_desired: np.ndarray) -> np.ndarray:
         self.intervening = False
+        control = control_desired
         for rta in self.rta_list:
-            control = np.copy(rta.filter_control(state, step_size, control))
+            control = np.copy(rta.filter_control(input_state, step_size, control))
             if rta.intervening:
                 self.intervening = True
 
         return control
 
     @abc.abstractmethod
-    def _setup_rta_list(self) -> list:
+    def _setup_rta_list(self) -> List[RTAModule]:
         """Setup list of RTA objects
 
         Returns
