@@ -3,8 +3,8 @@
 from collections import OrderedDict
 from typing import Union
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 import scipy
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
@@ -175,7 +175,7 @@ class InspectionRTA(ExplicitASIFModule):
         self.z_vel_limit = z_vel_limit
 
         self.e_hat = jnp.array([1, 0, 0])
-        self.u_max = control_bounds_high
+        self.u_max = U_MAX_DEFAULT
         self.a_max = self.u_max / self.m - (3 * self.n**2 + 2 * self.n * self.v1) * self.r_max - 2 * self.n * self.v0
         A, B = generate_cwh_matrices(self.m, self.n, mode="3d")
         self.A = jnp.array(A)
@@ -195,7 +195,9 @@ class InspectionRTA(ExplicitASIFModule):
 
         self.control_dim = self.B.shape[1]
 
-        super().__init__(*args, control_dim=self.control_dim, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
+        super().__init__(
+            *args, control_dim=self.control_dim, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs
+        )
 
     def _setup_constraints(self) -> OrderedDict:
         OD = OrderedDict(
@@ -360,8 +362,8 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
         p_es = p - jnp.dot(p, self.e_hat) * self.e_hat
         a = jnp.cos(self.theta) * (jnp.linalg.norm(p_es) - jnp.tan(self.theta) * jnp.dot(p, self.e_hat))
         p_pr = p + a * jnp.sin(self.theta) * self.e_hat + a * jnp.cos(self.theta
-                                                                    ) * (jnp.dot(p, self.e_hat) * self.e_hat - p) / jnp.linalg.norm(p_es)
+                                                                      ) * (jnp.dot(p, self.e_hat) * self.e_hat - p) / jnp.linalg.norm(p_es)
 
         h = jnp.sqrt(2 * self.a_max * jnp.linalg.norm(p - p_pr)
-                    ) + jnp.dot(p - p_pr, state[3:6] - self.e_hat_vel) / jnp.linalg.norm(p - p_pr)
+                     ) + jnp.dot(p - p_pr, state[3:6] - self.e_hat_vel) / jnp.linalg.norm(p - p_pr)
         return h
