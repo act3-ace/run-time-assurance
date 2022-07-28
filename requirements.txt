@@ -4,6 +4,7 @@ python-constraint
 scipy
 safe-autonomy-dynamics
 jax[cpu]
+matplotlib
 
 ## tests
 # linters
