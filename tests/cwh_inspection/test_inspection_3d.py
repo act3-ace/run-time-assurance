@@ -5,7 +5,7 @@ import time
 
 plt.rcParams.update({'font.size': 23, 'text.usetex': True, 'figure.autolayout': True})
 
-from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 from run_time_assurance.zoo.cwh.inspection_3d import NUM_DEPUTIES_DEFAULT, U_MAX_DEFAULT, InspectionRTA
 
 
