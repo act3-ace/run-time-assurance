@@ -3,7 +3,7 @@ import scipy
 import matplotlib.pyplot as plt
 import time
 
-plt.rcParams.update({'font.size': 23, 'text.usetex': True, 'figure.autolayout': True})
+plt.rcParams.update({'font.size': 30, 'text.usetex': True, 'figure.figsize': [6.4, 6]})
 
 from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 from run_time_assurance.zoo.cwh.inspection_3d import NUM_DEPUTIES_DEFAULT, U_MAX_DEFAULT, InspectionRTA
@@ -120,7 +120,7 @@ class Env():
         if plotter:
             self.plotter(array, control, np.array(intervening))
 
-    def plotter(self, array, control, intervening, paper_plot=False):
+    def plotter(self, array, control, intervening, paper_plot=True):
         if not paper_plot:
             fig = plt.figure(figsize=(15, 15))
             ax1 = fig.add_subplot(331, projection='3d')
@@ -134,26 +134,12 @@ class Env():
             ax7 = fig.add_subplot(339)
             lw = 2
         else:
+            lw = 4
+            hp = 0.1
+        
+        if paper_plot:
             fig = plt.figure()
             ax1 = fig.add_subplot(111, projection='3d')
-            fig = plt.figure()
-            ax2 = fig.add_subplot(111)
-            fig = plt.figure()
-            ax3 = fig.add_subplot(111)
-            fig = plt.figure()
-            ax4 = fig.add_subplot(111)
-            fig = plt.figure()
-            ax8 = fig.add_subplot(111)
-            fig = plt.figure()
-            ax9 = fig.add_subplot(111)
-            fig = plt.figure()
-            ax5 = fig.add_subplot(111)
-            fig = plt.figure()
-            ax6 = fig.add_subplot(111)
-            fig = plt.figure()
-            ax7 = fig.add_subplot(111)
-            lw = 3
-        
         max = 0
         for i in range(self.deputies):
             ax1.plot(array[:, 6*i], array[:, 6*i+1], array[:, 6*i+2], linewidth=lw)
@@ -166,8 +152,13 @@ class Env():
         ax1.set_ylim([-max, max])
         ax1.set_zlim([-max, max])
         ax1.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
 
         
+        if paper_plot:
+            fig = plt.figure()
+            ax2 = fig.add_subplot(111)
         xmax = 0
         ymax = 0
         for i in range(self.deputies):
@@ -177,7 +168,6 @@ class Env():
             xmax = np.maximum(xmax, np.max(v[:, 0])*1.1)
             ymax = np.maximum(ymax, np.max(v[:, 1])*1.1)
             ax2.plot(v[:, 0], v[:, 1], linewidth=lw)
-            ax3.plot(range(len(array)), v[:, 0], linewidth=lw)
         ax2.fill_between([0, xmax], [self.rta.v0, self.rta.v0 + self.rta.v1*xmax], [ymax, ymax], color=(255/255, 239/255, 239/255))
         ax2.fill_between([0, xmax], [0, 0], [self.rta.v0, self.rta.v0 + self.rta.v1*xmax], color=(244/255, 249/255, 241/255))
         ax2.plot([0, xmax], [self.rta.v0, self.rta.v0 + self.rta.v1*xmax], 'k--', linewidth=lw)
@@ -186,7 +176,17 @@ class Env():
         ax2.set_xlabel(r'Relative Dist. ($\vert \vert \mathbf{p}_i  \vert \vert_2$) [m]')
         ax2.set_ylabel(r'Relative Vel. ($\vert \vert \mathbf{v}_i  \vert \vert_2$) [m/s]')
         ax2.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
 
+        if paper_plot:
+            fig = plt.figure()
+            ax3 = fig.add_subplot(111)
+        for i in range(self.deputies):
+            v = np.empty([len(array), 2])
+            for j in range(len(array)):
+                v[j, :] = [np.linalg.norm(array[j, 6*i:6*i+3]), np.linalg.norm(array[j, 6*i+3:6*i+6])]
+            ax3.plot(range(len(array)), v[:, 0], linewidth=lw)
         ymax = xmax
         xmax = len(array)*1.1
         ax3.fill_between([0, xmax], [self.rta.chief_radius+self.rta.deputy_radius, self.rta.chief_radius+self.rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
@@ -198,7 +198,12 @@ class Env():
         ax3.set_yscale('log')
         ax3.set_ylim([6, ymax])
         ax3.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
 
+        if paper_plot:
+            fig = plt.figure()
+            ax4 = fig.add_subplot(111)
         th = self.rta.theta*180/np.pi
         xmax = len(array)*1.1
         ymax = 0
@@ -217,7 +222,12 @@ class Env():
         ax4.set_xlabel('Time [s]')
         ax4.set_ylabel(r'Angle to Sun ($\theta_s$) [degrees]')
         ax4.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
 
+        if paper_plot:
+            fig = plt.figure()
+            ax8 = fig.add_subplot(111)
         if self.deputies != 1:
             xmax = len(array)*1.1
             ymax = 0
@@ -240,7 +250,12 @@ class Env():
             ax8.set_yscale('log')
             ax8.set_ylim([6, ymax])
             ax8.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
 
+        if paper_plot:
+            fig = plt.figure()
+            ax9 = fig.add_subplot(111)
         xmax = len(array)*1.1
         ymax = self.rta.u_max*1.2
         for i in range(self.deputies*3):
@@ -255,7 +270,12 @@ class Env():
         ax9.set_xlabel('Time [s]')
         ax9.set_ylabel(r'$\mathbf{u}$ [N]')
         ax9.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
 
+        if paper_plot:
+            fig = plt.figure()
+            ax5 = fig.add_subplot(111)
         xmax = len(array)*1.1
         ymax = self.rta.x_vel_limit*1.2
         for i in range(self.deputies):
@@ -270,7 +290,12 @@ class Env():
         ax5.set_xlabel('Time [s]')
         ax5.set_ylabel(r'$\dot{x}_i$ [m/s]')
         ax5.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
 
+        if paper_plot:
+            fig = plt.figure()
+            ax6 = fig.add_subplot(111)
         xmax = len(array)*1.1
         ymax = self.rta.y_vel_limit*1.2
         for i in range(self.deputies):
@@ -285,7 +310,12 @@ class Env():
         ax6.set_xlabel('Time [s]')
         ax6.set_ylabel(r'$\dot{y}_i$ [m/s]')
         ax6.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
 
+        if paper_plot:
+            fig = plt.figure()
+            ax7 = fig.add_subplot(111)
         xmax = len(array)*1.1
         ymax = self.rta.z_vel_limit*1.2
         for i in range(self.deputies):
@@ -300,6 +330,8 @@ class Env():
         ax7.set_xlabel('Time [s]')
         ax7.set_ylabel(r'$\dot{z}_i$ [m/s]')
         ax7.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
 
         if not paper_plot:
             ax1.set_title('Trajectories')
