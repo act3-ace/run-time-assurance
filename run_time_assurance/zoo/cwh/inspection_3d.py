@@ -20,7 +20,7 @@ from run_time_assurance.state import RTAStateWrapper
 
 NUM_DEPUTIES_DEFAULT = 5  # Number of deputies for inspection problem
 # (1. Communication) Doesn't apply here, attitude requirement for pointing at earth
-CHIEF_RADIUS_DEFAULT = 10  # chief radius of collision [m] (2. collision freedom)
+CHIEF_RADIUS_DEFAULT = 5  # chief radius of collision [m] (2. collision freedom)
 DEPUTY_RADIUS_DEFAULT = 5  # deputy radius of collision [m] (2. collision freedom)
 V0_DEFAULT = 0.2  # maximum docking speed [m/s] (3. dynamic velocity constraint)
 V1_COEF_DEFAULT = 4  # velocity constraint slope [-] (3. dynamic velocity constraint)
@@ -203,31 +203,31 @@ class InspectionRTA(ExplicitASIFModule):
         OD = OrderedDict(
             [
                 ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1)),
-                ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius, a_max=self.a_max)),
+                ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
                 ('sun', ConstraintCWHSunAvoidance(a_max=self.a_max, theta=self.theta, e_hat=self.e_hat)),
                 (
                     'x_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.x_vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
+                        limit_val=self.x_vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01])
                     )
                 ),
                 (
                     'y_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.y_vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
+                        limit_val=self.y_vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01])
                     )
                 ),
                 (
                     'z_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.z_vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
+                        limit_val=self.z_vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01])
                     )
                 )
             ]
         )
         for i in range(self.num_deputies - 1):
             OD[f'deputy_collision_{i+1}'] = ConstraintCWHDeputyCollision(
-                collision_radius=self.deputy_radius, a_max=self.a_max, deputy=i + 1
+                collision_radius=self.deputy_radius * 2, a_max=self.a_max, deputy=i + 1
             )
         return OD
 
