@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import scipy
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
-from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices  # pylint: disable=E0611
 
 from run_time_assurance.constraint import (
     ConstraintMagnitudeStateLimit,
