@@ -57,7 +57,7 @@ if __name__ == '__main__':
         name="run-time-assurance",
         author="ACT3 Safe Autonomy Team",
         description="ACT3 Safe Autonomy Run Time Assurance Package",
-        version="0.1.1",
+        version="1.0.0",
 
         long_description=Path("README.md").read_text(),
         long_description_content_type="text/markdown",
