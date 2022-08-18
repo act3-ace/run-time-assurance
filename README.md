@@ -56,6 +56,9 @@ cp -r docs/. site/
 mkdocs serve
 ```
 
+## Public Release
+. Approved for public release; distribution is unlimited. Case Number: AFRL-2022-3202
+
 ## Team
 Umberto Ravaioli,
 Kyle Dunlap,

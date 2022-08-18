@@ -2,7 +2,6 @@ numpy
 quadprog
 python-constraint
 scipy
-
-## tests
-# linters
-pylint==2.8.3
+safe-autonomy-dynamics==0.3.0
+jax[cpu]
+matplotlib

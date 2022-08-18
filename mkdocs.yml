@@ -117,12 +117,10 @@ nav:
 #   - reference/SUMMARY.md  # API "Table of Contents"
     - api/index.md
     - constraint: reference/constraint.md
-    - dynamics: reference/dynamics.md
     - rta: reference/rta.md
     - state: reference/state.md
     - zoo:
         - cwh:
           - api/zoo/cwh/index.md
-          - reference/zoo/cwh/dynamics.md
           - reference/zoo/cwh/docking_2d.md
           - reference/zoo/cwh/docking_3d.md
