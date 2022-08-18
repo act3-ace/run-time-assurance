@@ -114,13 +114,17 @@ nav:
       - "Explicit ASIF": RTA/explicit_asif.md
       - "Implicit ASIF": RTA/implicit_asif.md
   - "API":
-#   - reference/SUMMARY.md  # API "Table of Contents"
     - api/index.md
     - constraint: reference/constraint.md
-    - rta: reference/rta.md
+    - controller: reference/controller.md
+    - rta:
+      - asif: reference/rta/asif.md
+      - base: reference/rta/base.md
+      - simplex: reference/rta/simplex.md
     - state: reference/state.md
+    - utils: reference/utils.md
     - zoo:
-        - cwh:
-          - api/zoo/cwh/index.md
-          - reference/zoo/cwh/docking_2d.md
-          - reference/zoo/cwh/docking_3d.md
+      - cwh:
+        - api/zoo/cwh/index.md
+        - reference/zoo/cwh/docking_2d.md
+        - reference/zoo/cwh/docking_3d.md
