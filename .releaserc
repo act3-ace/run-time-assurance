@@ -7,7 +7,7 @@
       "@semantic-release/release-notes-generator",
       "@semantic-release/changelog",
       ["@semantic-release/exec", {
-        "prepareCmd": "/bin/bash scripts/update-version-python.sh ${nextRelease.version} version.py"
+        "prepareCmd": "./release.sh ${nextRelease.version}" 
       }],      
       [
         "@semantic-release/git", 
