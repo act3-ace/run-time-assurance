@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/act3-ace/run-time-assurance/compare/v1.1.0...v1.1.1) (2022-08-18)
+
+
+### Bug Fixes
+
+* **setup.py:** fix versioning ([89ead8e](https://github.com/act3-ace/run-time-assurance/commit/89ead8e99ea28f0c1b8932e6d64f457185553cee))
+
 # [1.1.0](https://github.com/act3-ace/run-time-assurance/compare/v1.0.0...v1.1.0) (2022-08-18)
 
 
