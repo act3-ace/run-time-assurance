@@ -3,9 +3,9 @@ import scipy
 import matplotlib.pyplot as plt
 import time
 
-plt.rcParams.update({'font.size': 30, 'text.usetex': True, 'figure.figsize': [6.4, 6]})
+# plt.rcParams.update({'font.size': 30, 'text.usetex': True, 'figure.figsize': [6.4, 6]})
 
-from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 from run_time_assurance.zoo.cwh.inspection_3d import NUM_DEPUTIES_DEFAULT, U_MAX_DEFAULT, InspectionRTA
 
 
@@ -34,12 +34,15 @@ class Env():
         return np.clip(u, -self.u_max, self.u_max).flatten()
 
     def reset(self):
-        # Random point 800-1000 m away from origin
-        theta = np.random.rand()*2*np.pi
-        gamma = np.random.rand()*2*np.pi
-        r = (np.random.rand()-0.5)*200+900
-        x = np.array([[r*np.cos(theta)*np.cos(gamma)], [r*np.sin(theta)*np.cos(gamma)], [r*np.sin(gamma)], [0], [0], [0]])
-        return x.flatten()
+        return np.array(
+            [
+                [-678.84733531, 645.12760716, -129.71259692, 0., 0., 0.],
+                [674.36453393, 442.90772096, 543.97750877, 0., 0., 0.],
+                [-272.12276168, -393.5272131, 700.1336778, 0., 0., 0.],
+                [353.64983193, 142.56376478, 879.52164532, 0., 0., 0.],
+                [-528.83729321, -436.48202214, 582.09238772, 0., 0., 0.]
+            ]
+        )
 
     def step(self, x, u):
         x1 = np.zeros((self.deputies, 6))
@@ -69,20 +72,7 @@ class Env():
         # Track time
         start_time = time.time()
         # Track initial values
-        # x = np.zeros((self.deputies, 6))
-        # for i in range(self.deputies):
-        #     x[i, :] = self.reset()
-        # print(repr(x))
-        x = np.array([[-678.84733531,  645.12760716, -129.71259692,    0.        ,
-                0.        ,    0.        ],
-            [ 674.36453393,  442.90772096,  543.97750877,    0.        ,
-                0.        ,    0.        ],
-            [-272.12276168, -393.5272131 ,  700.1336778 ,    0.        ,
-                0.        ,    0.        ],
-            [ 353.64983193,  142.56376478,  879.52164532,    0.        ,
-                0.        ,    0.        ],
-            [-528.83729321, -436.48202214,  582.09238772,    0.        ,
-                0.        ,    0.        ]])
+        x = self.reset()
         # Desired state is opposite of initial state
         x_des = -x
         if plotter:
@@ -120,7 +110,7 @@ class Env():
         if plotter:
             self.plotter(array, control, np.array(intervening))
 
-    def plotter(self, array, control, intervening, paper_plot=True):
+    def plotter(self, array, control, intervening, paper_plot=False):
         if not paper_plot:
             fig = plt.figure(figsize=(15, 15))
             ax1 = fig.add_subplot(331, projection='3d')
@@ -155,7 +145,6 @@ class Env():
         if paper_plot:
             plt.tight_layout(pad=hp)
 
-        
         if paper_plot:
             fig = plt.figure()
             ax2 = fig.add_subplot(111)
@@ -350,23 +339,4 @@ class Env():
 env = Env()
 rta = InspectionRTA()
 env.run_episode(rta)
-
-# times = []
-# env.run_episode(rta, plotter=False)
-# for i in range(100):
-#     st = time.time()
-#     env.run_episode(rta, plotter=False)
-#     times.append(time.time()-st)
-# print(np.mean(times))
-
-# env.rta = rta
-# env.run_one_step()
-# env.run_one_step()
-# env.run_one_step()
-# env.run_one_step()
-
-# import cProfile
-
-# cProfile.run('env.run_one_step()', filename='program2.prof')
-
 plt.show()

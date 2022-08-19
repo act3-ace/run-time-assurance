@@ -19,22 +19,16 @@ from run_time_assurance.rta import ExplicitASIFModule
 from run_time_assurance.state import RTAStateWrapper
 
 NUM_DEPUTIES_DEFAULT = 5  # Number of deputies for inspection problem
-# (1. Communication) Doesn't apply here, attitude requirement for pointing at earth
-CHIEF_RADIUS_DEFAULT = 5  # chief radius of collision [m] (2. collision freedom)
-DEPUTY_RADIUS_DEFAULT = 5  # deputy radius of collision [m] (2. collision freedom)
-V0_DEFAULT = 0.2  # maximum docking speed [m/s] (3. dynamic velocity constraint)
-V1_COEF_DEFAULT = 4  # velocity constraint slope [-] (3. dynamic velocity constraint)
-# (4. Fuel limit) Doesn't apply here, consider using latched RTA to travel to NMT
-R_MAX_DEFAULT = 1000  # max distance from chief [m] (5. translational keep out zone)
-THETA_DEFAULT = jnp.pi / 6  # sun avoidance angle [rad] (5. translational keep out zone)
-# (6. Attitude keep out zone) Doesn't apply here, no attitude model
-# (7. Limited duration attitudes) Doesn't apply here, no attitude model
-# (8. Passively safe maneuvers) **??** Ensure if u=0 after safe action is taken, deputy would not colide with chief?
-# (9. Maintain battery charge) Doesn't apply here, attitude requirement for pointing solar panels at sun
+CHIEF_RADIUS_DEFAULT = 5  # chief radius of collision [m] (collision freedom)
+DEPUTY_RADIUS_DEFAULT = 5  # deputy radius of collision [m] (collision freedom)
+V0_DEFAULT = 0.2  # maximum docking speed [m/s] (dynamic velocity constraint)
+V1_COEF_DEFAULT = 4  # velocity constraint slope [-] (dynamic velocity constraint)
+R_MAX_DEFAULT = 1000  # max distance from chief [m] (translational keep out zone)
+THETA_DEFAULT = jnp.pi / 6  # sun avoidance angle [rad] (translational keep out zone)
 U_MAX_DEFAULT = 1  # Max thrust [N] (10. avoid actuation saturation)
-X_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (11. Avoid aggressive maneuvering)
-Y_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (11. Avoid aggressive maneuvering)
-Z_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (11. Avoid aggressive maneuvering)
+X_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
+Y_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
+Z_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
 
 
 class Inspection3dState(RTAStateWrapper):
