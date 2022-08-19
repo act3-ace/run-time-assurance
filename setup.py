@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Setup script for run-time-assurance"""
+import os
 from pathlib import Path
 
 from setuptools import setup, find_packages
@@ -12,6 +13,14 @@ def parse_requirements(filename: str):
     return [line for line in lineiter if line and not line.startswith("#")]
 
 reqs = parse_requirements("requirements.txt")
+
+version = {}
+try:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    base_dir = None
+with open(os.path.join(base_dir, 'version.py')) as fp:
+     exec(fp.read(), version)
 
 
 if __name__ == '__main__':
@@ -48,7 +57,7 @@ if __name__ == '__main__':
         name="run-time-assurance",
         author="ACT3 Safe Autonomy Team",
         description="ACT3 Safe Autonomy Run Time Assurance Package",
-        version="0.1.1",
+        version=version["__version__"],
 
         long_description=Path("README.md").read_text(),
         long_description_content_type="text/markdown",
