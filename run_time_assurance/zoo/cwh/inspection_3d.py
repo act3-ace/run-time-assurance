@@ -194,7 +194,7 @@ class InspectionRTA(ExplicitASIFModule):
         )
 
     def _setup_constraints(self) -> OrderedDict:
-        OD = OrderedDict(
+        constraint_dict = OrderedDict(
             [
                 ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1)),
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
@@ -220,10 +220,10 @@ class InspectionRTA(ExplicitASIFModule):
             ]
         )
         for i in range(self.num_deputies - 1):
-            OD[f'deputy_collision_{i+1}'] = ConstraintCWHDeputyCollision(
+            constraint_dict[f'deputy_collision_{i+1}'] = ConstraintCWHDeputyCollision(
                 collision_radius=self.deputy_radius * 2, a_max=self.a_max, deputy=i + 1
             )
-        return OD
+        return constraint_dict
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         pass
