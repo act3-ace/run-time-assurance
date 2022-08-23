@@ -239,11 +239,6 @@ class ConstraintBasedRTA(RTAModule):
         """
         raise NotImplementedError()
 
-    @abc.abstractmethod
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        """predict the next state of the system given the current state, step size, and control vector"""
-        raise NotImplementedError()
-
     def _clip_control_jax(self, control: jnp.ndarray) -> jnp.ndarray:
         """jax version of clip control for clipping control vector values to specified upper and lower bounds
         Parameters
@@ -354,3 +349,8 @@ class BackupControlBasedRTA(ConstraintBasedRTA):
         Allows trajectory integration with a stateful backup controller
         """
         self.backup_controller.restore()
+
+    @abc.abstractmethod
+    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """predict the next state of the system given the current state, step size, and control vector"""
+        raise NotImplementedError()
