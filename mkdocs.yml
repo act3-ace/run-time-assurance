@@ -83,9 +83,12 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_div_format
+  - pymdownx.arithmatex:  # MathJax (latex)
+      generic: true
 
 extra_javascript:
   - https://unpkg.com/mermaid@8.4.2/dist/mermaid.min.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 handlers:
   python:
@@ -99,15 +102,30 @@ handlers:
 
 nav:
   - "Introduction": index.md
+  - "Concepts":
+    - RTA/index.md
+    - "Defining Safety": RTA/safety.md
+    - "Simplex RTA Filters": 
+      - RTA/simplex.md
+      - "Explicit Simplex": RTA/explicit_simplex.md
+      - "Implicit Simplex": RTA/implicit_simplex.md
+    - "ASIF RTA Filters":
+      - RTA/asif.md
+      - "Explicit ASIF": RTA/explicit_asif.md
+      - "Implicit ASIF": RTA/implicit_asif.md
   - "API":
-#   - reference/SUMMARY.md  # API "Table of Contents"
     - api/index.md
     - constraint: reference/constraint.md
-    - rta: reference/rta.md
+    - controller: reference/controller.md
+    - rta:
+      - asif: reference/rta/asif.md
+      - base: reference/rta/base.md
+      - simplex: reference/rta/simplex.md
     - state: reference/state.md
+    - utils: reference/utils.md
     - zoo:
-        - cwh:
-          - api/zoo/cwh/index.md
-          - reference/zoo/cwh/docking_2d.md
-          - reference/zoo/cwh/docking_3d.md
-          - reference/zoo/cwh/inspection_3d.md
+      - cwh:
+        - api/zoo/cwh/index.md
+        - reference/zoo/cwh/docking_2d.md
+        - reference/zoo/cwh/docking_3d.md
+        - reference/zoo/cwh/inspection_3d.md
