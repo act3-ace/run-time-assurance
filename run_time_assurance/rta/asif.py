@@ -541,11 +541,6 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
         return traj_states, traj_sensitivity
 
-    @abc.abstractmethod
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        """predict the next state of the system given the current state, step size, and control vector"""
-        raise NotImplementedError()
-
 
 def get_lower_bound_ineq_constraint_mats(bound: Union[int, float, np.ndarray, jnp.ndarray],
                                          vec_len: int) -> tuple[jnp.ndarray, jnp.ndarray]:
