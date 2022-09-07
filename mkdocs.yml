@@ -128,3 +128,4 @@ nav:
         - api/zoo/cwh/index.md
         - reference/zoo/cwh/docking_2d.md
         - reference/zoo/cwh/docking_3d.md
+        - reference/zoo/cwh/inspection_3d.md
