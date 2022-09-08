@@ -1,0 +1,1852 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The Run Time Assurance ">
+      
+      
+        <meta name="author" content="Safe-Autonomy Team">
+      
+      
+        <link rel="canonical" href="https://git.act3-ace.com/reference/rta/base/">
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.3.1, mkdocs-material-8.4.3">
+    
+    
+      
+        <title>Base - Run-Time-Assurance</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.6b80c2a2.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.cbb835fc.min.css">
+        
+      
+      
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../../css/style.css">
+    
+      <link rel="stylesheet" href="../../../css/material.css">
+    
+      <link rel="stylesheet" href="../../../css/mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="lime">
+  
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#run_time_assurance.rta.base" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Run-Time-Assurance" class="md-header__button md-logo" aria-label="Run-Time-Assurance" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4.41 3 3 4.41 5.69 7.1A7.924 7.924 0 0 0 4 12c0 1.85.63 3.55 1.69 4.9L3 19.59 4.41 21l2.69-2.69A7.924 7.924 0 0 0 12 20c1.85 0 3.55-.63 4.9-1.69L19.59 21 21 19.59l-2.69-2.69A7.924 7.924 0 0 0 20 12c0-1.85-.63-3.55-1.69-4.9L21 4.41 19.59 3 16.9 5.69A7.924 7.924 0 0 0 12 4c-1.85 0-3.55.63-4.9 1.69L4.41 3M12 6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6 2.69-6 6-6Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Run-Time-Assurance
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Base
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      <form class="md-header__option" data-md-component="palette">
+        
+          
+          
+          <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="lime"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+          
+            <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_2" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3 3.19.09m3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95 2.06.05m-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31Z"/></svg>
+            </label>
+          
+        
+          
+          
+          <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_2">
+          
+            <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5c-.84 0-1.65.15-2.39.42L12 2M3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29L3.34 7m.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14L3.36 17M20.65 7l-1.77 3.79a7.023 7.023 0 0 0-2.38-4.15l4.15.36m-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29L20.64 17M12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44L12 22Z"/></svg>
+            </label>
+          
+        
+      </form>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://git.act3-ace.com/rta/run-time-assurance" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Git
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-tabs__inner md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../../.." class="md-tabs__link">
+      Introduction
+    </a>
+  </li>
+
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../../../api/" class="md-tabs__link">
+      API
+    </a>
+  </li>
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Run-Time-Assurance" class="md-nav__button md-logo" aria-label="Run-Time-Assurance" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4.41 3 3 4.41 5.69 7.1A7.924 7.924 0 0 0 4 12c0 1.85.63 3.55 1.69 4.9L3 19.59 4.41 21l2.69-2.69A7.924 7.924 0 0 0 12 20c1.85 0 3.55-.63 4.9-1.69L19.59 21 21 19.59l-2.69-2.69A7.924 7.924 0 0 0 20 12c0-1.85-.63-3.55-1.69-4.9L21 4.41 19.59 3 16.9 5.69A7.924 7.924 0 0 0 12 4c-1.85 0-3.55.63-4.9 1.69L4.41 3M12 6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6 2.69-6 6-6Z"/></svg>
+
+    </a>
+    Run-Time-Assurance
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://git.act3-ace.com/rta/run-time-assurance" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Git
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        Introduction
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" type="checkbox" id="__nav_2" >
+      
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../../api/">API</a>
+          
+            <label for="__nav_2">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="API" data-md-level="1">
+        <label class="md-nav__title" for="__nav_2">
+          <span class="md-nav__icon md-icon"></span>
+          API
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../constraint/" class="md-nav__link">
+        constraint
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rta.md" class="md-nav__link">
+        rta
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../state/" class="md-nav__link">
+        state
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2_4" type="checkbox" id="__nav_2_4" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_2_4">
+          zoo
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="zoo" data-md-level="2">
+        <label class="md-nav__title" for="__nav_2_4">
+          <span class="md-nav__icon md-icon"></span>
+          zoo
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2_4_1" type="checkbox" id="__nav_2_4_1" >
+      
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../../api/zoo/cwh/">cwh</a>
+          
+            <label for="__nav_2_4_1">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" aria-label="cwh" data-md-level="3">
+        <label class="md-nav__title" for="__nav_2_4_1">
+          <span class="md-nav__icon md-icon"></span>
+          cwh
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../zoo/cwh/docking_2d/" class="md-nav__link">
+        Docking 2d
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../zoo/cwh/docking_3d/" class="md-nav__link">
+        Docking 3d
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base" class="md-nav__link">
+    run_time_assurance.rta.base
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.BackupControlBasedRTA" class="md-nav__link">
+    BackupControlBasedRTA
+  </a>
+  
+    <nav class="md-nav" aria-label="BackupControlBasedRTA">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.BackupControlBasedRTA--parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_control" class="md-nav__link">
+    backup_control()
+  </a>
+  
+    <nav class="md-nav" aria-label="backup_control()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_control--parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_control--returns" class="md-nav__link">
+    Returns
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_controller_restore" class="md-nav__link">
+    backup_controller_restore()
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_controller_save" class="md-nav__link">
+    backup_controller_save()
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.BackupControlBasedRTA.reset_backup_controller" class="md-nav__link">
+    reset_backup_controller()
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.CascadedRTA" class="md-nav__link">
+    CascadedRTA
+  </a>
+  
+    <nav class="md-nav" aria-label="CascadedRTA">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.CascadedRTA.compute_filtered_control" class="md-nav__link">
+    compute_filtered_control()
+  </a>
+  
+    <nav class="md-nav" aria-label="compute_filtered_control()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.CascadedRTA.compute_filtered_control--parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.CascadedRTA.compute_filtered_control--returns" class="md-nav__link">
+    Returns
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.ConstraintBasedRTA" class="md-nav__link">
+    ConstraintBasedRTA
+  </a>
+  
+    <nav class="md-nav" aria-label="ConstraintBasedRTA">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.ConstraintBasedRTA--parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.ConstraintBasedRTA.compose" class="md-nav__link">
+    compose()
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.ConstraintBasedRTA.compute_filtered_control" class="md-nav__link">
+    compute_filtered_control()
+  </a>
+  
+    <nav class="md-nav" aria-label="compute_filtered_control()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.ConstraintBasedRTA.compute_filtered_control--parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.ConstraintBasedRTA.compute_filtered_control--returns" class="md-nav__link">
+    Returns
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule" class="md-nav__link">
+    RTAModule
+  </a>
+  
+    <nav class="md-nav" aria-label="RTAModule">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule--parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule.compute_filtered_control" class="md-nav__link">
+    compute_filtered_control()
+  </a>
+  
+    <nav class="md-nav" aria-label="compute_filtered_control()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule.compute_filtered_control--parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule.compute_filtered_control--returns" class="md-nav__link">
+    Returns
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule.filter_control" class="md-nav__link">
+    filter_control()
+  </a>
+  
+    <nav class="md-nav" aria-label="filter_control()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule.filter_control--parameters" class="md-nav__link">
+    Parameters
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule.filter_control--returns" class="md-nav__link">
+    Returns
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule.generate_info" class="md-nav__link">
+    generate_info()
+  </a>
+  
+    <nav class="md-nav" aria-label="generate_info()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule.generate_info--returns" class="md-nav__link">
+    Returns
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_time_assurance.rta.base.RTAModule.reset" class="md-nav__link">
+    reset()
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          <div class="md-content" data-md-component="content">
+            <article class="md-content__inner md-typeset">
+              
+                
+
+  <a href="https://git.act3-ace.com/rta/run-time-assurance/blob/main/docs/run_time_assurance/rta/base.py" title="Edit this page" class="md-content__button md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"/></svg>
+  </a>
+
+
+  <h1>Base</h1>
+
+<div class="doc doc-object doc-module">
+
+<a id="run_time_assurance.rta.base"></a>
+    <div class="doc doc-contents first">
+
+      <p>This module implements the base runtime assurance module interface for filtering actions into safe actions</p>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+  <div class="doc doc-object doc-class">
+
+
+
+<h2 id="run_time_assurance.rta.base.BackupControlBasedRTA" class="doc doc-heading">
+        <code>
+BackupControlBasedRTA            (<a class="autorefs autorefs-internal" title="run_time_assurance.rta.base.ConstraintBasedRTA" href="#run_time_assurance.rta.base.ConstraintBasedRTA">ConstraintBasedRTA</a>)
+        </code>
+
+
+
+<a href="#run_time_assurance.rta.base.BackupControlBasedRTA" class="headerlink" title="Permanent link">¤</a></h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Base class for backup control based RTA algorithms
+Adds iterfaces for backup controller member</p>
+<h4 id="run_time_assurance.rta.base.BackupControlBasedRTA--parameters">Parameters<a class="headerlink" href="#run_time_assurance.rta.base.BackupControlBasedRTA--parameters" title="Permanent link">¤</a></h4>
+<p>backup_controller : RTABackupController
+    backup controller object utilized by rta module to generate backup control</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">BackupControlBasedRTA</span><span class="p">(</span><span class="n">ConstraintBasedRTA</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Base class for backup control based RTA algorithms</span>
+<span class="sd">    Adds iterfaces for backup controller member</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    backup_controller : RTABackupController</span>
+<span class="sd">        backup controller object utilized by rta module to generate backup control</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">backup_controller</span><span class="p">:</span> <span class="n">RTABackupController</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backup_controller</span> <span class="o">=</span> <span class="n">backup_controller</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">backup_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;retrieve safe backup control given the current state</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state : jnp.ndarray</span>
+<span class="sd">            current rta state of the system</span>
+<span class="sd">        step_size : float</span>
+<span class="sd">            time duration over which backup control action will be applied</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        jnp.ndarray</span>
+<span class="sd">            backup control vector</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">control</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">backup_controller</span><span class="o">.</span><span class="n">generate_control</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clip_control_jax</span><span class="p">(</span><span class="n">control</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">reset_backup_controller</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Resets the backup controller to the initial state at the beginning of an episode</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backup_controller</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">backup_controller_save</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Save the internal state of the backup controller</span>
+<span class="sd">        Allows trajectory integration with a stateful backup controller</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backup_controller</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">backup_controller_restore</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Restores the internal state of the backup controller from the last save</span>
+<span class="sd">        Allows trajectory integration with a stateful backup controller</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backup_controller</span><span class="o">.</span><span class="n">restore</span><span class="p">()</span>
+</code></pre></div>
+        </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.BackupControlBasedRTA.backup_control" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">backup_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_control" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>retrieve safe backup control given the current state</p>
+<h5 id="run_time_assurance.rta.base.BackupControlBasedRTA.backup_control--parameters">Parameters<a class="headerlink" href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_control--parameters" title="Permanent link">¤</a></h5>
+<p>state : jnp.ndarray
+    current rta state of the system
+step_size : float
+    time duration over which backup control action will be applied</p>
+<h5 id="run_time_assurance.rta.base.BackupControlBasedRTA.backup_control--returns">Returns<a class="headerlink" href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_control--returns" title="Permanent link">¤</a></h5>
+<p>jnp.ndarray
+    backup control vector</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">backup_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;retrieve safe backup control given the current state</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    state : jnp.ndarray</span>
+<span class="sd">        current rta state of the system</span>
+<span class="sd">    step_size : float</span>
+<span class="sd">        time duration over which backup control action will be applied</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    jnp.ndarray</span>
+<span class="sd">        backup control vector</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">control</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">backup_controller</span><span class="o">.</span><span class="n">generate_control</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clip_control_jax</span><span class="p">(</span><span class="n">control</span><span class="p">)</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.BackupControlBasedRTA.backup_controller_restore" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">backup_controller_restore</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_controller_restore" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>Restores the internal state of the backup controller from the last save
+Allows trajectory integration with a stateful backup controller</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">backup_controller_restore</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Restores the internal state of the backup controller from the last save</span>
+<span class="sd">    Allows trajectory integration with a stateful backup controller</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">backup_controller</span><span class="o">.</span><span class="n">restore</span><span class="p">()</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.BackupControlBasedRTA.backup_controller_save" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">backup_controller_save</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.BackupControlBasedRTA.backup_controller_save" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>Save the internal state of the backup controller
+Allows trajectory integration with a stateful backup controller</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">backup_controller_save</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Save the internal state of the backup controller</span>
+<span class="sd">    Allows trajectory integration with a stateful backup controller</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">backup_controller</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.BackupControlBasedRTA.reset_backup_controller" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">reset_backup_controller</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.BackupControlBasedRTA.reset_backup_controller" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>Resets the backup controller to the initial state at the beginning of an episode</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">reset_backup_controller</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Resets the backup controller to the initial state at the beginning of an episode</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">backup_controller</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-class">
+
+
+
+<h2 id="run_time_assurance.rta.base.CascadedRTA" class="doc doc-heading">
+        <code>
+CascadedRTA            (<a class="autorefs autorefs-internal" title="run_time_assurance.rta.base.RTAModule" href="#run_time_assurance.rta.base.RTAModule">RTAModule</a>)
+        </code>
+
+
+
+<a href="#run_time_assurance.rta.base.CascadedRTA" class="headerlink" title="Permanent link">¤</a></h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Base class for cascaded RTA systems</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">CascadedRTA</span><span class="p">(</span><span class="n">RTAModule</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Base class for cascaded RTA systems</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rta_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setup_rta_list</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">compute_filtered_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">intervening</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">control</span> <span class="o">=</span> <span class="n">control_desired</span>
+        <span class="k">for</span> <span class="n">rta</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">rta_list</span><span class="p">:</span>
+            <span class="n">control</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">rta</span><span class="o">.</span><span class="n">filter_control</span><span class="p">(</span><span class="n">input_state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">control</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">rta</span><span class="o">.</span><span class="n">intervening</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">intervening</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">return</span> <span class="n">control</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_setup_rta_list</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RTAModule</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Setup list of RTA objects</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            list of RTA objects in order from lowest to highest priority</span>
+<span class="sd">            for list of length N, where {i = 1, ..., N}, output of RTA {i} is passed as input RTA {i+1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+</code></pre></div>
+        </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.CascadedRTA.compute_filtered_control" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">compute_filtered_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.CascadedRTA.compute_filtered_control" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>custom logic for filtering desired control into safe action</p>
+<h5 id="run_time_assurance.rta.base.CascadedRTA.compute_filtered_control--parameters">Parameters<a class="headerlink" href="#run_time_assurance.rta.base.CascadedRTA.compute_filtered_control--parameters" title="Permanent link">¤</a></h5>
+<p>input_state : Any
+    input state of environment to RTA module. May be any custom state type.
+step_size : float
+    simulation step size
+control_desired : np.ndarray
+    desired control vector</p>
+<h5 id="run_time_assurance.rta.base.CascadedRTA.compute_filtered_control--returns">Returns<a class="headerlink" href="#run_time_assurance.rta.base.CascadedRTA.compute_filtered_control--returns" title="Permanent link">¤</a></h5>
+<p>np.ndarray
+    safe filtered control vector</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">compute_filtered_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">intervening</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">control</span> <span class="o">=</span> <span class="n">control_desired</span>
+    <span class="k">for</span> <span class="n">rta</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">rta_list</span><span class="p">:</span>
+        <span class="n">control</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">rta</span><span class="o">.</span><span class="n">filter_control</span><span class="p">(</span><span class="n">input_state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">control</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">rta</span><span class="o">.</span><span class="n">intervening</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">intervening</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">return</span> <span class="n">control</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-class">
+
+
+
+<h2 id="run_time_assurance.rta.base.ConstraintBasedRTA" class="doc doc-heading">
+        <code>
+ConstraintBasedRTA            (<a class="autorefs autorefs-internal" title="run_time_assurance.rta.base.RTAModule" href="#run_time_assurance.rta.base.RTAModule">RTAModule</a>)
+        </code>
+
+
+
+<a href="#run_time_assurance.rta.base.ConstraintBasedRTA" class="headerlink" title="Permanent link">¤</a></h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Base class for constraint-based RTA systems</p>
+<h4 id="run_time_assurance.rta.base.ConstraintBasedRTA--parameters">Parameters<a class="headerlink" href="#run_time_assurance.rta.base.ConstraintBasedRTA--parameters" title="Permanent link">¤</a></h4>
+<p>control_bounds_high : Union[float, int, list, np.ndarray], optional
+    upper bound of allowable control. Pass a list for element specific limit. By default None
+control_bounds_low : Union[float, int, list, np.ndarray], optional
+    upper bound of allowable control. Pass a list for element specific limit. By default None</p>
+<div class="admonition jit_compile_dict">
+<p class="admonition-title">Dict[str, bool], optional</p>
+<p>Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
+Useful for implementing versions methods that can't be jit compiled
+Each RTA class will have custom default behavior if not passed</p>
+</div>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">ConstraintBasedRTA</span><span class="p">(</span><span class="n">RTAModule</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Base class for constraint-based RTA systems</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    control_bounds_high : Union[float, int, list, np.ndarray], optional</span>
+<span class="sd">        upper bound of allowable control. Pass a list for element specific limit. By default None</span>
+<span class="sd">    control_bounds_low : Union[float, int, list, np.ndarray], optional</span>
+<span class="sd">        upper bound of allowable control. Pass a list for element specific limit. By default None</span>
+<span class="sd">    jit_compile_dict: Dict[str, bool], optional</span>
+<span class="sd">        Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()</span>
+<span class="sd">        Useful for implementing versions methods that can&#39;t be jit compiled</span>
+<span class="sd">        Each RTA class will have custom default behavior if not passed</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">control_bounds_high</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">control_bounds_low</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">jit_compile_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">control_bounds_high</span><span class="o">=</span><span class="n">control_bounds_high</span><span class="p">,</span> <span class="n">control_bounds_low</span><span class="o">=</span><span class="n">control_bounds_low</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">jit_compile_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">jit_compile_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">jit_compile_dict</span> <span class="o">=</span> <span class="n">jit_compile_dict</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_properties</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setup_constraints</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compose</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">compute_filtered_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;filters desired control into safe action</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        input_state : Any</span>
+<span class="sd">            input state of environment to RTA module. May be any custom state type.</span>
+<span class="sd">            If using a custom state type, make sure to implement _get_state to traslate into an RTA state.</span>
+<span class="sd">            If custom _get_state() method is not implemented, must be an RTAState or numpy.ndarray instance.</span>
+<span class="sd">        step_size : float</span>
+<span class="sd">            time duration over which filtered control will be applied to actuators</span>
+<span class="sd">        control_desired : np.ndarray</span>
+<span class="sd">            desired control vector</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            safe filtered control vector</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_state</span><span class="p">(</span><span class="n">input_state</span><span class="p">)</span>
+        <span class="n">control_actual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_control</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">to_jnp_array_jit</span><span class="p">(</span><span class="n">control_desired</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">control_actual</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">control_actual</span><span class="p">)</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_filter_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;custom logic for filtering desired control into safe action</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state : jnp.ndarray</span>
+<span class="sd">            current rta state of the system</span>
+<span class="sd">        step_size : float</span>
+<span class="sd">            simulation step size</span>
+<span class="sd">        control : jnp.ndarray</span>
+<span class="sd">            desired control vector</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        jnp.ndarray</span>
+<span class="sd">            safe filtered control vector</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_setup_properties</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Additional initialization function to allow custom initialization to run after baseclass initialization,</span>
+<span class="sd">        but before constraint initialization&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">compose</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        applies jax composition transformations (grad, jit, jacobian etc.)</span>
+
+<span class="sd">        jit complilation is determined by the jit_compile_dict constructor parameter</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_setup_constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderedDict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ConstraintModule</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Initializes and returns RTA constraints</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        OrderedDict</span>
+<span class="sd">            OrderedDict of rta contraints with name string keys and ConstraintModule object values</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_pred_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;predict the next state of the system given the current state, step size, and control vector&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_clip_control_jax</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;jax version of clip control for clipping control vector values to specified upper and lower bounds</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        control : jnp.ndarray</span>
+<span class="sd">            raw control vector</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        jnp.ndarray</span>
+<span class="sd">            clipped control vector</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_low</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_high</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">control</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_low</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_high</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">return</span> <span class="n">control</span>
+
+    <span class="k">def</span> <span class="nf">_get_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Converts the global state to an internal RTA state&quot;&quot;&quot;</span>
+
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_state</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)),</span> <span class="p">(</span>
+            <span class="s2">&quot;input_state must be an RTAState or numpy array. &quot;</span>
+            <span class="s2">&quot;If you are tying to use a custom state variable, make sure to implement a custom &quot;</span>
+            <span class="s2">&quot;_get_state() method to translate your custom state to an RTAState&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_state</span><span class="p">,</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">input_state</span>
+
+        <span class="k">return</span> <span class="n">to_jnp_array_jit</span><span class="p">(</span><span class="n">input_state</span><span class="p">)</span>
+</code></pre></div>
+        </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.ConstraintBasedRTA.compose" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">compose</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.ConstraintBasedRTA.compose" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>applies jax composition transformations (grad, jit, jacobian etc.)</p>
+<p>jit complilation is determined by the jit_compile_dict constructor parameter</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">compose</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    applies jax composition transformations (grad, jit, jacobian etc.)</span>
+
+<span class="sd">    jit complilation is determined by the jit_compile_dict constructor parameter</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.ConstraintBasedRTA.compute_filtered_control" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">compute_filtered_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.ConstraintBasedRTA.compute_filtered_control" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>filters desired control into safe action</p>
+<h5 id="run_time_assurance.rta.base.ConstraintBasedRTA.compute_filtered_control--parameters">Parameters<a class="headerlink" href="#run_time_assurance.rta.base.ConstraintBasedRTA.compute_filtered_control--parameters" title="Permanent link">¤</a></h5>
+<p>input_state : Any
+    input state of environment to RTA module. May be any custom state type.
+    If using a custom state type, make sure to implement _get_state to traslate into an RTA state.
+    If custom _get_state() method is not implemented, must be an RTAState or numpy.ndarray instance.
+step_size : float
+    time duration over which filtered control will be applied to actuators
+control_desired : np.ndarray
+    desired control vector</p>
+<h5 id="run_time_assurance.rta.base.ConstraintBasedRTA.compute_filtered_control--returns">Returns<a class="headerlink" href="#run_time_assurance.rta.base.ConstraintBasedRTA.compute_filtered_control--returns" title="Permanent link">¤</a></h5>
+<p>np.ndarray
+    safe filtered control vector</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">compute_filtered_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;filters desired control into safe action</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    input_state : Any</span>
+<span class="sd">        input state of environment to RTA module. May be any custom state type.</span>
+<span class="sd">        If using a custom state type, make sure to implement _get_state to traslate into an RTA state.</span>
+<span class="sd">        If custom _get_state() method is not implemented, must be an RTAState or numpy.ndarray instance.</span>
+<span class="sd">    step_size : float</span>
+<span class="sd">        time duration over which filtered control will be applied to actuators</span>
+<span class="sd">    control_desired : np.ndarray</span>
+<span class="sd">        desired control vector</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        safe filtered control vector</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_state</span><span class="p">(</span><span class="n">input_state</span><span class="p">)</span>
+    <span class="n">control_actual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_control</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">to_jnp_array_jit</span><span class="p">(</span><span class="n">control_desired</span><span class="p">))</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">control_actual</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">control_actual</span><span class="p">)</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-class">
+
+
+
+<h2 id="run_time_assurance.rta.base.RTAModule" class="doc doc-heading">
+        <code>
+RTAModule            (<span title="abc.ABC">ABC</span>)
+        </code>
+
+
+
+<a href="#run_time_assurance.rta.base.RTAModule" class="headerlink" title="Permanent link">¤</a></h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Base class for RTA modules</p>
+<h4 id="run_time_assurance.rta.base.RTAModule--parameters">Parameters<a class="headerlink" href="#run_time_assurance.rta.base.RTAModule--parameters" title="Permanent link">¤</a></h4>
+<p>control_bounds_high : Union[float, int, list, np.ndarray], optional
+    upper bound of allowable control. Pass a list for element specific limit. By default None
+control_bounds_low : Union[float, int, list, np.ndarray], optional
+    upper bound of allowable control. Pass a list for element specific limit. By default None</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">RTAModule</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Base class for RTA modules</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    control_bounds_high : Union[float, int, list, np.ndarray], optional</span>
+<span class="sd">        upper bound of allowable control. Pass a list for element specific limit. By default None</span>
+<span class="sd">    control_bounds_low : Union[float, int, list, np.ndarray], optional</span>
+<span class="sd">        upper bound of allowable control. Pass a list for element specific limit. By default None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">control_bounds_high</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">control_bounds_low</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">control_bounds_high</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">)):</span>
+            <span class="n">control_bounds_high</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">control_bounds_high</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">control_bounds_low</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">)):</span>
+            <span class="n">control_bounds_low</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">control_bounds_low</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_high</span> <span class="o">=</span> <span class="n">control_bounds_high</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_low</span> <span class="o">=</span> <span class="n">control_bounds_low</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">enable</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">intervening</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_desired</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Resets the rta module to the initial state at the beginning of an episode</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enable</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">intervening</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">filter_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;filters desired control into safe action</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        input_state</span>
+<span class="sd">            input state of environment to RTA module. May be any custom state type.</span>
+<span class="sd">        step_size : float</span>
+<span class="sd">            time duration over which filtered control will be applied to actuators</span>
+<span class="sd">        control_desired : np.ndarray</span>
+<span class="sd">            desired control vector</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            safe filtered control vector</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_desired</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">control_desired</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable</span><span class="p">:</span>
+            <span class="n">control_actual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clip_control</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compute_filtered_control</span><span class="p">(</span><span class="n">input_state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">control_actual</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">control_desired</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span><span class="p">)</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">compute_filtered_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;custom logic for filtering desired control into safe action</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        input_state : Any</span>
+<span class="sd">            input state of environment to RTA module. May be any custom state type.</span>
+<span class="sd">        step_size : float</span>
+<span class="sd">            simulation step size</span>
+<span class="sd">        control_desired : np.ndarray</span>
+<span class="sd">            desired control vector</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            safe filtered control vector</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">generate_info</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;generates info dictionary on RTA module for logging</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            info dictionary for rta module</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;enable&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable</span><span class="p">,</span>
+            <span class="s1">&#39;intervening&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">intervening</span><span class="p">,</span>
+            <span class="s1">&#39;control_desired&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_desired</span><span class="p">,</span>
+            <span class="s1">&#39;control_actual&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">info</span>
+
+    <span class="k">def</span> <span class="nf">_clip_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;clip control vector values to specified upper and lower bounds</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        control : np.ndarray</span>
+<span class="sd">            raw control vector</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            clipped control vector</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_low</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_high</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">control</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_low</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_bounds_high</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">return</span> <span class="n">control</span>
+</code></pre></div>
+        </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.RTAModule.compute_filtered_control" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">compute_filtered_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.RTAModule.compute_filtered_control" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>custom logic for filtering desired control into safe action</p>
+<h5 id="run_time_assurance.rta.base.RTAModule.compute_filtered_control--parameters">Parameters<a class="headerlink" href="#run_time_assurance.rta.base.RTAModule.compute_filtered_control--parameters" title="Permanent link">¤</a></h5>
+<p>input_state : Any
+    input state of environment to RTA module. May be any custom state type.
+step_size : float
+    simulation step size
+control_desired : np.ndarray
+    desired control vector</p>
+<h5 id="run_time_assurance.rta.base.RTAModule.compute_filtered_control--returns">Returns<a class="headerlink" href="#run_time_assurance.rta.base.RTAModule.compute_filtered_control--returns" title="Permanent link">¤</a></h5>
+<p>np.ndarray
+    safe filtered control vector</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+<span class="k">def</span> <span class="nf">compute_filtered_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;custom logic for filtering desired control into safe action</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    input_state : Any</span>
+<span class="sd">        input state of environment to RTA module. May be any custom state type.</span>
+<span class="sd">    step_size : float</span>
+<span class="sd">        simulation step size</span>
+<span class="sd">    control_desired : np.ndarray</span>
+<span class="sd">        desired control vector</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        safe filtered control vector</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.RTAModule.filter_control" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">filter_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.RTAModule.filter_control" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>filters desired control into safe action</p>
+<h5 id="run_time_assurance.rta.base.RTAModule.filter_control--parameters">Parameters<a class="headerlink" href="#run_time_assurance.rta.base.RTAModule.filter_control--parameters" title="Permanent link">¤</a></h5>
+<p>input_state
+    input state of environment to RTA module. May be any custom state type.
+step_size : float
+    time duration over which filtered control will be applied to actuators
+control_desired : np.ndarray
+    desired control vector</p>
+<h5 id="run_time_assurance.rta.base.RTAModule.filter_control--returns">Returns<a class="headerlink" href="#run_time_assurance.rta.base.RTAModule.filter_control--returns" title="Permanent link">¤</a></h5>
+<p>np.ndarray
+    safe filtered control vector</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">filter_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;filters desired control into safe action</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    input_state</span>
+<span class="sd">        input state of environment to RTA module. May be any custom state type.</span>
+<span class="sd">    step_size : float</span>
+<span class="sd">        time duration over which filtered control will be applied to actuators</span>
+<span class="sd">    control_desired : np.ndarray</span>
+<span class="sd">        desired control vector</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        safe filtered control vector</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">control_desired</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">control_desired</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable</span><span class="p">:</span>
+        <span class="n">control_actual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clip_control</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compute_filtered_control</span><span class="p">(</span><span class="n">input_state</span><span class="p">,</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">control_desired</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">control_actual</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">control_desired</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span><span class="p">)</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.RTAModule.generate_info" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">generate_info</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.RTAModule.generate_info" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>generates info dictionary on RTA module for logging</p>
+<h5 id="run_time_assurance.rta.base.RTAModule.generate_info--returns">Returns<a class="headerlink" href="#run_time_assurance.rta.base.RTAModule.generate_info--returns" title="Permanent link">¤</a></h5>
+<p>dict
+    info dictionary for rta module</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">generate_info</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;generates info dictionary on RTA module for logging</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        info dictionary for rta module</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">info</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;enable&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable</span><span class="p">,</span>
+        <span class="s1">&#39;intervening&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">intervening</span><span class="p">,</span>
+        <span class="s1">&#39;control_desired&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_desired</span><span class="p">,</span>
+        <span class="s1">&#39;control_actual&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">info</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h3 id="run_time_assurance.rta.base.RTAModule.reset" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></code>
+
+
+<a href="#run_time_assurance.rta.base.RTAModule.reset" class="headerlink" title="Permanent link">¤</a></h3>
+
+    <div class="doc doc-contents ">
+
+      <p>Resets the rta module to the initial state at the beginning of an episode</p>
+
+        <details class="quote">
+          <summary>Source code in <code>run_time_assurance/rta/base.py</code></summary>
+          <div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Resets the rta module to the initial state at the beginning of an episode</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">enable</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">intervening</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">control_desired</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">control_actual</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div>
+        </details>
+    </div>
+
+  </div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+  </div>
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+  </div>
+
+
+
+
+              
+            </article>
+            
+          </div>
+        </div>
+        
+          <a href="#" class="md-top md-icon" data-md-component="top" hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+            Back to top
+          </a>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.tabs", "navigation.top"], "search": "../../../assets/javascripts/workers/search.ecf98df9.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version.title": "Select version"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.2ab50757.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@8.4.2/dist/mermaid.min.js"></script>
+      
+    
+  </body>
+</html>
