@@ -13,6 +13,13 @@ def parse_requirements(filename: str):
 
 reqs = parse_requirements("requirements.txt")
 
+version = {}
+try:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    base_dir = None
+with open(os.path.join(base_dir, 'version.py')) as fp:
+     exec(fp.read(), version)
 
 if __name__ == '__main__':
     tests_require = [
@@ -36,24 +43,17 @@ if __name__ == '__main__':
         'factory',
     ]
 
-    docs_require = [
-        'mkdocs',
-        'mkdocs-macros-plugin',
-        'mkdocs-mermaid-plugin',
-        'inari[mkdocs]',
-        'pymdown-extensions',
-    ]
+    docs_require = parse_requirements("mkdocs-requirements.txt")
 
     setup(
         name="run-time-assurance",
         author="ACT3 Safe Autonomy Team",
         description="ACT3 Safe Autonomy Run Time Assurance Package",
-        version="0.1.1",
 
         long_description=Path("README.md").read_text(),
         long_description_content_type="text/markdown",
 
-        url="https://git.act3-ace.com/rta/run-time-assurance",
+        url="https://act3-ace.github.io/run-time-assurance/",
 
         license="Distribution C",
 
