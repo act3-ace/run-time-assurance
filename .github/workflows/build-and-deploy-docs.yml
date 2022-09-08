@@ -1,0 +1,42 @@
+name: Build and Deploy Docs
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy-docs:
+    concurrency: ci-${{ github.ref }} # Recommended if you intend to make multiple deployments in quick succession.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v3
+
+      # Sets up python3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.8 
+
+      # Installs and upgrades pip, installs other dependencies and installs the package from setup.py
+      - name: Install Dependencies
+        run: |
+          # Upgrade pip
+          python3 -m pip install --upgrade pip
+          # If requirements.txt exists, install from it
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # If mkdocs-requirements.txt exists, install from it
+          if [ -f mkdocs-requirements.txt ]; then pip install -r mkdocs-requirements.txt; fi
+          # Install the package from setup.py
+          python3 setup.py install
+          # Build documentation
+          python3 -m mkdocs build
+          
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: site # The folder the action should deploy.
