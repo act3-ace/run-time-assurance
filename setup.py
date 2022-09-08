@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Setup script for run-time-assurance"""
+import os
 from pathlib import Path
 
 from setuptools import setup, find_packages
@@ -10,6 +11,7 @@ def parse_requirements(filename: str):
     """ load requirements from a pip requirements file """
     lineiter = (line.strip() for line in open(filename))
     return [line for line in lineiter if line and not line.startswith("#")]
+
 
 reqs = parse_requirements("requirements.txt")
 
@@ -57,6 +59,19 @@ if __name__ == '__main__':
 
         license="Distribution C",
 
+        setup_requires=[
+            'setuptools_scm',
+            'pytest-runner'
+        ],
+        
+        version=version["__version__"],
+
+        # add in package_data
+        include_package_data=True,
+        package_data={
+            'safe_autonomy_dynamics': ['*.yml', '*.yaml']
+        },
+
         packages=find_packages(),
 
         classifiers=[
@@ -70,5 +85,5 @@ if __name__ == '__main__':
             "testing":  tests_require,
             "docs":  docs_require,
         },
-        python_requires='>=3.7',
+        python_requires='>=3.8',
     )
