@@ -31,6 +31,7 @@ class ConstraintModule(abc.ABC):
 
     def _compose(self):
         self._compute_fn = jit(self._compute)
+        self.phi = jit(self._phi)
         self._grad_fn = jit(grad(self._compute))
 
     def __call__(self, state: jnp.ndarray) -> float:
@@ -120,7 +121,7 @@ class ConstraintModule(abc.ABC):
 
         return self._alpha(x)
 
-    def phi(self, state: jnp.ndarray) -> float:
+    def _phi(self, state: jnp.ndarray) -> float:
         """Evaluates constraint function phi(x).
         Considered satisfied when phi(x) >= 0.
         By default, returns the value of _compute without the buffer.
