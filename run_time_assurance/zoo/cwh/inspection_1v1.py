@@ -1,22 +1,26 @@
 """This module implements RTA methods for the single-agent inspection problem with 3D CWH dynamics models
 """
 from collections import OrderedDict
-from typing import Union
+from typing import Dict, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
-from jax import jit, vmap
+import scipy
+from jax import jit, lax, vmap
 from jax.experimental.ode import odeint
 from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
 from run_time_assurance.constraint import (
     ConstraintMagnitudeStateLimit,
+    ConstraintMaxStateLimit,
     ConstraintModule,
     ConstraintStrengthener,
     PolynomialConstraintStrengthener,
 )
-from run_time_assurance.rta import ExplicitASIFModule
+from run_time_assurance.controller import RTABackupController
+from run_time_assurance.rta import CascadedRTA, ExplicitASIFModule, ExplicitSimplexModule
 from run_time_assurance.state import RTAStateWrapper
+from run_time_assurance.utils import to_jnp_array_jit
 
 CHIEF_RADIUS_DEFAULT = 5  # chief radius of collision [m] (collision freedom)
 DEPUTY_RADIUS_DEFAULT = 5  # deputy radius of collision [m] (collision freedom)
@@ -26,7 +30,8 @@ R_MAX_DEFAULT = 1000  # max distance from chief [m] (translational keep out zone
 FOV_DEFAULT = 60 * jnp.pi / 180  # sun avoidance angle [rad] (translational keep out zone)
 U_MAX_DEFAULT = 1  # Max thrust [N] (10. avoid actuation saturation)
 VEL_LIMIT_DEFAULT = 1  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
-FUEL_LIMIT_DEFAULT = 1  # kg
+FUEL_LIMIT_DEFAULT = 0.25  # kg
+FUEL_THRESHOLD_DEFAULT = 0.1  # kg
 GRAVITY = 9.81  # m/s^2
 SPECIFIC_IMPULSE_DEFAULT = 220  # s
 
@@ -115,7 +120,7 @@ class Inspection3dState(RTAStateWrapper):
         self.vector[7] = val
 
 
-class InspectionRTA(ExplicitASIFModule):
+class Inspection1v1RTA(ExplicitASIFModule):
     """
     Implements Explicit Optimization RTA for the 3d Inspection problem
 
@@ -145,6 +150,12 @@ class InspectionRTA(ExplicitASIFModule):
         max velocity magnitude, by default VEL_LIMIT_DEFAULT
     fuel_limit : float, optional
         maximum fuel used limit, by default FUEL_LIMIT_DEFAULT
+    fuel_switching_threshold : float, optional
+        fuel threshold at which to switch to backup controller
+    gravity : float, optional
+        gravity at Earth's surface, by default GRAVITY
+    isp : float, optional
+        Specific impulse of thrusters in seconds, by default SPECIFIC_IMPULSE_DEFAULT
     control_bounds_high : float, optional
         upper bound of allowable control. Pass a list for element specific limit. By default U_MAX_DEFAULT
     control_bounds_low : float, optional
@@ -164,6 +175,7 @@ class InspectionRTA(ExplicitASIFModule):
         fov: float = FOV_DEFAULT,
         vel_limit: float = VEL_LIMIT_DEFAULT,
         fuel_limit: float = FUEL_LIMIT_DEFAULT,
+        fuel_switching_threshold: float = FUEL_THRESHOLD_DEFAULT,
         gravity: float = GRAVITY,
         isp: float = SPECIFIC_IMPULSE_DEFAULT,
         control_bounds_high: Union[float, list, np.ndarray, jnp.ndarray] = U_MAX_DEFAULT,
@@ -181,6 +193,7 @@ class InspectionRTA(ExplicitASIFModule):
         self.fov = fov
         self.vel_limit = vel_limit
         self.fuel_limit = fuel_limit
+        self.fuel_switching_threshold = fuel_switching_threshold
         self.gravity = gravity
         self.isp = isp
 
@@ -192,7 +205,7 @@ class InspectionRTA(ExplicitASIFModule):
 
         self.control_dim = self.B.shape[1]
 
-        self.pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
+        self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
 
         super().__init__(
             *args, control_dim=self.control_dim, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs
@@ -250,6 +263,137 @@ class InspectionRTA(ExplicitASIFModule):
 
     def state_transition_input(self, state: jnp.ndarray) -> jnp.ndarray:
         return jnp.vstack((self.B, jnp.zeros((2, 3))))
+
+
+class SwitchingFuelLimitRTA(ExplicitSimplexModule):
+    """Explicit Simplex RTA Filter for fuel use
+    Switches to NMT tracking backup controller
+
+    Parameters
+    ----------
+    m : float, optional
+        mass in kg of spacecraft, by default M_DEFAULT
+    n : float, optional
+        orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
+    fuel_limit : float, optional
+        maximum fuel used limit, by default FUEL_LIMIT_DEFAULT
+    fuel_switching_threshold : float, optional
+        fuel threshold at which to switch to backup controller
+    gravity : float, optional
+        gravity at Earth's surface, by default GRAVITY
+    isp : float, optional
+        Specific impulse of thrusters in seconds, by default SPECIFIC_IMPULSE_DEFAULT
+    control_bounds_high : float, optional
+        upper bound of allowable control. Pass a list for element specific limit. By default U_MAX_DEFAULT
+    control_bounds_low : float, optional
+        lower bound of allowable control. Pass a list for element specific limit. By default -U_MAX_DEFAULT
+    """
+
+    def __init__(
+        self,
+        *args,
+        m: float = M_DEFAULT,
+        n: float = N_DEFAULT,
+        fuel_limit: float = FUEL_LIMIT_DEFAULT,
+        fuel_switching_threshold: float = FUEL_THRESHOLD_DEFAULT,
+        gravity: float = GRAVITY,
+        isp: float = SPECIFIC_IMPULSE_DEFAULT,
+        control_bounds_high: Union[float, np.ndarray] = U_MAX_DEFAULT,
+        control_bounds_low: Union[float, np.ndarray] = -U_MAX_DEFAULT,
+        backup_controller: RTABackupController = None,
+        jit_compile_dict: Dict[str, bool] = None,
+        **kwargs
+    ):
+        self.m = m
+        self.n = n
+        self.fuel_limit = fuel_limit
+        self.fuel_switching_threshold = fuel_switching_threshold
+        self.gravity = gravity
+        self.isp = isp
+
+        if backup_controller is None:
+            backup_controller = NMTBackupController(m=self.m, n=self.n, fuel_limit=self.fuel_limit)
+
+        if jit_compile_dict is None:
+            jit_compile_dict = {'pred_state': True}
+
+        super().__init__(
+            *args,
+            control_bounds_high=control_bounds_high,
+            control_bounds_low=control_bounds_low,
+            backup_controller=backup_controller,
+            jit_compile_dict=jit_compile_dict,
+            **kwargs
+        )
+
+    def _setup_constraints(self) -> OrderedDict:
+        return OrderedDict([('fuel', ConstraintMaxStateLimit(limit_val=self.fuel_switching_threshold, state_index=7))])
+
+    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        m_f = state[7]
+        m_dot_f = jnp.sum(jnp.abs(control)) / (self.gravity * self.isp)
+        return jnp.array([0, 0, 0, 0, 0, 0, 0, m_f + m_dot_f * step_size])
+
+
+class InspectionCascadedRTA(CascadedRTA):
+    """Combines ASIF Inspection RTA with switching-based fuel limit
+    """
+
+    def _setup_rta_list(self):
+        return [Inspection1v1RTA(), SwitchingFuelLimitRTA()]
+
+
+class NMTBackupController(RTABackupController):
+    """Simple LQR controller to guide the deputy to the closest elliptical Natural Motion Trajectory (eNMT)
+
+    Parameters
+    ----------
+    m : float, optional
+        mass in kg of spacecraft, by default M_DEFAULT
+    n : float, optional
+        orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
+    fuel_limit : float, optional
+        maximum fuel used limit, by default FUEL_LIMIT_DEFAULT
+    """
+
+    def __init__(self, m: float = M_DEFAULT, n: float = N_DEFAULT, fuel_limit: float = FUEL_LIMIT_DEFAULT):
+        self.n = n
+        self.fuel_limit = fuel_limit
+
+        # LQR Gain Matrices
+        Q = np.eye(6) * 0.05
+        R = np.eye(3) * 1000
+        A, B = generate_cwh_matrices(m, n, mode="3d")
+        # Solve the Algebraic Ricatti equation for the given system
+        P = scipy.linalg.solve_continuous_are(A, B, Q, R)
+        # Construct the constain gain matrix, K
+        K = np.linalg.inv(R) @ (np.transpose(B) @ P)
+        self.K = to_jnp_array_jit(-K)
+
+        super().__init__()
+
+    def _generate_control(
+        self,
+        state: jnp.ndarray,
+        step_size: float,
+        controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray], None] = None
+    ) -> Tuple[jnp.ndarray, None]:
+
+        backup_action = lax.cond(state[7] >= self.fuel_limit, self.zero_u, self.lqr, state[0:6])
+
+        return backup_action, None
+
+    def zero_u(self, state):
+        """Zero control if fuel used is above limit
+        """
+        return jnp.array([0., 0., 0.]) + 0 * jnp.sum(state)
+
+    def lqr(self, state):
+        """LQR control to nearest eNMT.
+        Used when fuel use is above threshold but below limit
+        """
+        state_des = jnp.array([0, 0, 0, state[3] - self.n / 2 * state[1], state[4] + 2 * self.n * state[0], state[5]])
+        return self.K @ state_des
 
 
 class ConstraintCWHRelativeVelocity(ConstraintModule):

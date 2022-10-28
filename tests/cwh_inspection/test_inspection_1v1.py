@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import time
 
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
-from run_time_assurance.zoo.cwh.inspection_1v1 import U_MAX_DEFAULT, InspectionRTA
+from run_time_assurance.zoo.cwh.inspection_1v1 import U_MAX_DEFAULT, Inspection1v1RTA, SwitchingFuelLimitRTA, InspectionCascadedRTA
 from run_time_assurance.utils import to_jnp_array_jit
 
 
@@ -13,6 +13,7 @@ class Env():
         self.dt = 1  # Time step
         self.time = 3000 # Total sim time
         self.u_max = U_MAX_DEFAULT  # Actuation constraint
+        self.inspection_rta = Inspection1v1RTA()
 
         # Generate dynamics matrices
         self.A, self.B = generate_cwh_matrices(M_DEFAULT, N_DEFAULT, mode="3d")
@@ -55,13 +56,14 @@ class Env():
         # Run episode
         for t in range(int(self.time/self.dt)):
             if t < 1000:
-                x_des = np.array([-5*np.cos(x[6]), -5*np.sin(x[6]), 0., 0., 0., 0., 0., 0.])
+                x_des = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
+                # x_des = np.array([-5*np.cos(x[6]), -5*np.sin(x[6]), 0., 0., 0., 0., 0., 0.])
             else:
                 x_des = np.array([-1500*np.cos(x[6]), -1500*np.sin(x[6]), 0., 0., 0., 0., 0., 0.])
             u_des = self.u_des(x, x_des)
             u_safe = self.rta.filter_control(x, self.dt, u_des)
             # Take step using safe action
-            x = self.rta.pred_state_fn(to_jnp_array_jit(x), self.dt, to_jnp_array_jit(u_safe))
+            x = np.array(self.inspection_rta._pred_state_fn(to_jnp_array_jit(x), self.dt, to_jnp_array_jit(u_safe)))
             if plotter:
                 # Track data
                 array = np.append(array, [x], axis=0)
@@ -120,9 +122,9 @@ class Env():
         ax2.plot(range(len(array)), v[:, 0], linewidth=lw)
         xmax = len(array)*1.1
         ymax = np.max(v[:, 0])*1.1
-        ax2.fill_between([0, xmax], [self.rta.chief_radius+self.rta.deputy_radius, self.rta.chief_radius+self.rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
-        ax2.fill_between([0, xmax], [0, 0], [self.rta.chief_radius+self.rta.deputy_radius, self.rta.chief_radius+self.rta.deputy_radius], color=(255/255, 239/255, 239/255))
-        ax2.plot([0, xmax], [self.rta.chief_radius+self.rta.deputy_radius, self.rta.chief_radius+self.rta.deputy_radius], 'k--', linewidth=lw)
+        ax2.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
+        ax2.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
+        ax2.plot([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], 'k--', linewidth=lw)
         ax2.set_xlim([0, xmax])
         ax2.set_xlabel('Time [s]')
         ax2.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
@@ -138,9 +140,9 @@ class Env():
         xmax = np.max(v[:, 0])*1.1
         ymax = np.max(v[:, 1])*1.1
         ax3.plot(v[:, 0], v[:, 1], linewidth=lw)
-        ax3.fill_between([0, xmax], [self.rta.v0, self.rta.v0 + self.rta.v1*xmax], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax3.fill_between([0, xmax], [0, 0], [self.rta.v0, self.rta.v0 + self.rta.v1*xmax], color=(244/255, 249/255, 241/255))
-        ax3.plot([0, xmax], [self.rta.v0, self.rta.v0 + self.rta.v1*xmax], 'k--', linewidth=lw)
+        ax3.fill_between([0, xmax], [self.inspection_rta.v0, self.inspection_rta.v0 + self.inspection_rta.v1*xmax], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax3.fill_between([0, xmax], [0, 0], [self.inspection_rta.v0, self.inspection_rta.v0 + self.inspection_rta.v1*xmax], color=(244/255, 249/255, 241/255))
+        ax3.plot([0, xmax], [self.inspection_rta.v0, self.inspection_rta.v0 + self.inspection_rta.v1*xmax], 'k--', linewidth=lw)
         ax3.set_xlim([0, xmax])
         ax3.set_ylim([0, ymax])
         ax3.set_xlabel(r'Relative Dist. ($\vert \vert \mathbf{p}  \vert \vert_2$) [m]')
@@ -153,11 +155,12 @@ class Env():
             fig = plt.figure()
             ax4 = fig.add_subplot(111)
         xmax = len(array)*1.1
-        ymax = self.rta.fuel_limit*1.1
+        ymax = np.maximum(self.inspection_rta.fuel_limit, np.max(array[:, 7]))*1.1
         ax4.plot(range(len(array)), array[:, 7], linewidth=lw)
-        ax4.fill_between([0, xmax], [self.rta.fuel_limit, self.rta.fuel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax4.fill_between([0, xmax], [0, 0], [self.rta.fuel_limit, self.rta.fuel_limit], color=(244/255, 249/255, 241/255))
-        ax4.plot([0, xmax], [self.rta.fuel_limit, self.rta.fuel_limit], 'k--', linewidth=lw)
+        ax4.fill_between([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax4.fill_between([0, xmax], [0, 0], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], color=(244/255, 249/255, 241/255))
+        ax4.plot([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], 'k--', linewidth=lw)
+        ax4.plot([0, xmax], [self.inspection_rta.fuel_switching_threshold, self.inspection_rta.fuel_switching_threshold], 'r--', linewidth=lw)
         ax4.set_xlim([0, xmax])
         ax4.set_ylim([0, ymax])
         ax4.set_xlabel('Time [s]')
@@ -169,7 +172,7 @@ class Env():
         if paper_plot:
             fig = plt.figure()
             ax5 = fig.add_subplot(111)
-        th = self.rta.fov/2*180/np.pi
+        th = self.inspection_rta.fov/2*180/np.pi
         xmax = len(array)*1.1
         h = np.zeros(len(array))
         for j in range(len(array)):
@@ -194,10 +197,10 @@ class Env():
             ax6 = fig.add_subplot(111)
         ax6.plot(range(len(array)), v[:, 0], linewidth=lw)
         xmax = len(array)*1.1
-        ymax = np.maximum(np.max(v[:, 0])*1.1, self.rta.r_max*1.1)
-        ax6.fill_between([0, xmax], [self.rta.r_max, self.rta.r_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax6.fill_between([0, xmax], [0, 0], [self.rta.r_max, self.rta.r_max], color=(244/255, 249/255, 241/255))
-        ax6.plot([0, xmax], [self.rta.r_max, self.rta.r_max], 'k--', linewidth=lw)
+        ymax = np.maximum(np.max(v[:, 0])*1.1, self.inspection_rta.r_max*1.1)
+        ax6.fill_between([0, xmax], [self.inspection_rta.r_max, self.inspection_rta.r_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax6.fill_between([0, xmax], [0, 0], [self.inspection_rta.r_max, self.inspection_rta.r_max], color=(244/255, 249/255, 241/255))
+        ax6.plot([0, xmax], [self.inspection_rta.r_max, self.inspection_rta.r_max], 'k--', linewidth=lw)
         ax6.set_xlim([0, xmax])
         ax6.set_xlabel('Time [s]')
         ax6.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
@@ -210,14 +213,14 @@ class Env():
             fig = plt.figure()
             ax7 = fig.add_subplot(111)
         for i in range(0, len(array), 3):
-            r = self.rta.constraints["PSM"].get_array(array[i])+self.rta.chief_radius+self.rta.deputy_radius
+            r = self.inspection_rta.constraints["PSM"].get_array(array[i])+self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius
             ax7.plot(range(i, len(r)+i), r, 'c', linewidth=0.5)
         ax7.plot(range(len(array)), v[:, 0], linewidth=lw)
         xmax = len(array)*1.1
         ymax = np.max(v[:, 0])*1.1
-        ax7.fill_between([0, xmax], [self.rta.chief_radius+self.rta.deputy_radius, self.rta.chief_radius+self.rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
-        ax7.fill_between([0, xmax], [0, 0], [self.rta.chief_radius+self.rta.deputy_radius, self.rta.chief_radius+self.rta.deputy_radius], color=(255/255, 239/255, 239/255))
-        ax7.plot([0, xmax], [self.rta.chief_radius+self.rta.deputy_radius, self.rta.chief_radius+self.rta.deputy_radius], 'k--', linewidth=lw)
+        ax7.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
+        ax7.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
+        ax7.plot([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], 'k--', linewidth=lw)
         ax7.set_xlim([0, xmax])
         ax7.set_xlabel('Time [s]')
         ax7.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
@@ -231,15 +234,15 @@ class Env():
             fig = plt.figure()
             ax8 = fig.add_subplot(111)
         xmax = len(array)*1.1
-        ymax = self.rta.vel_limit*1.2
+        ymax = self.inspection_rta.vel_limit*1.2
         ax8.plot(range(len(array)), array[:, 3], linewidth=lw, label=r'$\dot{x}$')
         ax8.plot(range(len(array)), array[:, 4], linewidth=lw, label=r'$\dot{y}$')
         ax8.plot(range(len(array)), array[:, 5], linewidth=lw, label=r'$\dot{z}$')
-        ax8.fill_between([0, xmax], [self.rta.vel_limit, self.rta.vel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax8.fill_between([0, xmax], [-ymax, -ymax], [self.rta.vel_limit, self.rta.vel_limit], color=(255/255, 239/255, 239/255))
-        ax8.fill_between([0, xmax], [-self.rta.vel_limit, -self.rta.vel_limit], [self.rta.vel_limit, self.rta.vel_limit], color=(244/255, 249/255, 241/255))
-        ax8.plot([0, xmax], [self.rta.vel_limit, self.rta.vel_limit], 'k--', linewidth=lw)
-        ax8.plot([0, xmax], [-self.rta.vel_limit, -self.rta.vel_limit], 'k--', linewidth=lw)
+        ax8.fill_between([0, xmax], [self.inspection_rta.vel_limit, self.inspection_rta.vel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax8.fill_between([0, xmax], [-ymax, -ymax], [self.inspection_rta.vel_limit, self.inspection_rta.vel_limit], color=(255/255, 239/255, 239/255))
+        ax8.fill_between([0, xmax], [-self.inspection_rta.vel_limit, -self.inspection_rta.vel_limit], [self.inspection_rta.vel_limit, self.inspection_rta.vel_limit], color=(244/255, 249/255, 241/255))
+        ax8.plot([0, xmax], [self.inspection_rta.vel_limit, self.inspection_rta.vel_limit], 'k--', linewidth=lw)
+        ax8.plot([0, xmax], [-self.inspection_rta.vel_limit, -self.inspection_rta.vel_limit], 'k--', linewidth=lw)
         ax8.set_xlim([0, xmax])
         ax8.set_ylim([-ymax, ymax])
         ax8.set_xlabel('Time [s]')
@@ -253,15 +256,15 @@ class Env():
             fig = plt.figure()
             ax9 = fig.add_subplot(111)
         xmax = len(array)*1.1
-        ymax = self.rta.u_max*1.2
+        ymax = self.inspection_rta.u_max*1.2
         ax9.plot(range(len(control)), control[:, 0], linewidth=lw, label=r'$F_x$')
         ax9.plot(range(len(control)), control[:, 1], linewidth=lw, label=r'$F_y$')
         ax9.plot(range(len(control)), control[:, 2], linewidth=lw, label=r'$F_z$')
-        ax9.fill_between([0, xmax], [self.rta.u_max, self.rta.u_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax9.fill_between([0, xmax], [-ymax, -ymax], [self.rta.u_max, self.rta.u_max], color=(255/255, 239/255, 239/255))
-        ax9.fill_between([0, xmax], [-self.rta.u_max, -self.rta.u_max], [self.rta.u_max, self.rta.u_max], color=(244/255, 249/255, 241/255))
-        ax9.plot([0, xmax], [self.rta.u_max, self.rta.u_max], 'k--', linewidth=lw)
-        ax9.plot([0, xmax], [-self.rta.u_max, -self.rta.u_max], 'k--', linewidth=lw)
+        ax9.fill_between([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax9.fill_between([0, xmax], [-ymax, -ymax], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(255/255, 239/255, 239/255))
+        ax9.fill_between([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(244/255, 249/255, 241/255))
+        ax9.plot([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], 'k--', linewidth=lw)
+        ax9.plot([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], 'k--', linewidth=lw)
         ax9.set_xlim([0, xmax])
         ax9.set_ylim([-ymax, ymax])
         ax9.set_xlabel('Time [s]')
@@ -286,6 +289,8 @@ class Env():
 
 # Setup env, RTA, then run episode
 env = Env()
-rta = InspectionRTA()
+# rta = Inspection1v1RTA()
+# rta = SwitchingFuelLimitRTA()
+rta = InspectionCascadedRTA()
 env.run_episode(rta)
 plt.show()
