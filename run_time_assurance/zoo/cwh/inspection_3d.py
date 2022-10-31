@@ -196,25 +196,25 @@ class InspectionRTA(ExplicitASIFModule):
     def _setup_constraints(self) -> OrderedDict:
         constraint_dict = OrderedDict(
             [
-                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1)),
+                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, bias=-1e-4)),
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
                 ('sun', ConstraintCWHSunAvoidance(a_max=self.a_max, theta=self.theta, e_hat=self.e_hat)),
                 (
                     'x_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.x_vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01])
+                        limit_val=self.x_vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
                     )
                 ),
                 (
                     'y_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.y_vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01])
+                        limit_val=self.y_vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
                     )
                 ),
                 (
                     'z_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.z_vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01])
+                        limit_val=self.z_vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
                     )
                 )
             ]
@@ -250,13 +250,13 @@ class ConstraintCWHRelativeVelocity(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.05, 0, 0.5])
     """
 
-    def __init__(self, v0: float, v1: float, alpha: ConstraintStrengthener = None):
+    def __init__(self, v0: float, v1: float, alpha: ConstraintStrengthener = None, **kwargs):
         self.v0 = v0
         self.v1 = v1
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         h = (self.v0 + self.v1 * jnp.linalg.norm(state[0:3])) - jnp.linalg.norm(state[3:6])
@@ -277,13 +277,13 @@ class ConstraintCWHChiefCollision(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.005, 0, 0.05])
     """
 
-    def __init__(self, collision_radius: float, a_max: float, alpha: ConstraintStrengthener = None):
+    def __init__(self, collision_radius: float, a_max: float, alpha: ConstraintStrengthener = None, **kwargs):
         self.collision_radius = collision_radius
         self.a_max = a_max
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3]
@@ -291,6 +291,10 @@ class ConstraintCWHChiefCollision(ConstraintModule):
         mag_delta_p = jnp.linalg.norm(delta_p)
         h = jnp.sqrt(2 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
         return h
+
+    def _phi(self, state: jnp.ndarray) -> float:
+        delta_p = state[0:3]
+        return jnp.linalg.norm(delta_p) - self.collision_radius
 
 
 class ConstraintCWHDeputyCollision(ConstraintModule):
@@ -307,14 +311,14 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.005, 0, 0.05])
     """
 
-    def __init__(self, collision_radius: float, a_max: float, deputy: float, alpha: ConstraintStrengthener = None):
+    def __init__(self, collision_radius: float, a_max: float, deputy: float, alpha: ConstraintStrengthener = None, **kwargs):
         self.collision_radius = collision_radius
         self.a_max = a_max
         self.deputy = deputy
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3] - state[int(self.deputy * 6):int(self.deputy * 6 + 3)]
@@ -322,6 +326,10 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
         mag_delta_p = jnp.linalg.norm(delta_p)
         h = jnp.sqrt(4 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
         return h
+
+    def _phi(self, state: jnp.ndarray) -> float:
+        delta_p = state[0:3] - state[int(self.deputy * 6):int(self.deputy * 6 + 3)]
+        return jnp.linalg.norm(delta_p) - self.collision_radius
 
 
 class ConstraintCWHSunAvoidance(ConstraintModule):
@@ -341,7 +349,7 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.05])
     """
 
-    def __init__(self, a_max: float, theta: float, e_hat: jnp.ndarray, alpha: ConstraintStrengthener = None):
+    def __init__(self, a_max: float, theta: float, e_hat: jnp.ndarray, alpha: ConstraintStrengthener = None, **kwargs):
         self.a_max = a_max
         self.theta = theta
         self.e_hat = e_hat
@@ -349,7 +357,7 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.001])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         p = state[0:3]
@@ -360,4 +368,8 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
 
         h = jnp.sqrt(2 * self.a_max * jnp.linalg.norm(p - p_pr)
                      ) + jnp.dot(p - p_pr, state[3:6] - self.e_hat_vel) / jnp.linalg.norm(p - p_pr)
+        return h
+
+    def _phi(self, state: jnp.ndarray) -> float:
+        h = jnp.arccos(jnp.dot(state[0:3], self.e_hat) / (jnp.linalg.norm(state[0:3]) * jnp.linalg.norm(self.e_hat))) - self.theta
         return h

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import abc
 import numbers
+from typing import Any
 
 import jax.numpy as jnp
 from jax import grad, jit
@@ -18,15 +19,20 @@ class ConstraintModule(abc.ABC):
     ----------
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
+    bias : float
+        Value that adds a bias to the boundary of the constraint.
+        Use a small negative value to make the constraint slightly more conservative.
     """
 
-    def __init__(self, alpha: ConstraintStrengthener = None):
+    def __init__(self, alpha: ConstraintStrengthener = None, bias: float = 0):
         assert isinstance(alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         self._alpha = alpha
+        self.bias = bias
         self._compose()
 
     def _compose(self):
         self._compute_fn = jit(self._compute)
+        self.phi = jit(self._phi)
         self._grad_fn = jit(grad(self._compute))
 
     def __call__(self, state: jnp.ndarray) -> float:
@@ -43,7 +49,7 @@ class ConstraintModule(abc.ABC):
         float:
             result of inequality constraint function
         """
-        return self._compute_fn(state)
+        return self.compute(state)
 
     def compute(self, state: jnp.ndarray) -> float:
         """Evaluates constraint function h(x)
@@ -59,7 +65,7 @@ class ConstraintModule(abc.ABC):
         float:
             result of inequality constraint function
         """
-        return self._compute_fn(state)
+        return self._compute_fn(state) + self.bias
 
     @abc.abstractmethod
     def _compute(self, state: jnp.ndarray) -> float:
@@ -116,6 +122,24 @@ class ConstraintModule(abc.ABC):
 
         return self._alpha(x)
 
+    def _phi(self, state: jnp.ndarray) -> float:
+        """Evaluates constraint function phi(x).
+        Considered satisfied when phi(x) >= 0, where phi is not guaranteed to be control invariant.
+        Not used by RTA to enforce the constraint, but rather is useful for logging and plotting.
+        By default, returns the value of _compute without the bias.
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            current rta state of the system
+
+        Returns
+        -------
+        float:
+            result of inequality constraint function
+        """
+        return self._compute_fn(state)
+
 
 class ConstraintStrengthener(abc.ABC):
     """Strengthing function used to soften Nagumo's condition outside of constraint set boundary
@@ -157,13 +181,13 @@ class ConstraintMagnitudeStateLimit(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
     """
 
-    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None):
+    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None, **kwargs: Any):
         self.limit_val = limit_val
         self.state_index = state_index
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         return self.limit_val**2 - state[self.state_index]**2
@@ -186,13 +210,13 @@ class ConstraintMaxStateLimit(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
     """
 
-    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None):
+    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None, **kwargs: Any):
         self.limit_val = limit_val
         self.state_index = state_index
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         return self.limit_val - state[self.state_index]
@@ -215,13 +239,13 @@ class ConstraintMinStateLimit(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
     """
 
-    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None):
+    def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None, **kwargs: Any):
         self.limit_val = limit_val
         self.state_index = state_index
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         return state[self.state_index] - self.limit_val

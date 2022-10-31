@@ -102,7 +102,7 @@ class Docking2dRTAMixin:
         """generates constraints used in the docking problem"""
         return OrderedDict(
             [
-                ('rel_vel', ConstraintDocking2dRelativeVelocity(v0=v0, v1=v1)),
+                ('rel_vel', ConstraintDocking2dRelativeVelocity(v0=v0, v1=v1, bias=-1e-4)),
                 ('x_vel', ConstraintMagnitudeStateLimit(limit_val=x_vel_limit, state_index=2)),
                 ('y_vel', ConstraintMagnitudeStateLimit(limit_val=y_vel_limit, state_index=3)),
             ]
@@ -543,17 +543,17 @@ class ConstraintDocking2dRelativeVelocity(ConstraintModule):
         Small postiive value summed inside the vector norm sqrt operation to make constraint differentiable at 0
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
-        Defaults to PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
+        Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.1])
     """
 
-    def __init__(self, v0: float, v1: float, delta: float = 1e-5, alpha: ConstraintStrengthener = None):
+    def __init__(self, v0: float, v1: float, delta: float = 1e-5, alpha: ConstraintStrengthener = None, **kwargs):
         self.v0 = v0
         self.v1 = v1
         self.delta = delta
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.05, 0, 0.1])
-        super().__init__(alpha=alpha)
+            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.1])
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         return self.v0 + self.v1 * norm_with_delta(state[0:2], self.delta) - norm_with_delta(state[2:4], self.delta)
