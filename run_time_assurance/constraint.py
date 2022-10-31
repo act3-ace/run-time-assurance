@@ -124,9 +124,9 @@ class ConstraintModule(abc.ABC):
 
     def _phi(self, state: jnp.ndarray) -> float:
         """Evaluates constraint function phi(x).
-        Considered satisfied when phi(x) >= 0.
+        Considered satisfied when phi(x) >= 0, where phi is not guaranteed to be control invariant.
+        Not used by RTA to enforce the constraint, but rather is useful for logging and plotting.
         By default, returns the value of _compute without the bias.
-        Can be overwritten to give the value of a baseline constraint.
 
         Parameters
         ----------
