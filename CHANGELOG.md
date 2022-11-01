@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/act3-ace/run-time-assurance/compare/v1.1.1...v1.2.0) (2022-11-01)
+
+
+### Features
+
+* **constraint:** constraint bias and monte carlo compat ([941f7e5](https://github.com/act3-ace/run-time-assurance/commit/941f7e56e8feb8b1ea17f52e2ef5ed29e5b3ad03))
+
 ## [1.1.1](https://github.com/act3-ace/run-time-assurance/compare/v1.1.0...v1.1.1) (2022-08-18)
 
 
