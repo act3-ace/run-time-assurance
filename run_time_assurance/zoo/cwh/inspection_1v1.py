@@ -215,8 +215,8 @@ class Inspection1v1RTA(ExplicitASIFModule):
         constraint_dict = OrderedDict(
             [
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
-                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, buffer=1e-4)),
-                ('sun', ConstraintCWHSunAvoidance(a_max=self.a_max, fov=self.fov, sun_vel=jnp.array([0, 0, -self.n]))),
+                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, buffer=1e-3)),
+                ('sun', ConstraintCWHSunAvoidance(a_max=self.a_max, fov=self.fov, sun_vel=jnp.array([0, 0, -self.n]), buffer=1e-3)),
                 ('r_max', ConstraintCWHMaxDistance(r_max=self.r_max, a_max=self.a_max)),
                 (
                     'PSM',
@@ -416,7 +416,7 @@ class ConstraintCWHRelativeVelocity(ConstraintModule):
         self.v1 = v1
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
+            alpha = PolynomialConstraintStrengthener([0, 0.05, 0, 0.005])
         super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
@@ -481,7 +481,7 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
         self.sun_vel = sun_vel
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.001])
+            alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.0001])
         super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
@@ -491,8 +491,17 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
         p_es = p - jnp.dot(p, r_s_hat) * r_s_hat
         a = jnp.cos(theta) * (jnp.linalg.norm(p_es) - jnp.tan(theta) * jnp.dot(p, r_s_hat))
         p_pr = p + a * jnp.sin(theta) * r_s_hat + a * jnp.cos(theta) * (jnp.dot(p, r_s_hat) * r_s_hat - p) / jnp.linalg.norm(p_es)
+        v_pr = jnp.cross(self.sun_vel, p_pr)
 
-        h = jnp.sqrt(2 * self.a_max * jnp.linalg.norm(p - p_pr)) + jnp.dot(p - p_pr, state[3:6] - self.sun_vel) / jnp.linalg.norm(p - p_pr)
+        delta_p = p - p_pr
+        delta_v = state[3:6] - v_pr
+        # mag_delta_p = jnp.linalg.norm(delta_p)
+
+        r_s_hat = jnp.array([jnp.cos(state[6]), jnp.sin(state[6]), 0.])
+        r_b_hat = -state[0:3] / jnp.linalg.norm(state[0:3])
+        mag_delta_p = jnp.linalg.norm(p) * jnp.sin(jnp.arccos(jnp.dot(r_s_hat, r_b_hat)) - theta)
+
+        h = jnp.sqrt(2 * self.a_max * mag_delta_p) + delta_p.T @ delta_v / mag_delta_p
         return h
 
     def _phi(self, state: jnp.ndarray) -> float:
@@ -577,7 +586,7 @@ class ConstraintCWHMaxDistance(ConstraintModule):
         self.a_max = a_max
 
         if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.002, 0, 0.0002])
+            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
         super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
