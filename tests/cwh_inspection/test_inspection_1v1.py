@@ -134,7 +134,7 @@ class Env():
         # If all states are safe, returns True
         return True
 
-    def plotter(self, array, control, intervening, paper_plot=False, fast_plot=True):
+    def plotter(self, array, control, intervening, paper_plot=False, fast_plot=False):
         if not paper_plot:
             fig = plt.figure(figsize=(15, 15))
             ax1 = fig.add_subplot(331, projection='3d')
@@ -269,15 +269,15 @@ class Env():
         if paper_plot:
             plt.tight_layout(pad=hp)
 
-        h = []
-        phi = []
-        for i in range(len(array)):
-            h.append(self.inspection_rta.constraints["sun"](array[i]))
-            phi.append(self.inspection_rta.constraints["sun"].phi(array[i]))
-        ax7.plot(range(len(h)), h, linewidth=lw, label='h')
-        ax7.plot(range(len(phi)), phi, linewidth=lw, label='phi')
-        ax7.grid(True)
-        ax7.legend()
+        # h = []
+        # phi = []
+        # for i in range(len(array)):
+        #     h.append(self.inspection_rta.constraints["sun"](array[i]))
+        #     phi.append(self.inspection_rta.constraints["sun"].phi(array[i]))
+        # ax7.plot(range(len(h)), h, linewidth=lw, label='h')
+        # ax7.plot(range(len(phi)), phi, linewidth=lw, label='phi')
+        # ax7.grid(True)
+        # ax7.legend()
 
         if not fast_plot:
             if paper_plot:
@@ -364,19 +364,19 @@ if __name__ == '__main__':
     # rta = InspectionCascadedRTA()
     env = Env(rta)
 
-    # env.run_episode()
-    # plt.show()
+    env.run_episode()
+    plt.show()
 
-    list_of_files = glob.glob('*.csv')
-    latest_file = max(list_of_files, key=os.path.getctime)
-    with open(latest_file, newline='') as csvfile:
-        array = csv.reader(csvfile, delimiter=',')
-        for row in array:
-            if row[0] == 'False':
-                x = row[1]
-                x = x.replace('[', '')
-                x = x.replace(']', '')
-                x = x.replace(',', '')
-                x = np.array([float(val) for val in x.split()])
-                env.run_episode(init_state=x)
-                plt.show()
+    # list_of_files = glob.glob('*.csv')
+    # latest_file = max(list_of_files, key=os.path.getctime)
+    # with open(latest_file, newline='') as csvfile:
+    #     array = csv.reader(csvfile, delimiter=',')
+    #     for row in array:
+    #         if row[0] == 'False':
+    #             x = row[1]
+    #             x = x.replace('[', '')
+    #             x = x.replace(']', '')
+    #             x = x.replace(',', '')
+    #             x = np.array([float(val) for val in x.split()])
+    #             env.run_episode(init_state=x)
+    #             plt.show()
