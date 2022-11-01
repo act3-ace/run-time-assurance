@@ -19,14 +19,15 @@ class ConstraintModule(abc.ABC):
     ----------
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
-    buffer : float
-        Positive value that adds a buffer to the boundary of the constraint
+    bias : float
+        Value that adds a bias to the boundary of the constraint.
+        Use a small negative value to make the constraint slightly more conservative.
     """
 
-    def __init__(self, alpha: ConstraintStrengthener = None, buffer: float = 0):
+    def __init__(self, alpha: ConstraintStrengthener = None, bias: float = 0):
         assert isinstance(alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         self._alpha = alpha
-        self.buffer = buffer
+        self.bias = bias
         self._compose()
 
     def _compose(self):
@@ -48,7 +49,7 @@ class ConstraintModule(abc.ABC):
         float:
             result of inequality constraint function
         """
-        return self._compute_fn(state) - self.buffer
+        return self.compute(state)
 
     def compute(self, state: jnp.ndarray) -> float:
         """Evaluates constraint function h(x)
@@ -64,7 +65,7 @@ class ConstraintModule(abc.ABC):
         float:
             result of inequality constraint function
         """
-        return self._compute_fn(state) - self.buffer
+        return self._compute_fn(state) + self.bias
 
     @abc.abstractmethod
     def _compute(self, state: jnp.ndarray) -> float:
@@ -123,9 +124,9 @@ class ConstraintModule(abc.ABC):
 
     def _phi(self, state: jnp.ndarray) -> float:
         """Evaluates constraint function phi(x).
-        Considered satisfied when phi(x) >= 0.
-        By default, returns the value of _compute without the buffer.
-        Can be overwritten to give the value of a baseline constraint.
+        Considered satisfied when phi(x) >= 0, where phi is not guaranteed to be control invariant.
+        Not used by RTA to enforce the constraint, but rather is useful for logging and plotting.
+        By default, returns the value of _compute without the bias.
 
         Parameters
         ----------

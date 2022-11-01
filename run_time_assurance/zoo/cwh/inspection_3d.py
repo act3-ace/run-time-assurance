@@ -196,25 +196,25 @@ class InspectionRTA(ExplicitASIFModule):
     def _setup_constraints(self) -> OrderedDict:
         constraint_dict = OrderedDict(
             [
-                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, buffer=1e-4)),
+                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, bias=-1e-4)),
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
                 ('sun', ConstraintCWHSunAvoidance(a_max=self.a_max, theta=self.theta, e_hat=self.e_hat)),
                 (
                     'x_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.x_vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), buffer=0.001
+                        limit_val=self.x_vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
                     )
                 ),
                 (
                     'y_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.y_vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), buffer=0.001
+                        limit_val=self.y_vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
                     )
                 ),
                 (
                     'z_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.z_vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), buffer=0.001
+                        limit_val=self.z_vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
                     )
                 )
             ]
