@@ -28,12 +28,13 @@ V0_DEFAULT = 0.2  # maximum docking speed [m/s] (dynamic velocity constraint)
 V1_COEF_DEFAULT = 2  # velocity constraint slope [-] (dynamic velocity constraint)
 R_MAX_DEFAULT = 1000  # max distance from chief [m] (translational keep out zone)
 FOV_DEFAULT = 60 * jnp.pi / 180  # sun avoidance angle [rad] (translational keep out zone)
-U_MAX_DEFAULT = 1  # Max thrust [N] (10. avoid actuation saturation)
+U_MAX_DEFAULT = 1  # Max thrust [N] (avoid actuation saturation)
 VEL_LIMIT_DEFAULT = 1  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
-FUEL_LIMIT_DEFAULT = 0.25  # kg
-FUEL_THRESHOLD_DEFAULT = 0.1  # kg
-GRAVITY = 9.81  # m/s^2
-SPECIFIC_IMPULSE_DEFAULT = 220  # s
+FUEL_LIMIT_DEFAULT = 0.25  # Maximum fuel use limit [kg]
+FUEL_THRESHOLD_DEFAULT = 0.1  # Fuel use threshold, to switch to backup controller [kg]
+GRAVITY = 9.81  # Gravity at Earth's surface [m/s^2]
+SPECIFIC_IMPULSE_DEFAULT = 220  # Specific Impulse of thrusters [s]
+SUN_VEL_DEFAULT = -N_DEFAULT  # Speed of sun rotation in x-y plane
 
 
 class Inspection3dState(RTAStateWrapper):
@@ -156,6 +157,8 @@ class Inspection1v1RTA(ExplicitASIFModule):
         gravity at Earth's surface, by default GRAVITY
     isp : float, optional
         Specific impulse of thrusters in seconds, by default SPECIFIC_IMPULSE_DEFAULT
+    sun_vel : float, optional
+        velocity of sun in x-y plane (rad/sec), by default SUN_VEL_DEFAULT
     control_bounds_high : float, optional
         upper bound of allowable control. Pass a list for element specific limit. By default U_MAX_DEFAULT
     control_bounds_low : float, optional
@@ -178,6 +181,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         fuel_switching_threshold: float = FUEL_THRESHOLD_DEFAULT,
         gravity: float = GRAVITY,
         isp: float = SPECIFIC_IMPULSE_DEFAULT,
+        sun_vel: float = SUN_VEL_DEFAULT,
         control_bounds_high: Union[float, list, np.ndarray, jnp.ndarray] = U_MAX_DEFAULT,
         control_bounds_low: Union[float, list, np.ndarray, jnp.ndarray] = -U_MAX_DEFAULT,
         **kwargs
@@ -196,6 +200,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         self.fuel_switching_threshold = fuel_switching_threshold
         self.gravity = gravity
         self.isp = isp
+        self.sun_vel = sun_vel
 
         self.u_max = U_MAX_DEFAULT
         self.a_max = self.u_max / self.m - (3 * self.n**2 + 2 * self.n * self.v1) * self.r_max - 2 * self.n * self.v0
@@ -206,6 +211,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         self.control_dim = self.B.shape[1]
 
         self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
+        self._pred_state_cwh_fn = jit(self._pred_state_cwh, static_argnames=['step_size'])
 
         super().__init__(
             *args, control_dim=self.control_dim, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs
@@ -216,7 +222,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
             [
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
                 ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, bias=-1e-3)),
-                ('sun', ConstraintCWHSunAvoidance(a_max=self.a_max, fov=self.fov, sun_vel=jnp.array([0, 0, -self.n]), bias=-1e-3)),
+                ('sun', ConstraintCWHSunAvoidance(a_max=self.a_max, fov=self.fov, sun_vel=jnp.array([0, 0, self.sun_vel]), bias=-1e-3)),
                 ('r_max', ConstraintCWHMaxDistance(r_max=self.r_max, a_max=self.a_max)),
                 (
                     'PSM',
@@ -255,14 +261,36 @@ class Inspection1v1RTA(ExplicitASIFModule):
         """
         xd = self.A @ x[0:6] + self.B @ u + 0 * t
         fuel = jnp.sum(jnp.abs(u)) / (self.gravity * self.isp)
-        return jnp.concatenate((xd, jnp.array([-self.n, fuel])))
+        return jnp.concatenate((xd, jnp.array([self.sun_vel, fuel])))
+
+    def _pred_state_cwh(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """Predicted state for only CWH equations
+        """
+        sol = odeint(self.compute_state_dot_cwh, state, jnp.linspace(0., step_size, 11), control)
+        return sol[-1, :]
+
+    def compute_state_dot_cwh(self, x, t, u):
+        """Computes state dot for ODE integration (only CWH equations)
+        """
+        xd = self.A @ x[0:6] + self.B @ u + 0 * t
+        return xd
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         xd = self.A @ state[0:6]
-        return jnp.concatenate((xd, jnp.array([-self.n, 0])))
+        return jnp.concatenate((xd, jnp.array([self.sun_vel, 0])))
 
     def state_transition_input(self, state: jnp.ndarray) -> jnp.ndarray:
         return jnp.vstack((self.B, jnp.zeros((2, 3))))
+
+    def _get_state(self, input_state) -> jnp.ndarray:
+        assert isinstance(input_state, (np.ndarray, jnp.ndarray)), ("input_state must be an RTAState or numpy array.")
+        input_state = np.array(input_state)
+
+        if len(input_state) < 8:
+            input_state = np.concatenate((input_state, np.array([0., 0.])))
+            self.sun_vel = 0
+
+        return to_jnp_array_jit(input_state)
 
 
 class SwitchingFuelLimitRTA(ExplicitSimplexModule):

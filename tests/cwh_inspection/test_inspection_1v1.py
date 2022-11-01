@@ -52,7 +52,6 @@ class Env():
         p = np.array([np.cos(theta[0])*np.sin(theta[1]), np.sin(theta[0])*np.sin(theta[1]), np.cos(theta[1])]) * 100
         v = np.array([0, 0, 0])
         return np.concatenate((p, v, np.array([0, 0])))
-        # return np.array([-678.84733531, 645.12760716, -129.71259692, 0., 0., 0., 0., 0.])
 
     def run_episode(self, plotter=True, init_state=None):
         # Track time
@@ -67,8 +66,6 @@ class Env():
             if c.phi(x) < 0 or c(x) < 0:
                 print("Initial state unsafe")
                 return None
-        # Desired state is opposite of initial state
-        # x_des = -x*2
         if plotter:
             # Data tracking arrays
             array = [x]
@@ -79,7 +76,6 @@ class Env():
         for t in range(int(self.time/self.dt)):
             if t < 1000:
                 x_des = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
-                # x_des = np.array([-5*np.cos(x[6]), -5*np.sin(x[6]), 0., 0., 0., 0., 0., 0.])
             else:
                 x_des = np.array([-1500*np.cos(x[6]), -1500*np.sin(x[6]), 0., 0., 0., 0., 0., 0.])
             if init_state is None:
@@ -95,9 +91,9 @@ class Env():
                 control = np.append(control, [u_safe], axis=0)
                 intervening.append(self.rta.intervening)
 
-            for k, c in self.rta.constraints.items():
-                if c.phi(to_jnp_array_jit(x)) < 0:
-                    print(t, k, c.phi(to_jnp_array_jit(x)))
+            # for k, c in self.rta.constraints.items():
+            #     if c.phi(to_jnp_array_jit(x)) < 0:
+            #         print(t, k, c.phi(to_jnp_array_jit(x)))
 
         # Print final time, plot
         print(f"Simulation time: {time.time()-start_time:2.3f} sec")
@@ -134,7 +130,7 @@ class Env():
         # If all states are safe, returns True
         return True
 
-    def plotter(self, array, control, intervening, paper_plot=False, fast_plot=False):
+    def plotter(self, array, control, intervening, paper_plot=False, fast_plot=True):
         if not paper_plot:
             fig = plt.figure(figsize=(15, 15))
             ax1 = fig.add_subplot(331, projection='3d')
