@@ -222,7 +222,18 @@ class Inspection1v1RTA(ExplicitASIFModule):
             [
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
                 ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, bias=-1e-3)),
-                ('sun', ConstraintCWHSunAvoidance(a_max=self.a_max, fov=self.fov, sun_vel=jnp.array([0, 0, self.sun_vel]), bias=-1e-3)),
+                (
+                    'sun',
+                    ConstraintCWHConicKeepOutZone(
+                        a_max=self.a_max,
+                        fov=self.fov,
+                        get_pos=self.get_pos_vector,
+                        get_vel=self.get_vel_vector,
+                        get_cone_vec=self.get_sun_vector,
+                        cone_ang_vel=jnp.array([0, 0, self.sun_vel]),
+                        bias=-1e-3
+                    )
+                ),
                 ('r_max', ConstraintCWHMaxDistance(r_max=self.r_max, a_max=self.a_max)),
                 (
                     'PSM',
@@ -291,6 +302,18 @@ class Inspection1v1RTA(ExplicitASIFModule):
             self.sun_vel = 0
 
         return to_jnp_array_jit(input_state)
+
+    def get_sun_vector(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get vector pointing from sun to chief"""
+        return -jnp.array([jnp.cos(state[6]), jnp.sin(state[6]), 0.])
+
+    def get_pos_vector(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get position vector"""
+        return state[0:3]
+
+    def get_vel_vector(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get velocity vector"""
+        return state[3:6]
 
 
 class SwitchingFuelLimitRTA(ExplicitSimplexModule):
@@ -486,9 +509,9 @@ class ConstraintCWHChiefCollision(ConstraintModule):
         return jnp.linalg.norm(delta_p) - self.collision_radius
 
 
-class ConstraintCWHSunAvoidance(ConstraintModule):
+class ConstraintCWHConicKeepOutZone(ConstraintModule):
     """CWH sun avoidance constraint
-    Assumes deputy is always pointing at chief, and sun is not moving
+    Assumes deputy is always pointing at chief
 
     Parameters
     ----------
@@ -498,44 +521,62 @@ class ConstraintCWHSunAvoidance(ConstraintModule):
         sensor field of view. radians
     sun_vel: float
         sun velocity vector
+    get_sun_vec_fn : function
+        function to get vector pointing from chief to sun
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.05])
     """
 
-    def __init__(self, a_max: float, fov: float, sun_vel: float, alpha: ConstraintStrengthener = None, **kwargs):
+    def __init__(
+        self,
+        a_max: float,
+        fov: float,
+        get_pos,
+        get_vel,
+        get_cone_vec,
+        cone_ang_vel: jnp.ndarray,
+        alpha: ConstraintStrengthener = None,
+        **kwargs
+    ):
         self.a_max = a_max
         self.fov = fov
-        self.sun_vel = sun_vel
+        self.get_pos = get_pos
+        self.get_vel = get_vel
+        self.get_cone_vec = get_cone_vec
+        self.cone_ang_vel = cone_ang_vel
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.0001])
         super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
-        p = state[0:3]
+        pos = self.get_pos(state)
+        vel = self.get_vel(state)
+        cone_vec = self.get_cone_vec(state)
+        cone_unit_vec = cone_vec / jnp.linalg.norm(cone_vec)
+        cone_ang_vel = self.cone_ang_vel
         theta = self.fov / 2
-        r_s_hat = -jnp.array([jnp.cos(state[6]), jnp.sin(state[6]), 0.])
-        p_es = p - jnp.dot(p, r_s_hat) * r_s_hat
-        a = jnp.cos(theta) * (jnp.linalg.norm(p_es) - jnp.tan(theta) * jnp.dot(p, r_s_hat))
-        p_pr = p + a * jnp.sin(theta) * r_s_hat + a * jnp.cos(theta) * (jnp.dot(p, r_s_hat) * r_s_hat - p) / jnp.linalg.norm(p_es)
-        v_pr = jnp.cross(self.sun_vel, p_pr)
 
-        delta_p = p - p_pr
-        delta_v = state[3:6] - v_pr
-        # mag_delta_p = jnp.linalg.norm(delta_p)
+        pos_cone = pos - jnp.dot(pos, cone_unit_vec) * cone_unit_vec
+        mult = jnp.cos(theta) * (jnp.linalg.norm(pos_cone) - jnp.tan(theta) * jnp.dot(pos, cone_unit_vec))
+        proj = pos + mult * jnp.sin(theta) * cone_unit_vec + mult * jnp.cos(theta) * (jnp.dot(pos, cone_unit_vec) * cone_unit_vec -
+                                                                                      pos) / jnp.linalg.norm(pos_cone)
+        vel_proj = jnp.cross(cone_ang_vel, proj)
 
-        r_s_hat = jnp.array([jnp.cos(state[6]), jnp.sin(state[6]), 0.])
-        r_b_hat = -state[0:3] / jnp.linalg.norm(state[0:3])
-        mag_delta_p = jnp.linalg.norm(p) * jnp.sin(jnp.arccos(jnp.dot(r_s_hat, r_b_hat)) - theta)
+        delta_p = pos - proj
+        delta_v = vel - vel_proj
+        mag_delta_p = jnp.linalg.norm(pos) * jnp.sin(jnp.arccos(jnp.dot(cone_unit_vec, pos / jnp.linalg.norm(pos))) - theta)
 
         h = jnp.sqrt(2 * self.a_max * mag_delta_p) + delta_p.T @ delta_v / mag_delta_p
         return h
 
     def _phi(self, state: jnp.ndarray) -> float:
-        r_s_hat = jnp.array([jnp.cos(state[6]), jnp.sin(state[6]), 0.])
-        r_b_hat = -state[0:3] / jnp.linalg.norm(state[0:3])
-        h = jnp.arccos(jnp.dot(r_s_hat, r_b_hat)) - self.fov / 2
+        pos = self.get_pos(state)
+        cone_vec = self.get_cone_vec(state)
+        p_hat = pos / jnp.linalg.norm(pos)
+        c_hat = cone_vec / jnp.linalg.norm(cone_vec)
+        h = jnp.arccos(jnp.dot(p_hat, c_hat)) - self.fov / 2
         return h
 
 

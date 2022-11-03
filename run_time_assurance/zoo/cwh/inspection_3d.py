@@ -1,6 +1,7 @@
 """This module implements RTA methods for the multiagent inspection problem with 3D CWH dynamics models
 """
 from collections import OrderedDict
+from functools import partial
 from typing import Union
 
 import jax.numpy as jnp
@@ -16,83 +17,25 @@ from run_time_assurance.constraint import (
     PolynomialConstraintStrengthener,
 )
 from run_time_assurance.rta import ExplicitASIFModule
-from run_time_assurance.state import RTAStateWrapper
+from run_time_assurance.utils import to_jnp_array_jit
+from run_time_assurance.zoo.cwh.inspection_1v1 import (
+    CHIEF_RADIUS_DEFAULT,
+    DEPUTY_RADIUS_DEFAULT,
+    FOV_DEFAULT,
+    R_MAX_DEFAULT,
+    SUN_VEL_DEFAULT,
+    U_MAX_DEFAULT,
+    V0_DEFAULT,
+    V1_COEF_DEFAULT,
+    VEL_LIMIT_DEFAULT,
+    ConstraintCWHChiefCollision,
+    ConstraintCWHConicKeepOutZone,
+    ConstraintCWHMaxDistance,
+    ConstraintCWHRelativeVelocity,
+    ConstraintPassivelySafeManeuver,
+)
 
 NUM_DEPUTIES_DEFAULT = 5  # Number of deputies for inspection problem
-CHIEF_RADIUS_DEFAULT = 5  # chief radius of collision [m] (collision freedom)
-DEPUTY_RADIUS_DEFAULT = 5  # deputy radius of collision [m] (collision freedom)
-V0_DEFAULT = 0.2  # maximum docking speed [m/s] (dynamic velocity constraint)
-V1_COEF_DEFAULT = 4  # velocity constraint slope [-] (dynamic velocity constraint)
-R_MAX_DEFAULT = 1000  # max distance from chief [m] (translational keep out zone)
-THETA_DEFAULT = jnp.pi / 6  # sun avoidance angle [rad] (translational keep out zone)
-U_MAX_DEFAULT = 1  # Max thrust [N] (10. avoid actuation saturation)
-X_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
-Y_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
-Z_VEL_LIMIT_DEFAULT = 2  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
-
-
-class Inspection3dState(RTAStateWrapper):
-    """RTA state for inspection 3d RTA (only current deputy's state)"""
-
-    @property
-    def x(self) -> float:
-        """Getter for x position"""
-        return self.vector[0]
-
-    @x.setter
-    def x(self, val: float):
-        """Setter for x position"""
-        self.vector[0] = val
-
-    @property
-    def y(self) -> float:
-        """Getter for y position"""
-        return self.vector[1]
-
-    @y.setter
-    def y(self, val: float):
-        """Setter for y position"""
-        self.vector[1] = val
-
-    @property
-    def z(self) -> float:
-        """Getter for z position"""
-        return self.vector[2]
-
-    @z.setter
-    def z(self, val: float):
-        """Setter for z position"""
-        self.vector[2] = val
-
-    @property
-    def x_dot(self) -> float:
-        """Getter for x velocity component"""
-        return self.vector[3]
-
-    @x_dot.setter
-    def x_dot(self, val: float):
-        """Setter for x velocity component"""
-        self.vector[3] = val
-
-    @property
-    def y_dot(self) -> float:
-        """Getter for y velocity component"""
-        return self.vector[4]
-
-    @y_dot.setter
-    def y_dot(self, val: float):
-        """Setter for y velocity component"""
-        self.vector[4] = val
-
-    @property
-    def z_dot(self) -> float:
-        """Getter for z velocity component"""
-        return self.vector[5]
-
-    @z_dot.setter
-    def z_dot(self, val: float):
-        """Setter for z velocity component"""
-        self.vector[5] = val
 
 
 class InspectionRTA(ExplicitASIFModule):
@@ -121,14 +64,12 @@ class InspectionRTA(ExplicitASIFModule):
         v1_coef of v_limit = v0 + v1_coef*n*||r||
     r_max : float, optional
         maximum relative distance from chief, by default R_MAX_DEFAULT
-    theta : float, optional
-        sun avoidance angle (theta_EZ), by default THETA_DEFAULT
-    x_vel_limit : float, optional
-        max velocity magnitude in the x direction, by default X_VEL_LIMIT_DEFAULT
-    y_vel_limit : float, optional
-        max velocity magnitude in the y direction, by default Y_VEL_LIMIT_DEFAULT
-    z_vel_limit : float, optional
-        max velocity magnitude in the z direction, by default Z_VEL_LIMIT_DEFAULT
+    fov : float, optional
+        sensor field of view, by default FOV_DEFAULT
+    vel_limit : float, optional
+        max velocity magnitude, by default VEL_LIMIT_DEFAULT
+    sun_vel : float, optional
+        velocity of sun in x-y plane (rad/sec), by default SUN_VEL_DEFAULT
     control_bounds_high : float, optional
         upper bound of allowable control. Pass a list for element specific limit. By default U_MAX_DEFAULT
     control_bounds_low : float, optional
@@ -146,10 +87,9 @@ class InspectionRTA(ExplicitASIFModule):
         v0: float = V0_DEFAULT,
         v1_coef: float = V1_COEF_DEFAULT,
         r_max: float = R_MAX_DEFAULT,
-        theta: float = THETA_DEFAULT,
-        x_vel_limit: float = X_VEL_LIMIT_DEFAULT,
-        y_vel_limit: float = Y_VEL_LIMIT_DEFAULT,
-        z_vel_limit: float = Z_VEL_LIMIT_DEFAULT,
+        fov: float = FOV_DEFAULT,
+        vel_limit: float = VEL_LIMIT_DEFAULT,
+        sun_vel: float = SUN_VEL_DEFAULT,
         control_bounds_high: Union[float, list, np.ndarray, jnp.ndarray] = U_MAX_DEFAULT,
         control_bounds_low: Union[float, list, np.ndarray, jnp.ndarray] = -U_MAX_DEFAULT,
         **kwargs
@@ -163,12 +103,10 @@ class InspectionRTA(ExplicitASIFModule):
         self.v1_coef = v1_coef
         self.v1 = self.v1_coef * self.n
         self.r_max = r_max
-        self.theta = theta
-        self.x_vel_limit = x_vel_limit
-        self.y_vel_limit = y_vel_limit
-        self.z_vel_limit = z_vel_limit
+        self.fov = fov
+        self.vel_limit = vel_limit
+        self.sun_vel = sun_vel
 
-        self.e_hat = jnp.array([1, 0, 0])
         self.u_max = U_MAX_DEFAULT
         self.a_max = self.u_max / self.m - (3 * self.n**2 + 2 * self.n * self.v1) * self.r_max - 2 * self.n * self.v0
         A, B = generate_cwh_matrices(self.m, self.n, mode="3d")
@@ -196,32 +134,58 @@ class InspectionRTA(ExplicitASIFModule):
     def _setup_constraints(self) -> OrderedDict:
         constraint_dict = OrderedDict(
             [
-                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, bias=-1e-4)),
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
-                ('sun', ConstraintCWHSunAvoidance(a_max=self.a_max, theta=self.theta, e_hat=self.e_hat)),
+                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, bias=-1e-3)),
+                (
+                    'chief_sun',
+                    ConstraintCWHConicKeepOutZone(
+                        a_max=self.a_max,
+                        fov=self.fov,
+                        get_pos=self.get_pos_vector,
+                        get_vel=self.get_vel_vector,
+                        get_cone_vec=self.get_sun_vector,
+                        cone_ang_vel=jnp.array([0, 0, self.sun_vel]),
+                        bias=-1e-3
+                    )
+                ), ('r_max', ConstraintCWHMaxDistance(r_max=self.r_max, a_max=self.a_max)),
+                (
+                    'PSM',
+                    ConstraintPassivelySafeManeuver(
+                        collision_radius=self.chief_radius + self.deputy_radius, m=self.m, n=self.n, dt=1, steps=100
+                    )
+                ),
                 (
                     'x_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.x_vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
+                        limit_val=self.vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
                     )
                 ),
                 (
                     'y_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.y_vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
+                        limit_val=self.vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
                     )
                 ),
                 (
                     'z_vel',
                     ConstraintMagnitudeStateLimit(
-                        limit_val=self.z_vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
+                        limit_val=self.vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
                     )
                 )
             ]
         )
-        for i in range(self.num_deputies - 1):
-            constraint_dict[f'deputy_collision_{i+1}'] = ConstraintCWHDeputyCollision(
-                collision_radius=self.deputy_radius * 2, a_max=self.a_max, deputy=i + 1
+        for i in range(1, self.num_deputies):
+            constraint_dict[f'deputy_collision_{i}'] = ConstraintCWHDeputyCollision(
+                collision_radius=self.deputy_radius * 2, a_max=self.a_max, deputy=i
+            )
+            constraint_dict[f'deputy_sun_{i}'] = ConstraintCWHConicKeepOutZone(
+                a_max=self.a_max,
+                fov=self.fov,
+                get_pos=partial(self.get_p1_p2, i),
+                get_vel=partial(self.get_v1_v2, i),
+                get_cone_vec=self.get_sun_vector,
+                cone_ang_vel=jnp.array([0, 0, self.sun_vel]),
+                bias=-1e-3
             )
         return constraint_dict
 
@@ -229,72 +193,42 @@ class InspectionRTA(ExplicitASIFModule):
         pass
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
-        return self.A_n @ state
+        cwh = self.A_n @ state[0:self.num_deputies * 6]
+        return jnp.concatenate((cwh, jnp.array([self.sun_vel])))
 
     def state_transition_input(self, state: jnp.ndarray) -> jnp.ndarray:
-        return self.B_n
+        cwh = self.B_n
+        return jnp.vstack((cwh, jnp.zeros((1, 3))))
 
+    def _get_state(self, input_state) -> jnp.ndarray:
+        assert isinstance(input_state, (np.ndarray, jnp.ndarray)), ("input_state must be an RTAState or numpy array.")
+        input_state = np.array(input_state)
 
-class ConstraintCWHRelativeVelocity(ConstraintModule):
-    """CWH dynamic velocity constraint
+        if len(input_state) < 6 * self.num_deputies + 1:
+            input_state = np.concatenate((input_state, np.array([0.])))
+            self.sun_vel = 0
 
-    Parameters
-    ----------
-    v0: float
-        NMT safety constraint velocity upper bound constatnt component where ||v|| <= v0 + v1*distance. m/s
-    v1: float
-        NMT safety constraint velocity upper bound distance proportinality coefficient where
-        ||v|| <= v0 + v1*distance. 1/s
-    alpha : ConstraintStrengthener
-        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
-        Defaults to PolynomialConstraintStrengthener([0, 0.05, 0, 0.5])
-    """
+        return to_jnp_array_jit(input_state)
 
-    def __init__(self, v0: float, v1: float, alpha: ConstraintStrengthener = None, **kwargs):
-        self.v0 = v0
-        self.v1 = v1
+    def get_sun_vector(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get vector pointing from chief to sun"""
+        return -jnp.array([jnp.cos(state[-1]), jnp.sin(state[-1]), 0.])
 
-        if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
-        super().__init__(alpha=alpha, **kwargs)
+    def get_pos_vector(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get position vector"""
+        return state[0:3]
 
-    def _compute(self, state: jnp.ndarray) -> float:
-        h = (self.v0 + self.v1 * jnp.linalg.norm(state[0:3])) - jnp.linalg.norm(state[3:6])
-        return h
+    def get_vel_vector(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get velocity vector"""
+        return state[3:6]
 
+    def get_p1_p2(self, i: int, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get p1-p2 vector"""
+        return state[0:3] - state[6 * i:6 * i + 3]
 
-class ConstraintCWHChiefCollision(ConstraintModule):
-    """CWH chief collision avoidance constraint
-
-    Parameters
-    ----------
-    collision_radius: float
-        radius of collision for chief spacecraft. m
-    a_max: float
-        Maximum braking acceleration for deputy spacecraft. m/s^2
-    alpha : ConstraintStrengthener
-        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
-        Defaults to PolynomialConstraintStrengthener([0, 0.005, 0, 0.05])
-    """
-
-    def __init__(self, collision_radius: float, a_max: float, alpha: ConstraintStrengthener = None, **kwargs):
-        self.collision_radius = collision_radius
-        self.a_max = a_max
-
-        if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
-        super().__init__(alpha=alpha, **kwargs)
-
-    def _compute(self, state: jnp.ndarray) -> float:
-        delta_p = state[0:3]
-        delta_v = state[3:6]
-        mag_delta_p = jnp.linalg.norm(delta_p)
-        h = jnp.sqrt(2 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
-        return h
-
-    def _phi(self, state: jnp.ndarray) -> float:
-        delta_p = state[0:3]
-        return jnp.linalg.norm(delta_p) - self.collision_radius
+    def get_v1_v2(self, i: int, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get v1-v2 vector"""
+        return state[3:6] - state[6 * i + 3:6 * i + 6]
 
 
 class ConstraintCWHDeputyCollision(ConstraintModule):
@@ -306,12 +240,14 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
         radius of collision for deputy spacecraft. m
     a_max: float
         Maximum braking acceleration for each deputy spacecraft. m/s^2
+    deputy: int
+        number of the deputy to avoid
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.005, 0, 0.05])
     """
 
-    def __init__(self, collision_radius: float, a_max: float, deputy: float, alpha: ConstraintStrengthener = None, **kwargs):
+    def __init__(self, collision_radius: float, a_max: float, deputy: int, alpha: ConstraintStrengthener = None, **kwargs):
         self.collision_radius = collision_radius
         self.a_max = a_max
         self.deputy = deputy
@@ -330,46 +266,3 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
     def _phi(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3] - state[int(self.deputy * 6):int(self.deputy * 6 + 3)]
         return jnp.linalg.norm(delta_p) - self.collision_radius
-
-
-class ConstraintCWHSunAvoidance(ConstraintModule):
-    """CWH sun avoidance constraint
-    Assumes deputy is always pointing at chief, and sun is not moving
-
-    Parameters
-    ----------
-    a_max: float
-        Maximum braking acceleration for each deputy spacecraft. m/s^2
-    theta: float
-        sun avoidance angle (theta_EZ). radians
-    e_hat: float
-        Normal vector pointing from chief to sun.
-    alpha : ConstraintStrengthener
-        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
-        Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.05])
-    """
-
-    def __init__(self, a_max: float, theta: float, e_hat: jnp.ndarray, alpha: ConstraintStrengthener = None, **kwargs):
-        self.a_max = a_max
-        self.theta = theta
-        self.e_hat = e_hat
-        self.e_hat_vel = jnp.array([0, 0, 0])
-
-        if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.001])
-        super().__init__(alpha=alpha, **kwargs)
-
-    def _compute(self, state: jnp.ndarray) -> float:
-        p = state[0:3]
-        p_es = p - jnp.dot(p, self.e_hat) * self.e_hat
-        a = jnp.cos(self.theta) * (jnp.linalg.norm(p_es) - jnp.tan(self.theta) * jnp.dot(p, self.e_hat))
-        p_pr = p + a * jnp.sin(self.theta) * self.e_hat + a * jnp.cos(self.theta
-                                                                      ) * (jnp.dot(p, self.e_hat) * self.e_hat - p) / jnp.linalg.norm(p_es)
-
-        h = jnp.sqrt(2 * self.a_max * jnp.linalg.norm(p - p_pr)
-                     ) + jnp.dot(p - p_pr, state[3:6] - self.e_hat_vel) / jnp.linalg.norm(p - p_pr)
-        return h
-
-    def _phi(self, state: jnp.ndarray) -> float:
-        h = jnp.arccos(jnp.dot(state[0:3], self.e_hat) / (jnp.linalg.norm(state[0:3]) * jnp.linalg.norm(self.e_hat))) - self.theta
-        return h
