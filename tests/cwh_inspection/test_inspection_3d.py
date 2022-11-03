@@ -2,11 +2,19 @@ import numpy as np
 import scipy
 import matplotlib.pyplot as plt
 import time
+from functools import partial
+from jax import jit
+from jax.experimental.ode import odeint
+import jax.numpy as jnp
+from run_time_assurance.utils import to_jnp_array_jit
 
 # plt.rcParams.update({'font.size': 30, 'text.usetex': True, 'figure.figsize': [6.4, 6]})
 
+# from jax.config import config
+# config.update('jax_disable_jit', True)
+
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
-from run_time_assurance.zoo.cwh.inspection_3d import NUM_DEPUTIES_DEFAULT, U_MAX_DEFAULT, InspectionRTA
+from run_time_assurance.zoo.cwh.inspection_3d import NUM_DEPUTIES_DEFAULT, U_MAX_DEFAULT, SUN_VEL_DEFAULT, InspectionRTA
 
 
 class Env():
@@ -15,6 +23,7 @@ class Env():
         self.time = 2000 # Total sim time
         self.u_max = U_MAX_DEFAULT  # Actuation constraint
         self.deputies = NUM_DEPUTIES_DEFAULT # Number of deputies in simulation
+        self.sun_vel = SUN_VEL_DEFAULT
 
         # Generate dynamics matrices
         self.A, self.B = generate_cwh_matrices(M_DEFAULT, N_DEFAULT, mode="3d")
@@ -28,44 +37,50 @@ class Env():
         # Get LQR gain
         self.Klqr = np.array(-scipy.linalg.inv(R)*(self.B.T*Xare))
 
-    def u_des(self, x, x_des=np.array([[0], [0], [0], [0], [0], [0]])):
+    def u_des(self, x, x_des=np.array([0, 0, 0, 0, 0, 0])):
         # LQR to desired state
         u = self.Klqr @ (x - x_des)
-        return np.clip(u, -self.u_max, self.u_max).flatten()
+        return np.clip(u, -self.u_max, self.u_max)
 
     def reset(self):
-        return np.array(
-            [
-                [-678.84733531, 645.12760716, -129.71259692, 0., 0., 0.],
-                [674.36453393, 442.90772096, 543.97750877, 0., 0., 0.],
-                [-272.12276168, -393.5272131, 700.1336778, 0., 0., 0.],
-                [353.64983193, 142.56376478, 879.52164532, 0., 0., 0.],
-                [-528.83729321, -436.48202214, 582.09238772, 0., 0., 0.]
-            ]
-        )
+        return np.array([
+            -678.84733531, 645.12760716, -129.71259692, 0., 0., 0.,
+            674.36453393, 442.90772096, 543.97750877, 0., 0., 0.,
+            -272.12276168, -393.5272131, 700.1336778, 0., 0., 0.,
+            353.64983193, 142.56376478, 879.52164532, 0., 0., 0.,
+            -528.83729321, -436.48202214, 582.09238772, 0., 0., 0.,
+            0.
+        ])
 
+    @partial(jit, static_argnums=0)
     def step(self, x, u):
-        x1 = np.zeros((self.deputies, 6))
+        x1 = jnp.zeros(self.deputies*6+1)
         for i in range(self.deputies):
-            # Euler integration
-            xd = self.A @ np.vstack(x[i, :]) + self.B @ np.vstack(u[i, :])
-            x1[i, :] = (np.vstack(x[i, :]) + xd * self.dt).flatten()
+            sol = odeint(self.compute_state_dot, x[6*i:6*i+6], jnp.linspace(0., self.dt, 11), u[3*i:3*i+3])
+            x1 = x1.at[6*i:6*i+6].set(sol[-1, :])
+        x1.at[-1].set(x1[-1]+SUN_VEL_DEFAULT*self.dt)
         return x1
 
+    def compute_state_dot(self, x, t, u):
+        xd = self.A @ x + self.B @ u
+        return xd
+
+    def get_agent_state(self, state, i):
+        x_i = state[6*i:6*i+6]
+        x_old = np.delete(state, np.s_[6*i:6*i+6], 0)
+        x = np.concatenate((x_i, x_old))
+        return x
+
     def run_one_step(self):
-        x = np.zeros((self.deputies, 6))
+        x = self.reset()
+        u_safe = np.zeros(self.deputies*3)
         for i in range(self.deputies):
-            x[i, :] = self.reset()
-        u_safe = np.zeros((self.deputies, 3))
-        for i in range(self.deputies):
-            x_i = x[i, :]
-            u_des = self.u_des(np.vstack(x_i))
-            x_old = np.delete(x, i, 0)
-            x_new = np.row_stack((x_i, x_old))
+            u_des = self.u_des(x[6*i:6*i+6])
+            x_new = self.get_agent_state(x, i)
             # Use RTA
-            u_safe[i, :] = self.rta.filter_control(x_new.flatten(), self.dt, u_des)
+            u_safe[3*i:3*i+3] = self.rta.filter_control(x_new, self.dt, u_des)
         # Take step using safe action
-        x = self.step(x, u_safe)
+        x = np.array(self.step(to_jnp_array_jit(x), to_jnp_array_jit(u_safe)))
 
     def run_episode(self, rta, plotter=True):
         self.rta = rta
@@ -77,32 +92,29 @@ class Env():
         x_des = -x
         if plotter:
             # Data tracking arrays
-            array = [x.flatten()]
+            array = [x]
             control = [np.zeros(self.deputies*3)]
             intervening = [False]
 
         # Run episode
         for t in range(int(self.time/self.dt)):
-            u_safe = np.zeros((self.deputies, 3))
+            u_safe = np.zeros(self.deputies*3)
             # For each deputy
             for i in range(self.deputies):
-                x_i = x[i, :]
                 # Get u_des (x_des is the origin for the first half of the simulation)
                 if t > self.time/2:
-                    u_des = self.u_des(np.vstack(x_i), np.vstack(x_des[i, :]))
+                    u_des = self.u_des(x[6*i:6*i+6], x_des[6*i:6*i+6])
                 else:
-                    u_des = self.u_des(np.vstack(x_i))
-                # List current deputy's state first
-                x_old = np.delete(x, i, 0)
-                x_new = np.row_stack((x_i, x_old))
+                    u_des = self.u_des(x[6*i:6*i+6])
+                x_new = self.get_agent_state(x, i)
                 # Use RTA
-                u_safe[i, :] = self.rta.filter_control(x_new.flatten(), self.dt, u_des)
+                u_safe[3*i:3*i+3] = self.rta.filter_control(x_new, self.dt, u_des)
             # Take step using safe action
-            x = self.step(x, u_safe)
+            x = np.array(self.step(to_jnp_array_jit(x), to_jnp_array_jit(u_safe)))
             if plotter:
                 # Track data
-                array = np.append(array, [x.flatten()], axis=0)
-                control = np.append(control, [u_safe.flatten()], axis=0)
+                array = np.append(array, [x], axis=0)
+                control = np.append(control, [u_safe], axis=0)
                 intervening.append(self.rta.intervening)
 
         # Print final time, plot
@@ -193,14 +205,15 @@ class Env():
         if paper_plot:
             fig = plt.figure()
             ax4 = fig.add_subplot(111)
-        th = self.rta.theta*180/np.pi
+        th = self.rta.fov/2*180/np.pi
         xmax = len(array)*1.1
         ymax = 0
         for i in range(self.deputies):
             h = np.zeros(len(array))
             for j in range(len(array)):
-                # h[j] = -np.dot(array[j, 6*i:6*i+3], self.rta.e_hat)/np.linalg.norm(array[j, 6*i:6*i+3]) + np.cos(self.rta.theta)
-                h[j] = np.arccos(np.dot(array[j, 6*i:6*i+3], self.rta.e_hat)/(np.linalg.norm(array[j, 6*i:6*i+3])*np.linalg.norm(self.rta.e_hat)))*180/np.pi
+                r_s_hat = np.array([np.cos(array[j, -1]), np.sin(array[j, -1]), 0.])
+                r_b_hat = -array[j, 6*i:6*i+3]/np.linalg.norm(array[j, 6*i:6*i+3])
+                h[j] = np.arccos(np.dot(r_s_hat, r_b_hat))*180/np.pi
             ymax = np.maximum(ymax, np.max(h)*1.1)
             ax4.plot(range(len(array)), h, linewidth=lw)
         ax4.fill_between([0, xmax], [th, th], [ymax, ymax], color=(244/255, 249/255, 241/255))
@@ -266,14 +279,14 @@ class Env():
             fig = plt.figure()
             ax5 = fig.add_subplot(111)
         xmax = len(array)*1.1
-        ymax = self.rta.x_vel_limit*1.2
+        ymax = self.rta.vel_limit*1.2
         for i in range(self.deputies):
             ax5.plot(range(len(array)), array[:, 6*i+3], linewidth=lw)
-        ax5.fill_between([0, xmax], [self.rta.x_vel_limit, self.rta.x_vel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax5.fill_between([0, xmax], [-ymax, -ymax], [self.rta.x_vel_limit, self.rta.x_vel_limit], color=(255/255, 239/255, 239/255))
-        ax5.fill_between([0, xmax], [-self.rta.x_vel_limit, -self.rta.x_vel_limit], [self.rta.x_vel_limit, self.rta.x_vel_limit], color=(244/255, 249/255, 241/255))
-        ax5.plot([0, xmax], [self.rta.x_vel_limit, self.rta.x_vel_limit], 'k--', linewidth=lw)
-        ax5.plot([0, xmax], [-self.rta.x_vel_limit, -self.rta.x_vel_limit], 'k--', linewidth=lw)
+        ax5.fill_between([0, xmax], [self.rta.vel_limit, self.rta.vel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax5.fill_between([0, xmax], [-ymax, -ymax], [self.rta.vel_limit, self.rta.vel_limit], color=(255/255, 239/255, 239/255))
+        ax5.fill_between([0, xmax], [-self.rta.vel_limit, -self.rta.vel_limit], [self.rta.vel_limit, self.rta.vel_limit], color=(244/255, 249/255, 241/255))
+        ax5.plot([0, xmax], [self.rta.vel_limit, self.rta.vel_limit], 'k--', linewidth=lw)
+        ax5.plot([0, xmax], [-self.rta.vel_limit, -self.rta.vel_limit], 'k--', linewidth=lw)
         ax5.set_xlim([0, xmax])
         ax5.set_ylim([-ymax, ymax])
         ax5.set_xlabel('Time [s]')
@@ -286,14 +299,14 @@ class Env():
             fig = plt.figure()
             ax6 = fig.add_subplot(111)
         xmax = len(array)*1.1
-        ymax = self.rta.y_vel_limit*1.2
+        ymax = self.rta.vel_limit*1.2
         for i in range(self.deputies):
             ax6.plot(range(len(array)), array[:, 6*i+4], linewidth=lw)
-        ax6.fill_between([0, xmax], [self.rta.y_vel_limit, self.rta.y_vel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax6.fill_between([0, xmax], [-ymax, -ymax], [self.rta.y_vel_limit, self.rta.y_vel_limit], color=(255/255, 239/255, 239/255))
-        ax6.fill_between([0, xmax], [-self.rta.y_vel_limit, -self.rta.y_vel_limit], [self.rta.y_vel_limit, self.rta.y_vel_limit], color=(244/255, 249/255, 241/255))
-        ax6.plot([0, xmax], [self.rta.y_vel_limit, self.rta.y_vel_limit], 'k--', linewidth=lw)
-        ax6.plot([0, xmax], [-self.rta.y_vel_limit, -self.rta.y_vel_limit], 'k--', linewidth=lw)
+        ax6.fill_between([0, xmax], [self.rta.vel_limit, self.rta.vel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax6.fill_between([0, xmax], [-ymax, -ymax], [self.rta.vel_limit, self.rta.vel_limit], color=(255/255, 239/255, 239/255))
+        ax6.fill_between([0, xmax], [-self.rta.vel_limit, -self.rta.vel_limit], [self.rta.vel_limit, self.rta.vel_limit], color=(244/255, 249/255, 241/255))
+        ax6.plot([0, xmax], [self.rta.vel_limit, self.rta.vel_limit], 'k--', linewidth=lw)
+        ax6.plot([0, xmax], [-self.rta.vel_limit, -self.rta.vel_limit], 'k--', linewidth=lw)
         ax6.set_xlim([0, xmax])
         ax6.set_ylim([-ymax, ymax])
         ax6.set_xlabel('Time [s]')
@@ -306,14 +319,14 @@ class Env():
             fig = plt.figure()
             ax7 = fig.add_subplot(111)
         xmax = len(array)*1.1
-        ymax = self.rta.z_vel_limit*1.2
+        ymax = self.rta.vel_limit*1.2
         for i in range(self.deputies):
             ax7.plot(range(len(array)), array[:, 6*i+5], linewidth=lw)
-        ax7.fill_between([0, xmax], [self.rta.z_vel_limit, self.rta.z_vel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax7.fill_between([0, xmax], [-ymax, -ymax], [self.rta.z_vel_limit, self.rta.z_vel_limit], color=(255/255, 239/255, 239/255))
-        ax7.fill_between([0, xmax], [-self.rta.z_vel_limit, -self.rta.z_vel_limit], [self.rta.z_vel_limit, self.rta.z_vel_limit], color=(244/255, 249/255, 241/255))
-        ax7.plot([0, xmax], [self.rta.z_vel_limit, self.rta.z_vel_limit], 'k--', linewidth=lw)
-        ax7.plot([0, xmax], [-self.rta.z_vel_limit, -self.rta.z_vel_limit], 'k--', linewidth=lw)
+        ax7.fill_between([0, xmax], [self.rta.vel_limit, self.rta.vel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax7.fill_between([0, xmax], [-ymax, -ymax], [self.rta.vel_limit, self.rta.vel_limit], color=(255/255, 239/255, 239/255))
+        ax7.fill_between([0, xmax], [-self.rta.vel_limit, -self.rta.vel_limit], [self.rta.vel_limit, self.rta.vel_limit], color=(244/255, 249/255, 241/255))
+        ax7.plot([0, xmax], [self.rta.vel_limit, self.rta.vel_limit], 'k--', linewidth=lw)
+        ax7.plot([0, xmax], [-self.rta.vel_limit, -self.rta.vel_limit], 'k--', linewidth=lw)
         ax7.set_xlim([0, xmax])
         ax7.set_ylim([-ymax, ymax])
         ax7.set_xlabel('Time [s]')
