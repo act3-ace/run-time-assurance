@@ -18,6 +18,7 @@ from run_time_assurance.constraint import (
 )
 from run_time_assurance.rta import ExplicitASIFModule
 from run_time_assurance.utils import to_jnp_array_jit
+from run_time_assurance.zoo.cwh.docking_3d import ConstraintCWH3dRelativeVelocity
 from run_time_assurance.zoo.cwh.inspection_1v1 import (
     CHIEF_RADIUS_DEFAULT,
     DEPUTY_RADIUS_DEFAULT,
@@ -26,12 +27,12 @@ from run_time_assurance.zoo.cwh.inspection_1v1 import (
     SUN_VEL_DEFAULT,
     U_MAX_DEFAULT,
     V0_DEFAULT,
+    V0_DISTANCE_DEFAULT,
     V1_COEF_DEFAULT,
     VEL_LIMIT_DEFAULT,
     ConstraintCWHChiefCollision,
     ConstraintCWHConicKeepOutZone,
     ConstraintCWHMaxDistance,
-    ConstraintCWHRelativeVelocity,
     ConstraintPassivelySafeManeuver,
 )
 
@@ -58,10 +59,12 @@ class InspectionRTA(ExplicitASIFModule):
         radius of collision for each deputy spacecraft, by default DEPUTY_RADIUS_DEFAULT
     v0 : float, optional
         Maximum safe docking velocity in m/s, by default V0_DEFAULT
-        v0 of v_limit = v0 + v1*n*||r||
+        v0 of v_limit = v0 + v1*n*||r-v0_distance||
     v1_coef : float, optional
         coefficient of linear component of the distance depending speed limit in 1/seconds, by default V1_COEF_DEFAULT
-        v1_coef of v_limit = v0 + v1_coef*n*||r||
+        v1_coef of v_limit = v0 + v1_coef*n*||r-v0_distance||
+    v0_distance: float
+        NMT safety constraint minimum distance where v0 is applied. By default 0.
     r_max : float, optional
         maximum relative distance from chief, by default R_MAX_DEFAULT
     fov : float, optional
@@ -86,6 +89,7 @@ class InspectionRTA(ExplicitASIFModule):
         deputy_radius: float = DEPUTY_RADIUS_DEFAULT,
         v0: float = V0_DEFAULT,
         v1_coef: float = V1_COEF_DEFAULT,
+        v0_distance: float = V0_DISTANCE_DEFAULT,
         r_max: float = R_MAX_DEFAULT,
         fov: float = FOV_DEFAULT,
         vel_limit: float = VEL_LIMIT_DEFAULT,
@@ -102,6 +106,7 @@ class InspectionRTA(ExplicitASIFModule):
         self.v0 = v0
         self.v1_coef = v1_coef
         self.v1 = self.v1_coef * self.n
+        self.v0_distance = v0_distance
         self.r_max = r_max
         self.fov = fov
         self.vel_limit = vel_limit
@@ -135,7 +140,7 @@ class InspectionRTA(ExplicitASIFModule):
         constraint_dict = OrderedDict(
             [
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
-                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, bias=-1e-3)),
+                ('rel_vel', ConstraintCWH3dRelativeVelocity(v0=self.v0, v1=self.v1, v0_distance=self.v0_distance, bias=-1e-3)),
                 (
                     'chief_sun',
                     ConstraintCWHConicKeepOutZone(

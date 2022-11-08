@@ -25,6 +25,7 @@ Y_VEL_LIMIT_DEFAULT = 10
 V0_DEFAULT = 0.2
 V1_COEF_DEFAULT = 2
 V1_DEFAULT = V1_COEF_DEFAULT * N_DEFAULT
+V0_DISTANCE_DEFAULT = 0
 
 
 class Docking2dState(RTAStateWrapper):
@@ -98,11 +99,11 @@ class Docking2dRTAMixin:
         else:
             raise ValueError('integration_method must be either RK45 or Euler')
 
-    def _setup_docking_constraints(self, v0: float, v1: float, x_vel_limit: float, y_vel_limit: float) -> OrderedDict:
+    def _setup_docking_constraints(self, v0: float, v1: float, v0_distance: float, x_vel_limit: float, y_vel_limit: float) -> OrderedDict:
         """generates constraints used in the docking problem"""
         return OrderedDict(
             [
-                ('rel_vel', ConstraintDocking2dRelativeVelocity(v0=v0, v1=v1, bias=-1e-4)),
+                ('rel_vel', ConstraintDocking2dRelativeVelocity(v0=v0, v1=v1, v0_distance=v0_distance, bias=-1e-4)),
                 ('x_vel', ConstraintMagnitudeStateLimit(limit_val=x_vel_limit, state_index=2)),
                 ('y_vel', ConstraintMagnitudeStateLimit(limit_val=y_vel_limit, state_index=3)),
             ]
@@ -140,10 +141,12 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
     v0 : float, optional
         Maximum safe docking velocity in m/s, by default V0_DEFAULT
-        v0 of v_limit = v0 + v1*n*||r||
+        v0 of v_limit = v0 + v1*n*||r-v0_distance||
     v1_coef : float, optional
         coefficient of linear component of the distance depending speed limit in 1/seconds, by default V1_COEF_DEFAULT
-        v1_coef of v_limit = v0 + v1_coef*n*||r||
+        v1_coef of v_limit = v0 + v1_coef*n*||r-v0_distance||
+    v0_distance: float
+        NMT safety constraint minimum distance where v0 is applied. By default 0.
     x_vel_limit : float, optional
         max velocity magnitude in the x direction, by default X_VEL_LIMIT_DEFAULT
     y_vel_limit : float, optional
@@ -168,6 +171,7 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         n: float = N_DEFAULT,
         v0: float = V0_DEFAULT,
         v1_coef: float = V1_COEF_DEFAULT,
+        v0_distance: float = V0_DISTANCE_DEFAULT,
         x_vel_limit: float = X_VEL_LIMIT_DEFAULT,
         y_vel_limit: float = Y_VEL_LIMIT_DEFAULT,
         control_bounds_high: Union[float, np.ndarray] = 1,
@@ -181,6 +185,7 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         self.n = n
         self.v0 = v0
         self.v1_coef = v1_coef
+        self.v0_distance = v0_distance
 
         self.x_vel_limit = x_vel_limit
         self.y_vel_limit = y_vel_limit
@@ -205,7 +210,7 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         self._setup_docking_properties(self.m, self.n, self.v1_coef, self.jit_compile_dict, self.integration_method)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
+        return self._setup_docking_constraints(self.v0, self.v1, self.v0_distance, self.x_vel_limit, self.y_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         return self._docking_pred_state(state, step_size, control, self.integration_method)
@@ -224,10 +229,12 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
     v0 : float, optional
         Maximum safe docking velocity in m/s, by default V0_DEFAULT
-        v0 of v_limit = v0 + v1*n*||r||
+        v0 of v_limit = v0 + v1*n*||r-v0_distance||
     v1_coef : float, optional
         coefficient of linear component of the distance depending speed limit in 1/seconds, by default V1_COEF_DEFAULT
-        v1_coef of v_limit = v0 + v1_coef*n*||r||
+        v1_coef of v_limit = v0 + v1_coef*n*||r-v0_distance||
+    v0_distance: float
+        NMT safety constraint minimum distance where v0 is applied. By default 0.
     x_vel_limit : float, optional
         max velocity magnitude in the x direction, by default X_VEL_LIMIT_DEFAULT
     y_vel_limit : float, optional
@@ -253,6 +260,7 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         n: float = N_DEFAULT,
         v0: float = V0_DEFAULT,
         v1_coef: float = V1_COEF_DEFAULT,
+        v0_distance: float = V0_DISTANCE_DEFAULT,
         x_vel_limit: float = X_VEL_LIMIT_DEFAULT,
         y_vel_limit: float = Y_VEL_LIMIT_DEFAULT,
         control_bounds_high: Union[float, np.ndarray] = 1,
@@ -267,6 +275,7 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         self.n = n
         self.v0 = v0
         self.v1_coef = v1_coef
+        self.v0_distance = v0_distance
 
         self.x_vel_limit = x_vel_limit
         self.y_vel_limit = y_vel_limit
@@ -292,7 +301,7 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         self._setup_docking_properties(self.m, self.n, self.v1_coef, self.jit_compile_dict, self.integration_method)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
+        return self._setup_docking_constraints(self.v0, self.v1, self.v0_distance, self.x_vel_limit, self.y_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         return self._docking_pred_state(state, step_size, control, self.integration_method)
@@ -312,10 +321,12 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
         orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
     v0 : float, optional
         Maximum safe docking velocity in m/s, by default V0_DEFAULT
-        v0 of v_limit = v0 + v1*n*||r||
+        v0 of v_limit = v0 + v1*n*||r-v0_distance||
     v1_coef : float, optional
         coefficient of linear component of the distance depending speed limit in 1/seconds, by default V1_COEF_DEFAULT
-        v1_coef of v_limit = v0 + v1_coef*n*||r||
+        v1_coef of v_limit = v0 + v1_coef*n*||r-v0_distance||
+    v0_distance: float
+        NMT safety constraint minimum distance where v0 is applied. By default 0.
     x_vel_limit : float, optional
         max velocity magnitude in the x direction, by default X_VEL_LIMIT_DEFAULT
     y_vel_limit : float, optional
@@ -335,6 +346,7 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
         n: float = N_DEFAULT,
         v0: float = V0_DEFAULT,
         v1_coef: float = V1_COEF_DEFAULT,
+        v0_distance: float = V0_DISTANCE_DEFAULT,
         x_vel_limit: float = X_VEL_LIMIT_DEFAULT,
         y_vel_limit: float = Y_VEL_LIMIT_DEFAULT,
         control_bounds_high: Union[float, np.ndarray] = 1,
@@ -347,6 +359,7 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
         self.n = n
         self.v0 = v0
         self.v1_coef = v1_coef
+        self.v0_distance = v0_distance
 
         self.x_vel_limit = x_vel_limit
         self.y_vel_limit = y_vel_limit
@@ -367,7 +380,7 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
         self._setup_docking_properties(self.m, self.n, self.v1_coef, self.jit_compile_dict, 'RK45')
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
+        return self._setup_docking_constraints(self.v0, self.v1, self.v0_distance, self.x_vel_limit, self.y_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         pass
@@ -404,10 +417,12 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
     v0 : float, optional
         Maximum safe docking velocity in m/s, by default V0_DEFAULT
-        v0 of v_limit = v0 + v1*n*||r||
+        v0 of v_limit = v0 + v1*n*||r-v0_distance||
     v1_coef : float, optional
         coefficient of linear component of the distance depending speed limit in 1/seconds, by default V1_COEF_DEFAULT
-        v1_coef of v_limit = v0 + v1_coef*n*||r||
+        v1_coef of v_limit = v0 + v1_coef*n*||r-v0_distance||
+    v0_distance: float
+        NMT safety constraint minimum distance where v0 is applied. By default 0.
     x_vel_limit : float, optional
         max velocity magnitude in the x direction, by default X_VEL_LIMIT_DEFAULT
     y_vel_limit : float, optional
@@ -435,6 +450,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         n: float = N_DEFAULT,
         v0: float = V0_DEFAULT,
         v1_coef: float = V1_COEF_DEFAULT,
+        v0_distance: float = V0_DISTANCE_DEFAULT,
         x_vel_limit: float = X_VEL_LIMIT_DEFAULT,
         y_vel_limit: float = Y_VEL_LIMIT_DEFAULT,
         control_bounds_high: Union[float, np.ndarray] = 1,
@@ -448,6 +464,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         self.n = n
         self.v0 = v0
         self.v1_coef = v1_coef
+        self.v0_distance = v0_distance
 
         self.x_vel_limit = x_vel_limit
         self.y_vel_limit = y_vel_limit
@@ -476,7 +493,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         self._setup_docking_properties(self.m, self.n, self.v1_coef, self.jit_compile_dict, self.integration_method)
 
     def _setup_constraints(self) -> OrderedDict:
-        return self._setup_docking_constraints(self.v0, self.v1, self.x_vel_limit, self.y_vel_limit)
+        return self._setup_docking_constraints(self.v0, self.v1, self.v0_distance, self.x_vel_limit, self.y_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         return self._docking_pred_state(state, step_size, control, self.integration_method)
@@ -535,10 +552,12 @@ class ConstraintDocking2dRelativeVelocity(ConstraintModule):
     Parameters
     ----------
     v0: float
-        NMT safety constraint velocity upper bound constatnt component where ||v|| <= v0 + v1*distance. m/s
+        NMT safety constraint velocity upper bound constant component where ||v|| <= v0 + v1*(distance-v0_distance). m/s
     v1: float
         NMT safety constraint velocity upper bound distance proportinality coefficient where
-        ||v|| <= v0 + v1*distance. m/s
+        ||v|| <= v0 + v1*(distance-v0_distance). 1/s
+    v0_distance: float
+        NMT safety constraint minimum distance where v0 is applied. By default 0.
     delta: float
         Small postiive value summed inside the vector norm sqrt operation to make constraint differentiable at 0
     alpha : ConstraintStrengthener
@@ -546,9 +565,10 @@ class ConstraintDocking2dRelativeVelocity(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.1])
     """
 
-    def __init__(self, v0: float, v1: float, delta: float = 1e-5, alpha: ConstraintStrengthener = None, **kwargs):
+    def __init__(self, v0: float, v1: float, v0_distance: float = 0, delta: float = 1e-5, alpha: ConstraintStrengthener = None, **kwargs):
         self.v0 = v0
         self.v1 = v1
+        self.v0_distance = v0_distance
         self.delta = delta
 
         if alpha is None:
@@ -556,4 +576,4 @@ class ConstraintDocking2dRelativeVelocity(ConstraintModule):
         super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
-        return self.v0 + self.v1 * norm_with_delta(state[0:2], self.delta) - norm_with_delta(state[2:4], self.delta)
+        return self.v0 + self.v1 * (norm_with_delta(state[0:2], self.delta) - self.v0_distance) - norm_with_delta(state[2:4], self.delta)

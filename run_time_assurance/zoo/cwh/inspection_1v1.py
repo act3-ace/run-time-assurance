@@ -21,11 +21,13 @@ from run_time_assurance.controller import RTABackupController
 from run_time_assurance.rta import CascadedRTA, ExplicitASIFModule, ExplicitSimplexModule
 from run_time_assurance.state import RTAStateWrapper
 from run_time_assurance.utils import to_jnp_array_jit
+from run_time_assurance.zoo.cwh.docking_3d import ConstraintCWH3dRelativeVelocity
 
 CHIEF_RADIUS_DEFAULT = 5  # chief radius of collision [m] (collision freedom)
 DEPUTY_RADIUS_DEFAULT = 5  # deputy radius of collision [m] (collision freedom)
 V0_DEFAULT = 0.2  # maximum docking speed [m/s] (dynamic velocity constraint)
 V1_COEF_DEFAULT = 2  # velocity constraint slope [-] (dynamic velocity constraint)
+V0_DISTANCE_DEFAULT = 0  # distance where v0 is applied
 R_MAX_DEFAULT = 1000  # max distance from chief [m] (translational keep out zone)
 FOV_DEFAULT = 60 * jnp.pi / 180  # sun avoidance angle [rad] (translational keep out zone)
 U_MAX_DEFAULT = 1  # Max thrust [N] (avoid actuation saturation)
@@ -139,10 +141,12 @@ class Inspection1v1RTA(ExplicitASIFModule):
         radius of collision for each deputy spacecraft, by default DEPUTY_RADIUS_DEFAULT
     v0 : float, optional
         Maximum safe docking velocity in m/s, by default V0_DEFAULT
-        v0 of v_limit = v0 + v1*n*||r||
+        v0 of v_limit = v0 + v1*n*||r-v0_distance||
     v1_coef : float, optional
         coefficient of linear component of the distance depending speed limit in 1/seconds, by default V1_COEF_DEFAULT
-        v1_coef of v_limit = v0 + v1_coef*n*||r||
+        v1_coef of v_limit = v0 + v1_coef*n*||r-v0_distance||
+    v0_distance: float
+        NMT safety constraint minimum distance where v0 is applied. By default 0.
     r_max : float, optional
         maximum relative distance from chief, by default R_MAX_DEFAULT
     fov : float, optional
@@ -174,6 +178,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         deputy_radius: float = DEPUTY_RADIUS_DEFAULT,
         v0: float = V0_DEFAULT,
         v1_coef: float = V1_COEF_DEFAULT,
+        v0_distance: float = V0_DISTANCE_DEFAULT,
         r_max: float = R_MAX_DEFAULT,
         fov: float = FOV_DEFAULT,
         vel_limit: float = VEL_LIMIT_DEFAULT,
@@ -193,6 +198,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         self.v0 = v0
         self.v1_coef = v1_coef
         self.v1 = self.v1_coef * self.n
+        self.v0_distance = v0_distance
         self.r_max = r_max
         self.fov = fov
         self.vel_limit = vel_limit
@@ -221,7 +227,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         constraint_dict = OrderedDict(
             [
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
-                ('rel_vel', ConstraintCWHRelativeVelocity(v0=self.v0, v1=self.v1, bias=-1e-3)),
+                ('rel_vel', ConstraintCWH3dRelativeVelocity(v0=self.v0, v1=self.v1, v0_distance=self.v0_distance, bias=-1e-3)),
                 (
                     'sun',
                     ConstraintCWHConicKeepOutZone(
@@ -445,34 +451,6 @@ class NMTBackupController(RTABackupController):
         """
         state_des = jnp.array([0, 0, 0, state[3] - self.n / 2 * state[1], state[4] + 2 * self.n * state[0], state[5]])
         return self.K @ state_des
-
-
-class ConstraintCWHRelativeVelocity(ConstraintModule):
-    """CWH dynamic velocity constraint
-
-    Parameters
-    ----------
-    v0: float
-        NMT safety constraint velocity upper bound constatnt component where ||v|| <= v0 + v1*distance. m/s
-    v1: float
-        NMT safety constraint velocity upper bound distance proportinality coefficient where
-        ||v|| <= v0 + v1*distance. 1/s
-    alpha : ConstraintStrengthener
-        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
-        Defaults to PolynomialConstraintStrengthener([0, 0.05, 0, 0.5])
-    """
-
-    def __init__(self, v0: float, v1: float, alpha: ConstraintStrengthener = None, **kwargs):
-        self.v0 = v0
-        self.v1 = v1
-
-        if alpha is None:
-            alpha = PolynomialConstraintStrengthener([0, 0.05, 0, 0.005])
-        super().__init__(alpha=alpha, **kwargs)
-
-    def _compute(self, state: jnp.ndarray) -> float:
-        h = (self.v0 + self.v1 * jnp.linalg.norm(state[0:3])) - jnp.linalg.norm(state[3:6])
-        return h
 
 
 class ConstraintCWHChiefCollision(ConstraintModule):
