@@ -196,9 +196,9 @@ class Env():
         xmax = np.max(v[:, 0])*1.1
         ymax = np.max(v[:, 1])*1.1
         ax3.plot(v[:, 0], v[:, 1], linewidth=lw)
-        ax3.fill_between([0, xmax], [self.inspection_rta.v0, self.inspection_rta.v0 + self.inspection_rta.v1*xmax], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax3.fill_between([0, xmax], [0, 0], [self.inspection_rta.v0, self.inspection_rta.v0 + self.inspection_rta.v1*xmax], color=(244/255, 249/255, 241/255))
-        ax3.plot([0, xmax], [self.inspection_rta.v0, self.inspection_rta.v0 + self.inspection_rta.v1*xmax], 'k--', linewidth=lw)
+        ax3.fill_between([self.inspection_rta.v0_distance, xmax], [self.inspection_rta.v0, self.inspection_rta.v0 + self.inspection_rta.v1*(xmax-self.inspection_rta.v0_distance)], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax3.fill_between([self.inspection_rta.v0_distance, xmax], [0, 0], [self.inspection_rta.v0, self.inspection_rta.v0 + self.inspection_rta.v1*(xmax-self.inspection_rta.v0_distance)], color=(244/255, 249/255, 241/255))
+        ax3.plot([self.inspection_rta.v0_distance, xmax], [self.inspection_rta.v0, self.inspection_rta.v0 + self.inspection_rta.v1*(xmax-self.inspection_rta.v0_distance)], 'k--', linewidth=lw)
         ax3.set_xlim([0, xmax])
         ax3.set_ylim([0, ymax])
         ax3.set_xlabel(r'Relative Dist. ($\vert \vert \mathbf{p}  \vert \vert_2$) [m]')
