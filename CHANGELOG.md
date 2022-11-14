@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/act3-ace/run-time-assurance/compare/v1.2.0...v1.3.0) (2022-11-14)
+
+
+### Features
+
+* **zoo:** Inspection RTA ([d5c489f](https://github.com/act3-ace/run-time-assurance/commit/d5c489f809b99e619537469f57253c0a75359003))
+
 # [1.2.0](https://github.com/act3-ace/run-time-assurance/compare/v1.1.1...v1.2.0) (2022-11-01)
 
 
