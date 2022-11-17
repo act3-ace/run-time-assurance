@@ -58,7 +58,7 @@ class Env():
         for i in range(self.deputies):
             sol = odeint(self.compute_state_dot, x[6*i:6*i+6], jnp.linspace(0., self.dt, 11), u[3*i:3*i+3])
             x1 = x1.at[6*i:6*i+6].set(sol[-1, :])
-        x1.at[-1].set(x1[-1]+SUN_VEL_DEFAULT*self.dt)
+        x1 = x1.at[-1].set(x[-1]+SUN_VEL_DEFAULT*self.dt)
         return x1
 
     def compute_state_dot(self, x, t, u):
