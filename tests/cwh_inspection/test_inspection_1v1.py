@@ -130,7 +130,106 @@ class Env():
         # If all states are safe, returns True
         return True
 
-    def plotter(self, array, control, intervening, paper_plot=True, fast_plot=False):
+    def run_fuel_sim(self):
+        self.rta = InspectionCascadedRTA()
+        x = np.array([-500., -500., 700., 0, 0, 0, 0, 0])
+        x_des = np.array([500, 500, 700, 0, 0, 0, 0, 0])
+        array = [x]
+        control = [np.zeros(3)]
+        intervening = [False]
+        for t in range(7000):
+            if t % 100 == 0:
+                x_des *= -1
+            u_des = self.u_des(x, x_des)
+            u_safe = self.rta.filter_control(x, self.dt, u_des)
+            x = np.array(self.inspection_rta._pred_state_fn(to_jnp_array_jit(x), self.dt, to_jnp_array_jit(u_safe)))
+            array = np.append(array, [x], axis=0)
+            control = np.append(control, [u_safe], axis=0)
+            intervening.append(self.rta.intervening)
+
+        paper_plot=False
+        fast_plot=True
+        if not paper_plot:
+            fig = plt.figure(figsize=(15, 15))
+            ax1 = fig.add_subplot(331, projection='3d')
+            ax4 = fig.add_subplot(334)
+            ax9 = fig.add_subplot(339)
+            lw = 2
+        else:
+            plt.rcParams.update({'font.size': 25, 'text.usetex': True})
+            lw = 4
+            hp = 0.1
+        
+        if not fast_plot:
+            if paper_plot:
+                fig = plt.figure()
+                ax1 = fig.add_subplot(111, projection='3d')
+            for i in range(len(array)-1):
+                ax1.plot(array[i:i+2, 0], array[i:i+2, 1], array[i:i+2, 2], color=plt.cm.cool(i/len(array)), linewidth=lw)
+            # max = np.max(np.abs(array[:, 0:3]))*1.1
+            max = 1100
+            ax1.plot(0, 0, 0, 'k*', markersize=15)
+            ax1.set_xlabel(r'$x$ [km]')
+            ax1.set_ylabel(r'$y$ [km]')
+            ax1.set_zlabel(r'$z$ [km]')
+            ax1.set_xticks([-1000, 0, 1000])
+            ax1.set_yticks([-1000, 0, 1000])
+            ax1.set_zticks([-1000, 0, 1000])
+            ax1.set_xticklabels([-1, 0, 1])
+            ax1.set_yticklabels([-1, 0, 1])
+            ax1.set_zticklabels([-1, 0, 1])
+            ax1.set_xlim([-max, max])
+            ax1.set_ylim([-max, max])
+            ax1.set_zlim([-max, max])
+            ax1.set_box_aspect((1,1,1))
+            ax1.grid(True)
+            if paper_plot:
+                ax1.xaxis.labelpad = 10
+                ax1.yaxis.labelpad = 10
+                ax1.zaxis.labelpad = 10
+                plt.tight_layout(pad=hp)
+
+        if paper_plot:
+            fig = plt.figure()
+            ax4 = fig.add_subplot(111)
+        xmax = len(array)*1.1
+        ymax = np.maximum(self.inspection_rta.fuel_limit, np.max(array[:, 7]))*1.1
+        ax4.plot(range(len(array)), array[:, 7], linewidth=lw)
+        ax4.fill_between([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax4.fill_between([0, xmax], [0, 0], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], color=(244/255, 249/255, 241/255))
+        ax4.plot([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], 'k--', linewidth=lw)
+        ax4.plot([0, xmax], [self.inspection_rta.fuel_switching_threshold, self.inspection_rta.fuel_switching_threshold], 'r--', linewidth=lw)
+        ax4.set_xlim([0, xmax])
+        ax4.set_ylim([0, ymax])
+        ax4.set_xlabel('Time [s]')
+        ax4.set_ylabel(r'Fuel Used ($m_f$) [kg]')
+        ax4.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
+
+        if paper_plot:
+            fig = plt.figure()
+            ax9 = fig.add_subplot(111)
+        xmax = len(array)*1.1
+        ymax = self.inspection_rta.u_max*1.2
+        ax9.plot(range(len(control)), control[:, 0], linewidth=lw, label=r'$F_x$')
+        ax9.plot(range(len(control)), control[:, 1], linewidth=lw, label=r'$F_y$')
+        ax9.plot(range(len(control)), control[:, 2], linewidth=lw, label=r'$F_z$')
+        ax9.fill_between([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax9.fill_between([0, xmax], [-ymax, -ymax], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(255/255, 239/255, 239/255))
+        ax9.fill_between([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(244/255, 249/255, 241/255))
+        ax9.plot([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], 'k--', linewidth=lw)
+        ax9.plot([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], 'k--', linewidth=lw)
+        ax9.set_xlim([0, xmax])
+        ax9.set_ylim([-ymax, ymax])
+        ax9.set_xlabel('Time [s]')
+        ax9.set_ylabel(r'$\mathbf{u}$ [N]')
+        ax9.grid(True)
+        ax9.legend()
+        if paper_plot:
+            plt.tight_layout(pad=hp)
+
+    def plotter(self, array, control, intervening, paper_plot=False, fast_plot=True):
         if not paper_plot:
             fig = plt.figure(figsize=(15, 15))
             ax1 = fig.add_subplot(331, projection='3d')
@@ -373,6 +472,7 @@ if __name__ == '__main__':
     env = Env(rta)
 
     env.run_episode()
+    # env.run_fuel_sim()
     plt.show()
 
     # list_of_files = glob.glob('*.csv')
