@@ -7,6 +7,7 @@ from typing import Union
 import jax.numpy as jnp
 import numpy as np
 import scipy
+from jax import lax
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
@@ -190,7 +191,8 @@ class InspectionRTA(ExplicitASIFModule):
                 get_vel=partial(self.get_v1_v2, i),
                 get_cone_vec=self.get_sun_vector,
                 cone_ang_vel=jnp.array([0, 0, self.sun_vel]),
-                bias=-1e-3
+                bias=-1e-3,
+                alpha=PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
             )
         return constraint_dict
 
@@ -229,11 +231,23 @@ class InspectionRTA(ExplicitASIFModule):
 
     def get_p1_p2(self, i: int, state: jnp.ndarray) -> jnp.ndarray:
         """Function to get p1-p2 vector"""
-        return state[0:3] - state[6 * i:6 * i + 3]
+        pos = state[0:3] - state[6 * i:6 * i + 3]
+        sign = self.get_sign(i, state)
+        return sign * pos
 
     def get_v1_v2(self, i: int, state: jnp.ndarray) -> jnp.ndarray:
         """Function to get v1-v2 vector"""
-        return state[3:6] - state[6 * i + 3:6 * i + 6]
+        vel = state[3:6] - state[6 * i + 3:6 * i + 6]
+        sign = self.get_sign(i, state)
+        return sign * vel
+
+    def get_sign(self, i, state):
+        """Gets sign for pos/vel"""
+        pos = state[0:3] - state[6 * i:6 * i + 3]
+        cone_vec = self.get_sun_vector(state)
+        p_hat = pos / jnp.linalg.norm(pos)
+        c_hat = cone_vec / jnp.linalg.norm(cone_vec)
+        return lax.cond(jnp.arccos(jnp.dot(p_hat, c_hat)) > jnp.pi / 2, lambda x: -1, lambda x: 1, 0)
 
 
 class ConstraintCWHDeputyCollision(ConstraintModule):
