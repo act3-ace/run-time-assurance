@@ -287,7 +287,8 @@ class Env():
             v = np.empty([len(array), 2])
             for j in range(len(array)):
                 v[j, :] = [np.linalg.norm(array[j, 0:3]), np.linalg.norm(array[j, 3:6])]
-            ax2.plot(range(len(array)), v[:, 0], linewidth=lw)
+            ax2.plot(range(len(array)), v[:, 0], linewidth=lw, label=r'$\mathbf{p}_{act}$')
+            ax2.plot(-1, -1, 'c', linewidth=0.5, label=r'$\mathbf{p}_{NM}$')
             xmax = len(array)*1.1
             ymax = self.inspection_rta.r_max * 1.4
             ax2.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [self.inspection_rta.r_max, self.inspection_rta.r_max], color=(244/255, 249/255, 241/255))
@@ -301,6 +302,7 @@ class Env():
             ax2.set_yscale('log')
             ax2.set_ylim([6, ymax])
             ax2.grid(True)
+            ax2.legend()
             plt.tight_layout(pad=hp)
         if not paper_plot:
             v = np.empty([len(array), 2])
