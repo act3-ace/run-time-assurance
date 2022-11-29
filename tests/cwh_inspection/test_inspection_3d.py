@@ -99,6 +99,7 @@ class Env():
                         break
             if loop_safe:
                 init_state_safe = True
+        print(repr(x))
 
         # Desired state is opposite of initial state
         x_des = -x
@@ -114,10 +115,11 @@ class Env():
             # For each deputy
             for i in range(self.deputies):
                 # Get u_des (x_des is the origin for the first half of the simulation)
-                if t > self.time/2:
-                    u_des = self.u_des(x[6*i:6*i+6], x_des[6*i:6*i+6])
-                else:
-                    u_des = self.u_des(x[6*i:6*i+6])
+                # if t > self.time/2:
+                #     u_des = self.u_des(x[6*i:6*i+6], x_des[6*i:6*i+6])
+                # else:
+                    # u_des = self.u_des(x[6*i:6*i+6])
+                u_des = self.u_des(x[6*i:6*i+6])
                 x_new = self.get_agent_state(x, i)
                 # Use RTA
                 u_safe[3*i:3*i+3] = self.rta.filter_control(x_new, self.dt, u_des)
