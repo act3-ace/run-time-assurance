@@ -6,7 +6,7 @@ from typing import Dict, Tuple, Union
 import jax.numpy as jnp
 import numpy as np
 import scipy
-from jax import jit, lax, vmap
+from jax import jit, vmap
 from jax.experimental.ode import odeint
 from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
@@ -32,8 +32,8 @@ R_MAX_DEFAULT = 1000  # max distance from chief [m] (translational keep out zone
 FOV_DEFAULT = 60 * jnp.pi / 180  # sun avoidance angle [rad] (translational keep out zone)
 U_MAX_DEFAULT = 1  # Max thrust [N] (avoid actuation saturation)
 VEL_LIMIT_DEFAULT = 1  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
-FUEL_LIMIT_DEFAULT = 0.25  # Maximum fuel use limit [kg]
-FUEL_THRESHOLD_DEFAULT = 0.1  # Fuel use threshold, to switch to backup controller [kg]
+FUEL_LIMIT_DEFAULT = 0.1  # Maximum fuel use limit [kg]
+FUEL_THRESHOLD_DEFAULT = 0.09  # Fuel use threshold, to switch to backup controller [kg]
 GRAVITY = 9.81  # Gravity at Earth's surface [m/s^2]
 SPECIFIC_IMPULSE_DEFAULT = 220  # Specific Impulse of thrusters [s]
 SUN_VEL_DEFAULT = -N_DEFAULT  # Speed of sun rotation in x-y plane
@@ -369,7 +369,7 @@ class SwitchingFuelLimitRTA(ExplicitSimplexModule):
         self.isp = isp
 
         if backup_controller is None:
-            backup_controller = NMTBackupController(m=self.m, n=self.n, fuel_limit=self.fuel_limit)
+            backup_controller = LatchedENMTBackupController(m=self.m, n=self.n)
 
         if jit_compile_dict is None:
             jit_compile_dict = {'pred_state': True}
@@ -400,8 +400,8 @@ class InspectionCascadedRTA(CascadedRTA):
         return [Inspection1v1RTA(), SwitchingFuelLimitRTA()]
 
 
-class NMTBackupController(RTABackupController):
-    """Simple LQR controller to guide the deputy to the closest elliptical Natural Motion Trajectory (eNMT)
+class LatchedENMTBackupController(RTABackupController):
+    """Tracking LQR controller that tracks closest eNMT for 3d CWHSpacecraft
 
     Parameters
     ----------
@@ -409,23 +409,28 @@ class NMTBackupController(RTABackupController):
         mass in kg of spacecraft, by default M_DEFAULT
     n : float, optional
         orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
-    fuel_limit : float, optional
-        maximum fuel used limit, by default FUEL_LIMIT_DEFAULT
     """
 
-    def __init__(self, m: float = M_DEFAULT, n: float = N_DEFAULT, fuel_limit: float = FUEL_LIMIT_DEFAULT):
+    def __init__(self, m: float = M_DEFAULT, n: float = N_DEFAULT):
+
         self.n = n
-        self.fuel_limit = fuel_limit
+
+        self.error_integral = np.zeros(6)
 
         # LQR Gain Matrices
-        Q = np.eye(6) * 0.05
-        R = np.eye(3) * 1000
-        A, B = generate_cwh_matrices(m, n, mode="3d")
+        Q = np.eye(12) * 1e-5
+        R = np.eye(3) * 1e5
+        C = np.eye(6)
+        A, B = generate_cwh_matrices(m, self.n, mode="3d")
+
+        A_int = np.vstack((np.hstack((A, np.zeros((6, 6)))), np.hstack((C, np.zeros((6, 6))))))
+        B_int = np.vstack((B, np.zeros((6, 3))))
         # Solve the Algebraic Ricatti equation for the given system
-        P = scipy.linalg.solve_continuous_are(A, B, Q, R)
+        P = scipy.linalg.solve_continuous_are(A_int, B_int, Q, R)
         # Construct the constain gain matrix, K
-        K = np.linalg.inv(R) @ (np.transpose(B) @ P)
-        self.K = to_jnp_array_jit(-K)
+        K = np.linalg.inv(R) @ (np.transpose(B_int) @ P)
+        self.K_1 = K[:, 0:6]
+        self.K_2 = K[:, 6:]
 
         super().__init__()
 
@@ -436,21 +441,11 @@ class NMTBackupController(RTABackupController):
         controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray], None] = None
     ) -> Tuple[jnp.ndarray, None]:
 
-        backup_action = lax.cond(state[7] >= self.fuel_limit, self.zero_u, self.lqr, state[0:6])
+        error = jnp.array([0, 0, 0, state[3] - self.n / 2 * state[1], state[4] + 2 * self.n * state[0], 0])
+        backup_action = -self.K_1 @ error - self.K_2 @ self.error_integral
+        self.error_integral = self.error_integral + error * step_size
 
         return backup_action, None
-
-    def zero_u(self, state):
-        """Zero control if fuel used is above limit
-        """
-        return jnp.array([0., 0., 0.]) + 0 * jnp.sum(state)
-
-    def lqr(self, state):
-        """LQR control to nearest eNMT.
-        Used when fuel use is above threshold but below limit
-        """
-        state_des = jnp.array([0, 0, 0, state[3] - self.n / 2 * state[1], state[4] + 2 * self.n * state[0], state[5]])
-        return self.K @ state_des
 
 
 class ConstraintCWHChiefCollision(ConstraintModule):

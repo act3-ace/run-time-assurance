@@ -7,6 +7,7 @@ from typing import Union
 import jax.numpy as jnp
 import numpy as np
 import scipy
+from jax import lax, vmap
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
@@ -140,7 +141,16 @@ class InspectionRTA(ExplicitASIFModule):
         constraint_dict = OrderedDict(
             [
                 ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
-                ('rel_vel', ConstraintCWH3dRelativeVelocity(v0=self.v0, v1=self.v1, v0_distance=self.v0_distance, bias=-1e-3)),
+                (
+                    'rel_vel',
+                    ConstraintCWH3dRelativeVelocity(
+                        v0=self.v0,
+                        v1=self.v1,
+                        v0_distance=self.v0_distance,
+                        bias=-2e-3,
+                        alpha=PolynomialConstraintStrengthener([0, 0, 0, .1])
+                    )
+                ),
                 (
                     'chief_sun',
                     ConstraintCWHConicKeepOutZone(
@@ -190,7 +200,11 @@ class InspectionRTA(ExplicitASIFModule):
                 get_vel=partial(self.get_v1_v2, i),
                 get_cone_vec=self.get_sun_vector,
                 cone_ang_vel=jnp.array([0, 0, self.sun_vel]),
-                bias=-1e-3
+                bias=-1e-3,
+                alpha=PolynomialConstraintStrengthener([0, 0, 0, .1])
+            )
+            constraint_dict[f'deputy_PSM_{i}'] = ConstraintPSMDeputy(
+                collision_radius=self.chief_radius + self.deputy_radius, m=self.m, n=self.n, dt=1, steps=100, deputy=i
             )
         return constraint_dict
 
@@ -229,11 +243,23 @@ class InspectionRTA(ExplicitASIFModule):
 
     def get_p1_p2(self, i: int, state: jnp.ndarray) -> jnp.ndarray:
         """Function to get p1-p2 vector"""
-        return state[0:3] - state[6 * i:6 * i + 3]
+        pos = state[0:3] - state[6 * i:6 * i + 3]
+        sign = self.get_sign(i, state)
+        return sign * pos
 
     def get_v1_v2(self, i: int, state: jnp.ndarray) -> jnp.ndarray:
         """Function to get v1-v2 vector"""
-        return state[3:6] - state[6 * i + 3:6 * i + 6]
+        vel = state[3:6] - state[6 * i + 3:6 * i + 6]
+        sign = self.get_sign(i, state)
+        return sign * vel
+
+    def get_sign(self, i, state):
+        """Gets sign for pos/vel"""
+        pos = state[0:3] - state[6 * i:6 * i + 3]
+        cone_vec = self.get_sun_vector(state)
+        p_hat = pos / jnp.linalg.norm(pos)
+        c_hat = cone_vec / jnp.linalg.norm(cone_vec)
+        return lax.cond(jnp.arccos(jnp.dot(p_hat, c_hat)) > jnp.pi / 2, lambda x: -1, lambda x: 1, 0)
 
 
 class ConstraintCWHDeputyCollision(ConstraintModule):
@@ -271,3 +297,72 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
     def _phi(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3] - state[int(self.deputy * 6):int(self.deputy * 6 + 3)]
         return jnp.linalg.norm(delta_p) - self.collision_radius
+
+
+class ConstraintPSMDeputy(ConstraintModule):
+    """Passively Safe Maneuver Constraint
+    Assures that deputy will never collide with another deputy if there is a fault and u=0 for both
+
+    Parameters
+    ----------
+    collision_radius: float
+        radius of collision for deputy spacecraft. m
+    m: float
+        mass of deputy. kg
+    n: float
+        mean motion. rad/sec
+    dt: float
+        time step for integration. sec
+    steps: int
+        total number of steps to integrate over
+    deputy: int
+        number of the deputy to avoid
+    alpha : ConstraintStrengthener
+        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
+        Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
+    """
+
+    def __init__(
+        self, collision_radius: float, m: float, n: float, dt: float, steps: int, deputy: int, alpha: ConstraintStrengthener = None
+    ):
+        self.n = n
+        self.collision_radius = collision_radius
+        self.dt = dt
+        self.steps = steps
+        self.deputy = deputy
+        A, _ = generate_cwh_matrices(m, n, mode="3d")
+        self.A = jnp.array(A)
+
+        if alpha is None:
+            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
+        super().__init__(alpha=alpha)
+
+    def _compute(self, state: jnp.ndarray) -> float:
+        vmapped_get_future_state = vmap(self.get_future_state, (None, 0), 0)
+        phi_array = vmapped_get_future_state(state, jnp.linspace(self.dt, self.steps * self.dt, self.steps))
+        return jnp.min(phi_array)
+
+    def get_future_state(self, state, t):
+        """Gets future state using closed form CWH dynamics (http://www.ae.utexas.edu/courses/ase366k/cw_equations.pdf)
+        """
+        x = (4 - 3 * jnp.cos(self.n * t)) * state[0] + jnp.sin(self.n * t
+                                                               ) * state[3] / self.n + 2 / self.n * (1 - jnp.cos(self.n * t)) * state[4]
+        y = 6 * (jnp.sin(self.n * t) - self.n * t) * state[0] + state[
+            1] - 2 / self.n * (1 - jnp.cos(self.n * t)) * state[3] + (4 * jnp.sin(self.n * t) - 3 * self.n * t) * state[4] / self.n
+        z = state[2] * jnp.cos(self.n * t) + state[5] / self.n * jnp.sin(self.n * t)
+
+        xd = (4 - 3 * jnp.cos(self.n * t)) * state[int(self.deputy * 6)] + jnp.sin(self.n * t) * state[
+            int(self.deputy * 6) + 3] / self.n + 2 / self.n * (1 - jnp.cos(self.n * t)) * state[int(self.deputy * 6) + 4]
+        yd = 6 * (jnp.sin(self.n * t) - self.n * t) * state[int(self.deputy * 6) + 0] + state[int(self.deputy * 6) + 1] - 2 / self.n * (
+            1 - jnp.cos(self.n * t)
+        ) * state[int(self.deputy * 6) + 3] + (4 * jnp.sin(self.n * t) - 3 * self.n * t) * state[int(self.deputy * 6) + 4] / self.n
+        zd = state[int(self.deputy * 6) + 2] * jnp.cos(self.n * t) + state[int(self.deputy * 6) + 5] / self.n * jnp.sin(self.n * t)
+
+        return jnp.linalg.norm([x - xd, y - yd, z - zd]) - self.collision_radius
+
+    def get_array(self, state: jnp.ndarray) -> float:
+        """Gets entire trajectory array
+        """
+        vmapped_get_future_state = vmap(self.get_future_state, (None, 0), 0)
+        phi_array = vmapped_get_future_state(state, jnp.linspace(0, self.steps * self.dt, self.steps + 1))
+        return phi_array

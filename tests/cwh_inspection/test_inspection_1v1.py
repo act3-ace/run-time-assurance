@@ -130,6 +130,105 @@ class Env():
         # If all states are safe, returns True
         return True
 
+    def run_fuel_sim(self):
+        self.rta = InspectionCascadedRTA()
+        x = np.array([-500., -500., 700., 0, 0, 0, 0, 0])
+        x_des = np.array([500, 500, 700, 0, 0, 0, 0, 0])
+        array = [x]
+        control = [np.zeros(3)]
+        intervening = [False]
+        for t in range(7000):
+            if t % 100 == 0:
+                x_des *= -1
+            u_des = self.u_des(x, x_des)
+            u_safe = self.rta.filter_control(x, self.dt, u_des)
+            x = np.array(self.inspection_rta._pred_state_fn(to_jnp_array_jit(x), self.dt, to_jnp_array_jit(u_safe)))
+            array = np.append(array, [x], axis=0)
+            control = np.append(control, [u_safe], axis=0)
+            intervening.append(self.rta.intervening)
+
+        paper_plot=False
+        fast_plot=True
+        if not paper_plot:
+            fig = plt.figure(figsize=(15, 15))
+            ax1 = fig.add_subplot(331, projection='3d')
+            ax4 = fig.add_subplot(334)
+            ax9 = fig.add_subplot(339)
+            lw = 2
+        else:
+            plt.rcParams.update({'font.size': 25, 'text.usetex': True})
+            lw = 4
+            hp = 0.1
+        
+        if not fast_plot:
+            if paper_plot:
+                fig = plt.figure()
+                ax1 = fig.add_subplot(111, projection='3d')
+            for i in range(len(array)-1):
+                ax1.plot(array[i:i+2, 0], array[i:i+2, 1], array[i:i+2, 2], color=plt.cm.cool(i/len(array)), linewidth=lw)
+            # max = np.max(np.abs(array[:, 0:3]))*1.1
+            max = 1100
+            ax1.plot(0, 0, 0, 'k*', markersize=15)
+            ax1.set_xlabel(r'$x$ [km]')
+            ax1.set_ylabel(r'$y$ [km]')
+            ax1.set_zlabel(r'$z$ [km]')
+            ax1.set_xticks([-1000, 0, 1000])
+            ax1.set_yticks([-1000, 0, 1000])
+            ax1.set_zticks([-1000, 0, 1000])
+            ax1.set_xticklabels([-1, 0, 1])
+            ax1.set_yticklabels([-1, 0, 1])
+            ax1.set_zticklabels([-1, 0, 1])
+            ax1.set_xlim([-max, max])
+            ax1.set_ylim([-max, max])
+            ax1.set_zlim([-max, max])
+            ax1.set_box_aspect((1,1,1))
+            ax1.grid(True)
+            if paper_plot:
+                ax1.xaxis.labelpad = 10
+                ax1.yaxis.labelpad = 10
+                ax1.zaxis.labelpad = 10
+                plt.tight_layout(pad=hp)
+
+        if paper_plot:
+            fig = plt.figure()
+            ax4 = fig.add_subplot(111)
+        xmax = len(array)*1.1
+        ymax = np.maximum(self.inspection_rta.fuel_limit, np.max(array[:, 7]))*1.1
+        ax4.plot(range(len(array)), array[:, 7], linewidth=lw)
+        ax4.fill_between([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax4.fill_between([0, xmax], [0, 0], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], color=(244/255, 249/255, 241/255))
+        ax4.plot([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], 'k--', linewidth=lw)
+        ax4.plot([0, xmax], [self.inspection_rta.fuel_switching_threshold, self.inspection_rta.fuel_switching_threshold], 'r--', linewidth=lw)
+        ax4.set_xlim([0, xmax])
+        ax4.set_ylim([0, ymax])
+        ax4.set_xlabel('Time [s]')
+        ax4.set_ylabel(r'Fuel Used ($m_f$) [kg]')
+        ax4.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
+
+        if paper_plot:
+            fig = plt.figure()
+            ax9 = fig.add_subplot(111)
+        xmax = len(array)*1.1
+        ymax = self.inspection_rta.u_max*1.2
+        ax9.plot(range(len(control)), control[:, 0], linewidth=lw, label=r'$F_x$')
+        ax9.plot(range(len(control)), control[:, 1], linewidth=lw, label=r'$F_y$')
+        ax9.plot(range(len(control)), control[:, 2], linewidth=lw, label=r'$F_z$')
+        ax9.fill_between([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax9.fill_between([0, xmax], [-ymax, -ymax], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(255/255, 239/255, 239/255))
+        ax9.fill_between([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(244/255, 249/255, 241/255))
+        ax9.plot([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], 'k--', linewidth=lw)
+        ax9.plot([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], 'k--', linewidth=lw)
+        ax9.set_xlim([0, xmax])
+        ax9.set_ylim([-ymax, ymax])
+        ax9.set_xlabel('Time [s]')
+        ax9.set_ylabel(r'$\mathbf{u}$ [N]')
+        ax9.grid(True)
+        ax9.legend()
+        if paper_plot:
+            plt.tight_layout(pad=hp)
+
     def plotter(self, array, control, intervening, paper_plot=False, fast_plot=True):
         if not paper_plot:
             fig = plt.figure(figsize=(15, 15))
@@ -144,7 +243,7 @@ class Env():
             ax9 = fig.add_subplot(339)
             lw = 2
         else:
-            plt.rcParams.update({'font.size': 30, 'text.usetex': True, 'figure.figsize': [6.4, 6]})
+            plt.rcParams.update({'font.size': 25, 'text.usetex': True})
             lw = 4
             hp = 0.1
         
@@ -158,37 +257,69 @@ class Env():
             # max = np.max(np.abs(array[:, 0:3]))*1.1
             max = 1100
             ax1.plot(0, 0, 0, 'k*', markersize=15)
-            ax1.set_xlabel(r'$x$ [m]')
-            ax1.set_ylabel(r'$y$ [m]')
-            ax1.set_zlabel(r'$z$ [m]')
+            ax1.set_xlabel(r'$x$ [km]')
+            ax1.set_ylabel(r'$y$ [km]')
+            ax1.set_zlabel(r'$z$ [km]')
+            ax1.set_xticks([-1000, 0, 1000])
+            ax1.set_yticks([-1000, 0, 1000])
+            ax1.set_zticks([-1000, 0, 1000])
+            ax1.set_xticklabels([-1, 0, 1])
+            ax1.set_yticklabels([-1, 0, 1])
+            ax1.set_zticklabels([-1, 0, 1])
             ax1.set_xlim([-max, max])
             ax1.set_ylim([-max, max])
             ax1.set_zlim([-max, max])
             ax1.set_box_aspect((1,1,1))
             ax1.grid(True)
             if paper_plot:
+                ax1.xaxis.labelpad = 10
+                ax1.yaxis.labelpad = 10
+                ax1.zaxis.labelpad = 10
                 plt.tight_layout(pad=hp)
 
         if paper_plot:
             fig = plt.figure()
             ax2 = fig.add_subplot(111)
-        v = np.empty([len(array), 2])
-        for j in range(len(array)):
-            v[j, :] = [np.linalg.norm(array[j, 0:3]), np.linalg.norm(array[j, 3:6])]
-        ax2.plot(range(len(array)), v[:, 0], linewidth=lw)
-        xmax = len(array)*1.1
-        ymax = np.max(v[:, 0])*1.1
-        ax2.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
-        ax2.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
-        ax2.plot([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], 'k--', linewidth=lw)
-        ax2.set_xlim([0, xmax])
-        ax2.set_xlabel('Time [s]')
-        ax2.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
-        ax2.set_yscale('log')
-        ax2.set_ylim([6, ymax])
-        ax2.grid(True)
-        if paper_plot:
+            if not fast_plot:
+                for i in range(0, len(array), 3):
+                    r = self.inspection_rta.constraints["PSM"].get_array(array[i])+self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius
+                    ax2.plot(range(i, len(r)+i), r, 'c', linewidth=0.5)
+            v = np.empty([len(array), 2])
+            for j in range(len(array)):
+                v[j, :] = [np.linalg.norm(array[j, 0:3]), np.linalg.norm(array[j, 3:6])]
+            ax2.plot(range(len(array)), v[:, 0], linewidth=lw, label=r'$\mathbf{p}_{act}$')
+            ax2.plot(-1, -1, 'c', linewidth=0.5, label=r'$\mathbf{p}_{NM}$')
+            xmax = len(array)*1.1
+            ymax = self.inspection_rta.r_max * 1.4
+            ax2.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [self.inspection_rta.r_max, self.inspection_rta.r_max], color=(244/255, 249/255, 241/255))
+            ax2.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
+            ax2.fill_between([0, xmax], [self.inspection_rta.r_max, self.inspection_rta.r_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
+            ax2.plot([0, xmax], [self.inspection_rta.r_max, self.inspection_rta.r_max], 'k--', linewidth=lw)
+            ax2.plot([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], 'k--', linewidth=lw)
+            ax2.set_xlim([0, xmax])
+            ax2.set_xlabel('Time [s]')
+            ax2.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
+            ax2.set_yscale('log')
+            ax2.set_ylim([6, ymax])
+            ax2.grid(True)
+            ax2.legend()
             plt.tight_layout(pad=hp)
+        if not paper_plot:
+            v = np.empty([len(array), 2])
+            for j in range(len(array)):
+                v[j, :] = [np.linalg.norm(array[j, 0:3]), np.linalg.norm(array[j, 3:6])]
+            ax2.plot(range(len(array)), v[:, 0], linewidth=lw)
+            xmax = len(array)*1.1
+            ymax = np.max(v[:, 0])*1.1
+            ax2.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
+            ax2.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
+            ax2.plot([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], 'k--', linewidth=lw)
+            ax2.set_xlim([0, xmax])
+            ax2.set_xlabel('Time [s]')
+            ax2.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
+            ax2.set_yscale('log')
+            ax2.set_ylim([6, ymax])
+            ax2.grid(True)
 
         if paper_plot:
             fig = plt.figure()
@@ -220,7 +351,7 @@ class Env():
         ax4.set_xlim([0, xmax])
         ax4.set_ylim([0, ymax])
         ax4.set_xlabel('Time [s]')
-        ax4.set_ylabel(r'Fuel Used ($\dot{m}_f$) [kg]')
+        ax4.set_ylabel(r'Fuel Used ($m_f$) [kg]')
         ax4.grid(True)
         if paper_plot:
             plt.tight_layout(pad=hp)
@@ -243,59 +374,41 @@ class Env():
         ax5.set_xlim([0, xmax])
         ax5.set_ylim([0, ymax])
         ax5.set_xlabel('Time [s]')
-        ax5.set_ylabel(r'Angle to Sun ($\theta_{EZ}}$) [degrees]')
+        ax5.set_ylabel(r'Angle to Sun ($\theta_{EZ}$) [degrees]')
         ax5.grid(True)
         if paper_plot:
             plt.tight_layout(pad=hp)
 
-        if paper_plot:
-            fig = plt.figure()
-            ax6 = fig.add_subplot(111)
-        ax6.plot(range(len(array)), v[:, 0], linewidth=lw)
-        xmax = len(array)*1.1
-        ymax = np.maximum(np.max(v[:, 0])*1.1, self.inspection_rta.r_max*1.1)
-        ax6.fill_between([0, xmax], [self.inspection_rta.r_max, self.inspection_rta.r_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax6.fill_between([0, xmax], [0, 0], [self.inspection_rta.r_max, self.inspection_rta.r_max], color=(244/255, 249/255, 241/255))
-        ax6.plot([0, xmax], [self.inspection_rta.r_max, self.inspection_rta.r_max], 'k--', linewidth=lw)
-        ax6.set_xlim([0, xmax])
-        ax6.set_xlabel('Time [s]')
-        ax6.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
-        ax6.set_ylim([0, ymax])
-        ax6.grid(True)
-        if paper_plot:
-            plt.tight_layout(pad=hp)
-
-        # h = []
-        # phi = []
-        # for i in range(len(array)):
-        #     h.append(self.inspection_rta.constraints["sun"](array[i]))
-        #     phi.append(self.inspection_rta.constraints["sun"].phi(array[i]))
-        # ax7.plot(range(len(h)), h, linewidth=lw, label='h')
-        # ax7.plot(range(len(phi)), phi, linewidth=lw, label='phi')
-        # ax7.grid(True)
-        # ax7.legend()
+        if not paper_plot:
+            ax6.plot(range(len(array)), v[:, 0], linewidth=lw)
+            xmax = len(array)*1.1
+            ymax = np.maximum(np.max(v[:, 0])*1.1, self.inspection_rta.r_max*1.1)
+            ax6.fill_between([0, xmax], [self.inspection_rta.r_max, self.inspection_rta.r_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
+            ax6.fill_between([0, xmax], [0, 0], [self.inspection_rta.r_max, self.inspection_rta.r_max], color=(244/255, 249/255, 241/255))
+            ax6.plot([0, xmax], [self.inspection_rta.r_max, self.inspection_rta.r_max], 'k--', linewidth=lw)
+            ax6.set_xlim([0, xmax])
+            ax6.set_xlabel('Time [s]')
+            ax6.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
+            ax6.set_ylim([0, ymax])
+            ax6.grid(True)
 
         if not fast_plot:
-            if paper_plot:
-                fig = plt.figure()
-                ax7 = fig.add_subplot(111)
-            for i in range(0, len(array), 3):
-                r = self.inspection_rta.constraints["PSM"].get_array(array[i])+self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius
-                ax7.plot(range(i, len(r)+i), r, 'c', linewidth=0.5)
-            ax7.plot(range(len(array)), v[:, 0], linewidth=lw)
-            xmax = len(array)*1.1
-            ymax = np.max(v[:, 0])*1.1
-            ax7.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
-            ax7.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
-            ax7.plot([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], 'k--', linewidth=lw)
-            ax7.set_xlim([0, xmax])
-            ax7.set_xlabel('Time [s]')
-            ax7.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
-            ax7.set_yscale('log')
-            ax7.set_ylim([6, ymax])
-            ax7.grid(True)
-            if paper_plot:
-                plt.tight_layout(pad=hp)
+            if not paper_plot:
+                for i in range(0, len(array), 3):
+                    r = self.inspection_rta.constraints["PSM"].get_array(array[i])+self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius
+                    ax7.plot(range(i, len(r)+i), r, 'c', linewidth=0.5)
+                ax7.plot(range(len(array)), v[:, 0], linewidth=lw)
+                xmax = len(array)*1.1
+                ymax = np.max(v[:, 0])*1.1
+                ax7.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
+                ax7.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
+                ax7.plot([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], 'k--', linewidth=lw)
+                ax7.set_xlim([0, xmax])
+                ax7.set_xlabel('Time [s]')
+                ax7.set_ylabel(r'Relative Dist. ($\vert \vert \mathbf{p} \vert \vert_2$) [m]')
+                ax7.set_yscale('log')
+                ax7.set_ylim([6, ymax])
+                ax7.grid(True)
 
         if paper_plot:
             fig = plt.figure()
@@ -361,6 +474,7 @@ if __name__ == '__main__':
     env = Env(rta)
 
     env.run_episode()
+    # env.run_fuel_sim()
     plt.show()
 
     # list_of_files = glob.glob('*.csv')
