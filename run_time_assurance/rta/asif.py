@@ -13,7 +13,9 @@ from typing import Any, Dict, Union
 import jax.numpy as jnp
 import numpy as np
 import quadprog
+import scipy
 from jax import jacfwd, jit, vmap
+from jax.experimental.ode import odeint
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
@@ -292,6 +294,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             i.e. the n points closest to violating a safety constraint
     backup_controller : RTABackupController
         backup controller object utilized by rta module to generate backup control
+    integration_method: str, optional
+        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -302,11 +306,13 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         skip_length: int = 1,
         subsample_constraints_num_least: int = None,
         backup_controller: RTABackupController,
+        integration_method: str = 'RK45_JAX',
         **kwargs: Any,
     ):
         self.backup_window = backup_window
         self.num_check_all = num_check_all
         self.skip_length = skip_length
+        self.integration_method = integration_method
 
         assert (subsample_constraints_num_least is None) or \
                (isinstance(subsample_constraints_num_least, int) and subsample_constraints_num_least > 0), \
@@ -341,12 +347,19 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         else:
             self._generate_ineq_constraint_mats_fn = self._generate_ineq_constraint_mats
 
-        if self.jit_compile_dict.get('pred_state', False):
+        if self.integration_method in ('Euler', 'RK45_JAX'):
+            default_int = True
+        elif self.integration_method == 'RK45':
+            default_int = False
+        else:
+            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
+
+        if self.jit_compile_dict.get('pred_state', default_int):
             self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
         else:
             self._pred_state_fn = self._pred_state
 
-        if self.jit_compile_dict.get('integrate', False):
+        if self.jit_compile_dict.get('integrate', default_int):
             self._integrate_fn = jit(self.integrate, static_argnames=['step_size', 'Nsteps'])
         else:
             self._integrate_fn = self.integrate
@@ -540,6 +553,73 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         self.backup_controller_restore()
 
         return traj_states, traj_sensitivity
+
+    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        if self.integration_method == 'RK45':
+            sol = scipy.integrate.solve_ivp(self.state_dot_fn, (0, step_size), state, args=(control, ))
+            next_state_vec = sol.y[:, -1]
+            out = to_jnp_array_jit(next_state_vec)
+        elif self.integration_method == 'Euler':
+            state_dot = self.state_dot_fn(0, state, control)
+            out = state + state_dot * step_size
+        elif self.integration_method == 'RK45_JAX':
+            sol = odeint(self.state_dot_fn_jax, state, jnp.linspace(0., step_size, 11), control)
+            out = sol[-1, :]
+        else:
+            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
+        return out
+
+    def state_dot_fn(
+        self,
+        t: float,  # pylint: disable=unused-argument
+        state: Union[np.ndarray, jnp.ndarray],
+        control: Union[np.ndarray, jnp.ndarray]
+    ) -> Union[np.ndarray, jnp.ndarray]:
+        """
+        Computes the instantaneous time derivative of the state vector for scipy solve_ivp
+
+        Parameters
+        ----------
+        t : float
+            Time in seconds since the beginning of the simulation step.
+            Note, this is NOT the total simulation time but the time within the individual step.
+        state : Union[np.ndarray, jnp.ndarray]
+            Current state vector at time t.
+        control : Union[np.ndarray, jnp.ndarray]
+            Control vector.
+
+        Returns
+        -------
+        Union[np.ndarray, jnp.ndarray]
+            Instantaneous time derivative of the state vector.
+        """
+        return self.state_transition_system(to_jnp_array_jit(state)) + self.state_transition_input(to_jnp_array_jit(state)) @ control
+
+    def state_dot_fn_jax(
+        self,
+        state: jnp.ndarray,
+        t: float,  # pylint: disable=unused-argument
+        control: jnp.ndarray
+    ) -> jnp.ndarray:
+        """
+        Computes the instantaneous time derivative of the state vector for jax odeint
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            Current state vector at time t.
+        t : float
+            Time in seconds since the beginning of the simulation step.
+            Note, this is NOT the total simulation time but the time within the individual step.
+        control : jnp.ndarray
+            Control vector.
+
+        Returns
+        -------
+        jnp.ndarray
+            Instantaneous time derivative of the state vector.
+        """
+        return self.state_transition_system(state) + self.state_transition_input(state) @ control
 
 
 def get_lower_bound_ineq_constraint_mats(bound: Union[int, float, np.ndarray, jnp.ndarray],
