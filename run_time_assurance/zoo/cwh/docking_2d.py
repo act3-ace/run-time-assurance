@@ -474,7 +474,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
             backup_controller = Docking2dStopLQRBackupController(m=self.m, n=self.n)
 
         if jit_compile_dict is None:
-            jit_compile_dict = {'generate_barrier_constraint_mats': False, 'generate_ineq_constraint_mats': True}
+            jit_compile_dict = {'generate_ineq_constraint_mats': True}
 
         super().__init__(
             *args,
