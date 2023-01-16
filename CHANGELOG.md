@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/act3-ace/run-time-assurance/compare/v1.4.0...v1.5.0) (2023-01-16)
+
+
+### Features
+
+* **implicit asif:** Fix subsample_constraints for implicit ASIF ([4f6a7f4](https://github.com/act3-ace/run-time-assurance/commit/4f6a7f4cc2ddee25c6c9c81c90efd014a47010b3))
+
 # [1.4.0](https://github.com/act3-ace/run-time-assurance/compare/v1.3.0...v1.4.0) (2023-01-16)
 
 
