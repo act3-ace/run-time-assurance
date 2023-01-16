@@ -342,6 +342,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         """
         self._jacobian = jit(jacfwd(self._backup_state_transition), static_argnums=[1], static_argnames=['step_size'])
 
+        self.jit_compile_dict.setdefault('generate_barrier_constraint_mats', False)
+
         if self.jit_compile_dict.get('generate_ineq_constraint_mats', True):
             self._generate_ineq_constraint_mats_fn = jit(self._generate_ineq_constraint_mats, static_argnames=['num_steps'])
         else:
@@ -416,7 +418,9 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         """
         num_steps = int(self.backup_window / step_size) + 1
         traj_states, traj_sensitivities = self._integrate_fn(state, step_size, num_steps)
-        return self._generate_ineq_constraint_mats_fn(state, num_steps, traj_states, traj_sensitivities)
+        ineq_weight, ineq_constant = self._generate_ineq_constraint_mats_fn(state, num_steps, traj_states, traj_sensitivities)
+
+        return ineq_weight, ineq_constant
 
     def _generate_ineq_constraint_mats(self, state: jnp.ndarray, num_steps: int, traj_states: jnp.ndarray,
                                        traj_sensitivities: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -441,38 +445,38 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
         """
-        ineq_weight_barrier = jnp.empty((0, self.control_dim))
-        ineq_constant_barrier = jnp.empty(0)
+        constraint_list = list(self.constraints.values())
+        num_constraints = len(self.constraints)
 
         check_points = jnp.hstack(
-            (
-                jnp.array(range(0, self.num_check_all + 1)),
-                jnp.array(range(self.num_check_all + self.skip_length, num_steps, self.skip_length))
-            )
+            (jnp.array(range(0, self.num_check_all)), jnp.array(range(self.num_check_all + 1, num_steps, self.skip_length)))
         ).astype(int)
+        num_points = len(check_points)
 
-        # resample checkpoints to the trajectory points with the min constraint values
-        if self.subsample_constraints_num_least is not None:
-            # evaluate constraints at all trajectory points
-            constraint_vals = []
-            for i in check_points:
-                traj_state = traj_states[i]
-                constraint_val = min([c(traj_state) for c in self.constraints.values()])
-                constraint_vals.append(constraint_val)
-
-            constraint_sorted_idxs = jnp.argsort(constraint_vals)
-            check_points = [check_points[i] for i in constraint_sorted_idxs[0:self.subsample_constraints_num_least]]
+        ineq_weight_barrier = jnp.empty((num_constraints * num_points, self.control_dim))
+        ineq_constant_barrier = jnp.empty(num_constraints * num_points)
+        constraint_vals = jnp.empty((num_constraints, num_points))
 
         traj_states = jnp.array(traj_states)[check_points, :]
         traj_sensitivities = jnp.array(traj_sensitivities)[check_points, :]
 
-        constraint_list = list(self.constraints.values())
-        num_constraints = len(self.constraints)
         for i in range(num_constraints):
-            constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0), (0, 0))
-            point_ineq_weight, point_ineq_constant = constraint_vmapped(constraint_list[i], state, traj_states, traj_sensitivities)
-            ineq_weight_barrier = jnp.concatenate((ineq_weight_barrier, point_ineq_weight), axis=0)
-            ineq_constant_barrier = jnp.concatenate((ineq_constant_barrier, point_ineq_constant), axis=0)
+            constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0), (0, 0, 0))
+            point_ineq_weight, point_ineq_constant, point_constraint_vals = constraint_vmapped(
+                constraint_list[i], state, traj_states, traj_sensitivities)
+            ineq_weight_barrier = ineq_weight_barrier.at[i * num_points:(i + 1) * num_points, :].set(point_ineq_weight)
+            ineq_constant_barrier = ineq_constant_barrier.at[i * num_points:(i + 1) * num_points].set(point_ineq_constant)
+            constraint_vals = constraint_vals.at[i, :].set(point_constraint_vals)
+
+        if self.subsample_constraints_num_least is not None:
+            constraint_sorted_idxs = jnp.argsort(constraint_vals)
+            use_idxs = constraint_sorted_idxs[:, 0:self.subsample_constraints_num_least]
+
+            constraint_rows = jnp.arange(constraint_vals.shape[0])[:, None]
+            final_idxs = constraint_rows * constraint_vals.shape[1] + use_idxs
+
+            ineq_weight_barrier = ineq_weight_barrier[final_idxs.flatten(), :]
+            ineq_constant_barrier = ineq_constant_barrier[final_idxs.flatten()]
 
         ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
         ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
@@ -480,7 +484,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
     def invariance_constraints(
         self, constraint: ConstraintModule, initial_state: jnp.ndarray, traj_state: jnp.ndarray, traj_sensitivity: jnp.ndarray
-    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
         """Computes safety constraint invariance constraints via Nagumo's condition for a point in the backup trajectory
 
         Parameters
@@ -500,6 +504,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             matix C.T of quadprog inequality constraint C.T x >= b
         jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
+        float
+            constraint value at trajectory state
         """
         traj_state_array = jnp.array(traj_state)
         traj_sensitivity_array = jnp.array(traj_sensitivity)
@@ -513,7 +519,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         ineq_constant = grad_x @ (traj_sensitivity_array @ f_x0) \
             + constraint.alpha(constraint(traj_state_array))
 
-        return ineq_weight, -ineq_constant
+        return ineq_weight, -ineq_constant, constraint(traj_state_array)
 
     def integrate(self, state: jnp.ndarray, step_size: float, Nsteps: int) -> tuple[list, list]:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
