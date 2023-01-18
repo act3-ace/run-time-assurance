@@ -6,6 +6,7 @@ from typing import Dict, Tuple, Union
 import jax.numpy as jnp
 import numpy as np
 import scipy
+from jax.experimental.ode import odeint
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
@@ -93,11 +94,11 @@ class Docking2dRTAMixin:
                 raise ValueError('pred_state uses RK45 integration and can not be compiled using jit')
             if jit_compile_dict.get('integrate'):
                 raise ValueError('integrate uses RK45 integration and can not be compiled using jit')
-        elif integration_method == 'Euler':
+        elif integration_method in ('Euler', 'RK45_JAX'):
             jit_compile_dict.setdefault('pred_state', True)
             jit_compile_dict.setdefault('integrate', True)
         else:
-            raise ValueError('integration_method must be either RK45 or Euler')
+            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
 
     def _setup_docking_constraints(self, v0: float, v1: float, v0_distance: float, x_vel_limit: float, y_vel_limit: float) -> OrderedDict:
         """generates constraints used in the docking problem"""
@@ -117,8 +118,11 @@ class Docking2dRTAMixin:
         elif integration_method == 'Euler':
             state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
             out = state + state_dot * step_size
+        elif integration_method == 'RK45_JAX':
+            sol = odeint(self._docking_state_dot, state, jnp.linspace(0., step_size, 11), control)
+            out = sol[-1, :]
         else:
-            raise ValueError('integration_method must be either RK45 or Euler')
+            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
         return out
 
     def _docking_f_x(self, state: jnp.ndarray) -> jnp.ndarray:
@@ -128,6 +132,15 @@ class Docking2dRTAMixin:
     def _docking_g_x(self, _: jnp.ndarray) -> jnp.ndarray:
         """Computes the control input contribution to the state transition: g(x) of dx/dt = f(x) + g(x)u"""
         return jnp.copy(self.B)
+
+    def _docking_state_dot(
+        self,
+        state: jnp.ndarray,
+        t: float,  # pylint: disable=unused-argument
+        control: jnp.ndarray
+    ) -> jnp.ndarray:
+        """Computes the instantaneous time derivative of the state vector for jax odeint"""
+        return self._docking_f_x(state) + self._docking_g_x(state) @ control
 
 
 class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
@@ -161,7 +174,7 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
     jit_compile_dict: Dict[str, bool], optional
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     integration_method: str, optional
-        Integration method to use, either 'RK45' or 'Euler'
+        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -178,7 +191,7 @@ class Docking2dExplicitSwitchingRTA(ExplicitSimplexModule, Docking2dRTAMixin):
         control_bounds_low: Union[float, np.ndarray] = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
-        integration_method: str = 'RK45',
+        integration_method: str = 'RK45_JAX',
         **kwargs
     ):
         self.m = m
@@ -249,7 +262,7 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
     jit_compile_dict: Dict[str, bool], optional
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     integration_method: str, optional
-        Integration method to use, either 'RK45' or 'Euler'
+        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -267,7 +280,7 @@ class Docking2dImplicitSwitchingRTA(ImplicitSimplexModule, Docking2dRTAMixin):
         control_bounds_low: Union[float, np.ndarray] = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
-        integration_method: str = 'RK45',
+        integration_method: str = 'RK45_JAX',
         **kwargs
     ):
 
@@ -382,9 +395,6 @@ class Docking2dExplicitOptimizationRTA(ExplicitASIFModule, Docking2dRTAMixin):
     def _setup_constraints(self) -> OrderedDict:
         return self._setup_docking_constraints(self.v0, self.v1, self.v0_distance, self.x_vel_limit, self.y_vel_limit)
 
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        pass
-
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         return self._docking_f_x(state)
 
@@ -437,7 +447,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
     jit_compile_dict: Dict[str, bool], optional
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     integration_method: str, optional
-        Integration method to use, either 'RK45' or 'Euler'
+        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -457,7 +467,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
         control_bounds_low: Union[float, np.ndarray] = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
-        integration_method: str = 'RK45',
+        integration_method: str = 'RK45_JAX',
         **kwargs
     ):
         self.m = m
@@ -468,13 +478,12 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
 
         self.x_vel_limit = x_vel_limit
         self.y_vel_limit = y_vel_limit
-        self.integration_method = integration_method
 
         if backup_controller is None:
             backup_controller = Docking2dStopLQRBackupController(m=self.m, n=self.n)
 
         if jit_compile_dict is None:
-            jit_compile_dict = {'generate_barrier_constraint_mats': False, 'generate_ineq_constraint_mats': True}
+            jit_compile_dict = {'generate_ineq_constraint_mats': True}
 
         super().__init__(
             *args,
@@ -486,6 +495,7 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
             jit_compile_dict=jit_compile_dict,
+            integration_method=integration_method,
             **kwargs
         )
 
@@ -494,9 +504,6 @@ class Docking2dImplicitOptimizationRTA(ImplicitASIFModule, Docking2dRTAMixin):
 
     def _setup_constraints(self) -> OrderedDict:
         return self._setup_docking_constraints(self.v0, self.v1, self.v0_distance, self.x_vel_limit, self.y_vel_limit)
-
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control, self.integration_method)
 
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         return self._docking_f_x(state)

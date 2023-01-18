@@ -208,9 +208,6 @@ class InspectionRTA(ExplicitASIFModule):
             )
         return constraint_dict
 
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        pass
-
     def state_transition_system(self, state: jnp.ndarray) -> jnp.ndarray:
         cwh = self.A_n @ state[0:self.num_deputies * 6]
         return jnp.concatenate((cwh, jnp.array([self.sun_vel])))

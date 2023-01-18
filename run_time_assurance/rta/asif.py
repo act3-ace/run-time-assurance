@@ -13,7 +13,9 @@ from typing import Any, Dict, Union
 import jax.numpy as jnp
 import numpy as np
 import quadprog
+import scipy
 from jax import jacfwd, jit, vmap
+from jax.experimental.ode import odeint
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
@@ -292,6 +294,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             i.e. the n points closest to violating a safety constraint
     backup_controller : RTABackupController
         backup controller object utilized by rta module to generate backup control
+    integration_method: str, optional
+        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -302,11 +306,13 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         skip_length: int = 1,
         subsample_constraints_num_least: int = None,
         backup_controller: RTABackupController,
+        integration_method: str = 'RK45_JAX',
         **kwargs: Any,
     ):
         self.backup_window = backup_window
         self.num_check_all = num_check_all
         self.skip_length = skip_length
+        self.integration_method = integration_method
 
         assert (subsample_constraints_num_least is None) or \
                (isinstance(subsample_constraints_num_least, int) and subsample_constraints_num_least > 0), \
@@ -336,17 +342,26 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         """
         self._jacobian = jit(jacfwd(self._backup_state_transition), static_argnums=[1], static_argnames=['step_size'])
 
+        self.jit_compile_dict.setdefault('generate_barrier_constraint_mats', False)
+
         if self.jit_compile_dict.get('generate_ineq_constraint_mats', True):
             self._generate_ineq_constraint_mats_fn = jit(self._generate_ineq_constraint_mats, static_argnames=['num_steps'])
         else:
             self._generate_ineq_constraint_mats_fn = self._generate_ineq_constraint_mats
 
-        if self.jit_compile_dict.get('pred_state', False):
+        if self.integration_method in ('Euler', 'RK45_JAX'):
+            default_int = True
+        elif self.integration_method == 'RK45':
+            default_int = False
+        else:
+            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
+
+        if self.jit_compile_dict.get('pred_state', default_int):
             self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
         else:
             self._pred_state_fn = self._pred_state
 
-        if self.jit_compile_dict.get('integrate', False):
+        if self.jit_compile_dict.get('integrate', default_int):
             self._integrate_fn = jit(self.integrate, static_argnames=['step_size', 'Nsteps'])
         else:
             self._integrate_fn = self.integrate
@@ -403,7 +418,9 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         """
         num_steps = int(self.backup_window / step_size) + 1
         traj_states, traj_sensitivities = self._integrate_fn(state, step_size, num_steps)
-        return self._generate_ineq_constraint_mats_fn(state, num_steps, traj_states, traj_sensitivities)
+        ineq_weight, ineq_constant = self._generate_ineq_constraint_mats_fn(state, num_steps, traj_states, traj_sensitivities)
+
+        return ineq_weight, ineq_constant
 
     def _generate_ineq_constraint_mats(self, state: jnp.ndarray, num_steps: int, traj_states: jnp.ndarray,
                                        traj_sensitivities: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -428,38 +445,38 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
         """
-        ineq_weight_barrier = jnp.empty((0, self.control_dim))
-        ineq_constant_barrier = jnp.empty(0)
+        constraint_list = list(self.constraints.values())
+        num_constraints = len(self.constraints)
 
         check_points = jnp.hstack(
-            (
-                jnp.array(range(0, self.num_check_all + 1)),
-                jnp.array(range(self.num_check_all + self.skip_length, num_steps, self.skip_length))
-            )
+            (jnp.array(range(0, self.num_check_all)), jnp.array(range(self.num_check_all + 1, num_steps, self.skip_length)))
         ).astype(int)
+        num_points = len(check_points)
 
-        # resample checkpoints to the trajectory points with the min constraint values
-        if self.subsample_constraints_num_least is not None:
-            # evaluate constraints at all trajectory points
-            constraint_vals = []
-            for i in check_points:
-                traj_state = traj_states[i]
-                constraint_val = min([c(traj_state) for c in self.constraints.values()])
-                constraint_vals.append(constraint_val)
-
-            constraint_sorted_idxs = jnp.argsort(constraint_vals)
-            check_points = [check_points[i] for i in constraint_sorted_idxs[0:self.subsample_constraints_num_least]]
+        ineq_weight_barrier = jnp.empty((num_constraints * num_points, self.control_dim))
+        ineq_constant_barrier = jnp.empty(num_constraints * num_points)
+        constraint_vals = jnp.empty((num_constraints, num_points))
 
         traj_states = jnp.array(traj_states)[check_points, :]
         traj_sensitivities = jnp.array(traj_sensitivities)[check_points, :]
 
-        constraint_list = list(self.constraints.values())
-        num_constraints = len(self.constraints)
         for i in range(num_constraints):
-            constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0), (0, 0))
-            point_ineq_weight, point_ineq_constant = constraint_vmapped(constraint_list[i], state, traj_states, traj_sensitivities)
-            ineq_weight_barrier = jnp.concatenate((ineq_weight_barrier, point_ineq_weight), axis=0)
-            ineq_constant_barrier = jnp.concatenate((ineq_constant_barrier, point_ineq_constant), axis=0)
+            constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0), (0, 0, 0))
+            point_ineq_weight, point_ineq_constant, point_constraint_vals = constraint_vmapped(
+                constraint_list[i], state, traj_states, traj_sensitivities)
+            ineq_weight_barrier = ineq_weight_barrier.at[i * num_points:(i + 1) * num_points, :].set(point_ineq_weight)
+            ineq_constant_barrier = ineq_constant_barrier.at[i * num_points:(i + 1) * num_points].set(point_ineq_constant)
+            constraint_vals = constraint_vals.at[i, :].set(point_constraint_vals)
+
+        if self.subsample_constraints_num_least is not None:
+            constraint_sorted_idxs = jnp.argsort(constraint_vals)
+            use_idxs = constraint_sorted_idxs[:, 0:self.subsample_constraints_num_least]
+
+            constraint_rows = jnp.arange(constraint_vals.shape[0])[:, None]
+            final_idxs = constraint_rows * constraint_vals.shape[1] + use_idxs
+
+            ineq_weight_barrier = ineq_weight_barrier[final_idxs.flatten(), :]
+            ineq_constant_barrier = ineq_constant_barrier[final_idxs.flatten()]
 
         ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
         ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
@@ -467,7 +484,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
 
     def invariance_constraints(
         self, constraint: ConstraintModule, initial_state: jnp.ndarray, traj_state: jnp.ndarray, traj_sensitivity: jnp.ndarray
-    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
         """Computes safety constraint invariance constraints via Nagumo's condition for a point in the backup trajectory
 
         Parameters
@@ -487,6 +504,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             matix C.T of quadprog inequality constraint C.T x >= b
         jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
+        float
+            constraint value at trajectory state
         """
         traj_state_array = jnp.array(traj_state)
         traj_sensitivity_array = jnp.array(traj_sensitivity)
@@ -500,7 +519,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         ineq_constant = grad_x @ (traj_sensitivity_array @ f_x0) \
             + constraint.alpha(constraint(traj_state_array))
 
-        return ineq_weight, -ineq_constant
+        return ineq_weight, -ineq_constant, constraint(traj_state_array)
 
     def integrate(self, state: jnp.ndarray, step_size: float, Nsteps: int) -> tuple[list, list]:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
@@ -540,6 +559,73 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         self.backup_controller_restore()
 
         return traj_states, traj_sensitivity
+
+    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        if self.integration_method == 'RK45':
+            sol = scipy.integrate.solve_ivp(self.state_dot_fn, (0, step_size), state, args=(control, ))
+            next_state_vec = sol.y[:, -1]
+            out = to_jnp_array_jit(next_state_vec)
+        elif self.integration_method == 'Euler':
+            state_dot = self.state_dot_fn(0, state, control)
+            out = state + state_dot * step_size
+        elif self.integration_method == 'RK45_JAX':
+            sol = odeint(self.state_dot_fn_jax, state, jnp.linspace(0., step_size, 11), control)
+            out = sol[-1, :]
+        else:
+            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
+        return out
+
+    def state_dot_fn(
+        self,
+        t: float,  # pylint: disable=unused-argument
+        state: Union[np.ndarray, jnp.ndarray],
+        control: Union[np.ndarray, jnp.ndarray]
+    ) -> Union[np.ndarray, jnp.ndarray]:
+        """
+        Computes the instantaneous time derivative of the state vector for scipy solve_ivp
+
+        Parameters
+        ----------
+        t : float
+            Time in seconds since the beginning of the simulation step.
+            Note, this is NOT the total simulation time but the time within the individual step.
+        state : Union[np.ndarray, jnp.ndarray]
+            Current state vector at time t.
+        control : Union[np.ndarray, jnp.ndarray]
+            Control vector.
+
+        Returns
+        -------
+        Union[np.ndarray, jnp.ndarray]
+            Instantaneous time derivative of the state vector.
+        """
+        return self.state_transition_system(to_jnp_array_jit(state)) + self.state_transition_input(to_jnp_array_jit(state)) @ control
+
+    def state_dot_fn_jax(
+        self,
+        state: jnp.ndarray,
+        t: float,  # pylint: disable=unused-argument
+        control: jnp.ndarray
+    ) -> jnp.ndarray:
+        """
+        Computes the instantaneous time derivative of the state vector for jax odeint
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            Current state vector at time t.
+        t : float
+            Time in seconds since the beginning of the simulation step.
+            Note, this is NOT the total simulation time but the time within the individual step.
+        control : jnp.ndarray
+            Control vector.
+
+        Returns
+        -------
+        jnp.ndarray
+            Instantaneous time derivative of the state vector.
+        """
+        return self.state_transition_system(state) + self.state_transition_input(state) @ control
 
 
 def get_lower_bound_ineq_constraint_mats(bound: Union[int, float, np.ndarray, jnp.ndarray],
