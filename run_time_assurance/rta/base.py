@@ -170,6 +170,8 @@ class ConstraintBasedRTA(RTAModule):
 
         self._setup_properties()
         self.constraints = self._setup_constraints()
+        self.constraint_values: Dict[str, float] = {}
+        self.is_stale_constraints = False
         self.compose()
 
     def compute_filtered_control(self, input_state: Any, step_size: float, control_desired: np.ndarray) -> np.ndarray:
@@ -192,6 +194,7 @@ class ConstraintBasedRTA(RTAModule):
             safe filtered control vector
         """
         state = self._get_state(input_state)
+        self._update_constraint_values(state, stale=True)
         control_actual = self._filter_control(state, step_size, to_jnp_array_jit(control_desired))
         self.control_actual = np.array(control_actual)
 
@@ -267,6 +270,53 @@ class ConstraintBasedRTA(RTAModule):
             return input_state
 
         return to_jnp_array_jit(input_state)
+
+    def update_constraint_values(self, input_state: Any):
+        """Updates constraint values for given input state
+        Recommended usage: call after computing the simulation step, with the updated input state
+
+        Parameters
+        ----------
+        input_state : Any
+            input state of environment to RTA module
+        """
+        state = self._get_state(input_state)
+        self._update_constraint_values(state)
+
+    def _update_constraint_values(self, state: jnp.ndarray, stale: bool = False):
+        """Updates constraint values for given input state
+
+        Parameters
+        ----------
+        input_state : Any
+            input state of environment to RTA module
+        stale : bool
+            True if called before state is updated
+        """
+        self.constraint_values = {k: float(v(state)) for k, v in self.constraints.items()}
+        if stale:
+            self.is_stale_constraints = True
+        else:
+            self.is_stale_constraints = False
+
+    def generate_info(self) -> dict:
+        """generates info dictionary on RTA module for logging
+
+        Returns
+        -------
+        dict
+            info dictionary for rta module
+        """
+        info = super().generate_info()
+
+        if self.is_stale_constraints:
+            constraint_key = 'constraints_at_last_state'
+        else:
+            constraint_key = 'constraints'
+
+        info.update({constraint_key: self.constraint_values})
+
+        return info
 
 
 class CascadedRTA(RTAModule):
