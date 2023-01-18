@@ -22,9 +22,14 @@ class SimplexModule(BackupControlBasedRTA):
 
     Parameters
     ----------
-    backup_controller : RTABackupController
-        backup controller object utilized by rta module to generate backup control
+    latch_time : float
+        Amount of time to latch onto the backup controller. By default 0 (unlatched)
     """
+
+    def __init__(self, *args: Any, latch_time: float = 0, **kwargs: Any):
+        self.latch_time = latch_time
+        self.latched_elapsed = 0.
+        super().__init__(*args, **kwargs)
 
     def reset(self):
         """Resets the rta module to the initial state at the beginning of an episode
@@ -57,12 +62,25 @@ class SimplexModule(BackupControlBasedRTA):
 
     def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Simplex implementation of filter control
-        Returns backup control if monitor returns True
+        If latched, returns backup control.
+        Otherwise returns backup control if monitor returns True
         """
-        self.intervening = self.monitor(state, step_size, control)
-
+        latched = False
         if self.intervening:
-            return self.backup_control(state, step_size)
+            if self.latched_elapsed >= self.latch_time:
+                self.latched_elapsed = 0
+            else:
+                self.latched_elapsed += step_size
+                latched = True
+
+        if latched:
+            control = self.backup_control(state, step_size)
+
+        else:
+            self.intervening = self.monitor(state, step_size, control)
+
+            if self.intervening:
+                return self.backup_control(state, step_size)
 
         return control
 
