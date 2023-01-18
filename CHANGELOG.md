@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/act3-ace/run-time-assurance/compare/v1.5.0...v1.6.0) (2023-01-18)
+
+
+### Features
+
+* **logging:** constraint values are logged by rta modules ([0a253b3](https://github.com/act3-ace/run-time-assurance/commit/0a253b360bb6f107c58c20a099e523329afc5e29))
+
 # [1.5.0](https://github.com/act3-ace/run-time-assurance/compare/v1.4.0...v1.5.0) (2023-01-16)
 
 
