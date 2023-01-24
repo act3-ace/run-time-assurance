@@ -1,3 +1,11 @@
+# [1.8.0](https://github.com/act3-ace/run-time-assurance/compare/v1.7.0...v1.8.0) (2023-01-24)
+
+
+### Features
+
+* **constraint:** Resolve "Incorporate exponential/high order CBFs" ([66e53aa](https://github.com/act3-ace/run-time-assurance/commit/66e53aa78c7b7671fe017ae56b8e026e09a58b11))
+* **jit:** Disable jit and vmap for debugging ([45359db](https://github.com/act3-ace/run-time-assurance/commit/45359dbe97010a5eca24d30e58219a8050bfa882))
+
 # [1.7.0](https://github.com/act3-ace/run-time-assurance/compare/v1.6.0...v1.7.0) (2023-01-24)
 
 
