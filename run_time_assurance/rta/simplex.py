@@ -5,11 +5,12 @@ This module implements Explicit and Simple RTA modules. These RTA modules utiliz
 from __future__ import annotations
 
 import abc
-from typing import Any
+from typing import Any, Union
 
 import jax.numpy as jnp
 from jax import jit, vmap
 
+from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
 from run_time_assurance.rta.base import BackupControlBasedRTA
 from run_time_assurance.utils import add_dim_jit, jnp_stack_jit
@@ -50,15 +51,20 @@ class SimplexModule(BackupControlBasedRTA):
                 default False
         """
         super().compose()
-        if self.jit_compile_dict.get('constraint_violation', True):
+        if self.jit_enable and self.jit_compile_dict.get('constraint_violation', True):
             self._constraint_violation_fn = jit(self._constraint_violation)
         else:
             self._constraint_violation_fn = self._constraint_violation
 
-        if self.jit_compile_dict.get('pred_state', False):
+        if self.jit_enable and self.jit_compile_dict.get('pred_state', False):
             self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
         else:
             self._pred_state_fn = self._pred_state
+
+        if self.jit_enable:
+            self._get_constraint_vals_fn = self._get_constraint_vals
+        else:
+            self._get_constraint_vals_fn = self._get_constraint_vals_no_vmap
 
     def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Simplex implementation of filter control
@@ -134,12 +140,50 @@ class SimplexModule(BackupControlBasedRTA):
         for i in range(num_constraints):
             c = constraint_list[i]
 
-            constraint_vmapped = vmap(c.compute, 0, 0)
-            traj_constraint_vals = constraint_vmapped(states)
+            traj_constraint_vals = self._get_constraint_vals_fn(c, states)
 
             constraint_violations = constraint_violations.at[i].set(jnp.any(traj_constraint_vals < 0))
 
         return jnp.any(constraint_violations)
+
+    def _get_constraint_vals(self, constraint: ConstraintModule, states: jnp.ndarray) -> Union[float, jnp.ndarray]:
+        """Uses vmap to compute constraint values along a trajectory
+
+        Parameters
+        ----------
+        constraint : ConstraintModule
+            Constraint to evaluate
+        states : jnp.ndarray
+            array of state values
+
+        Returns
+        -------
+        [float, jnp.ndarray]
+            constraint values along trajectory
+        """
+        constraint_vmapped = vmap(constraint.compute, 0, 0)
+        traj_constraint_vals = constraint_vmapped(states)
+        return traj_constraint_vals
+
+    def _get_constraint_vals_no_vmap(self, constraint: ConstraintModule, states: jnp.ndarray) -> jnp.ndarray:
+        """Does not use vmap to compute constraint values along a trajectory, allows for easier debugging
+
+        Parameters
+        ----------
+        constraint : ConstraintModule
+            Constraint to evaluate
+        states : jnp.ndarray
+            array of state values
+
+        Returns
+        -------
+        jnp.ndarray
+            constraint values along trajectory
+        """
+        traj_constraint_vals = []
+        for state in states:
+            traj_constraint_vals.append(constraint.compute(state))
+        return jnp.array(traj_constraint_vals)
 
 
 class ExplicitSimplexModule(SimplexModule):
@@ -185,7 +229,7 @@ class ImplicitSimplexModule(SimplexModule):
         See parent class for additional options
         """
         super().compose()
-        if self.jit_compile_dict.get('integrate', False):
+        if self.jit_enable and self.jit_compile_dict.get('integrate', False):
             self._integrate_fn = jit(self.integrate, static_argnames=['step_size'])
         else:
             self._integrate_fn = self.integrate

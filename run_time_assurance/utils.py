@@ -1,6 +1,7 @@
 """Provides util functions for the run-time-assurance library"""
 from functools import partial
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import jit
@@ -81,6 +82,12 @@ def add_dim_jit(x: jnp.ndarray) -> jnp.ndarray:
         output array of shape (1, N)
     """
     return x[None, :]
+
+
+def disable_all_jax_jit():
+    """Disables all jit compilation, useful for debugging
+    """
+    jax.config.update('jax_disable_jit', True)
 
 
 class SolverError(Exception):

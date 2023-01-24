@@ -22,18 +22,26 @@ class ConstraintModule(abc.ABC):
     bias : float
         Value that adds a bias to the boundary of the constraint.
         Use a small negative value to make the constraint slightly more conservative.
+    jit_enable: bool, optional
+        Flag to enable or disable JIT compiliation. Useful for debugging
     """
 
-    def __init__(self, alpha: ConstraintStrengthener = None, bias: float = 0):
+    def __init__(self, alpha: ConstraintStrengthener = None, bias: float = 0, jit_enable: bool = True):
         assert isinstance(alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         self._alpha = alpha
         self.bias = bias
+        self.jit_enable = jit_enable
         self._compose()
 
     def _compose(self):
-        self._compute_fn = jit(self._compute)
-        self.phi = jit(self._phi)
-        self._grad_fn = jit(grad(self._compute))
+        if self.jit_enable:
+            self._compute_fn = jit(self._compute)
+            self.phi = jit(self._phi)
+            self._grad_fn = jit(grad(self._compute))
+        else:
+            self._compute_fn = self._compute
+            self.phi = self._phi
+            self._grad_fn = grad(self._compute)
 
     def __call__(self, state: jnp.ndarray) -> float:
         """Evaluates constraint function h(x)
