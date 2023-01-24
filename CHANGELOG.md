@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/act3-ace/run-time-assurance/compare/v1.6.0...v1.7.0) (2023-01-24)
+
+
+### Features
+
+* **zoo:** 1d Integrator RTA ([b6448c9](https://github.com/act3-ace/run-time-assurance/commit/b6448c987e31c6b5d33c4c41d6077a346896a3b5))
+
 # [1.6.0](https://github.com/act3-ace/run-time-assurance/compare/v1.5.0...v1.6.0) (2023-01-18)
 
 
