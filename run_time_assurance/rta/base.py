@@ -151,6 +151,9 @@ class ConstraintBasedRTA(RTAModule):
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
         Useful for implementing versions methods that can't be jit compiled
         Each RTA class will have custom default behavior if not passed
+    jit_enable: bool, optional
+        Flag to enable or disable JIT compiliation. Useful for debugging
+        Sets all values in jit_compile_dict to False.
     """
 
     def __init__(
@@ -159,6 +162,7 @@ class ConstraintBasedRTA(RTAModule):
         control_bounds_high: Union[float, int, list, np.ndarray] = None,
         control_bounds_low: Union[float, int, list, np.ndarray] = None,
         jit_compile_dict: Dict[str, bool] = None,
+        jit_enable: bool = True,
         **kwargs: Any
     ):
         super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
@@ -168,10 +172,18 @@ class ConstraintBasedRTA(RTAModule):
         else:
             self.jit_compile_dict = jit_compile_dict
 
+        self.jit_enable = jit_enable
+
         self._setup_properties()
         self.constraints = self._setup_constraints()
         self.constraint_values: Dict[str, float] = {}
         self.is_stale_constraints = False
+
+        if not self.jit_enable:
+            self.jit_compile_dict = dict.fromkeys(self.jit_compile_dict, False)
+            for c in self.constraints.values():
+                c.jit_enable = self.jit_enable
+                c._compose()
         self.compose()
 
     def compute_filtered_control(self, input_state: Any, step_size: float, control_desired: np.ndarray) -> np.ndarray:
@@ -363,6 +375,9 @@ class BackupControlBasedRTA(ConstraintBasedRTA):
     def __init__(self, *args: Any, backup_controller: RTABackupController, **kwargs: Any):
         self.backup_controller = backup_controller
         super().__init__(*args, **kwargs)
+        if not self.jit_enable:
+            self.backup_controller.jit_enable = self.jit_enable
+            self.backup_controller._compose()
 
     def backup_control(self, state: jnp.ndarray, step_size: float) -> jnp.ndarray:
         """retrieve safe backup control given the current state

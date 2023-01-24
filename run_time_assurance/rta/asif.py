@@ -60,7 +60,7 @@ class ASIFModule(ConstraintBasedRTA):
                 default True
         """
         super().compose()
-        if self.jit_compile_dict.get('generate_barrier_constraint_mats', True):
+        if self.jit_enable and self.jit_compile_dict.get('generate_barrier_constraint_mats', True):
             self._generate_barrier_constraint_mats_fn = jit(self._generate_barrier_constraint_mats, static_argnames=['step_size'])
         else:
             self._generate_barrier_constraint_mats_fn = self._generate_barrier_constraint_mats
@@ -340,11 +340,14 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             integrate:
                 default False
         """
-        self._jacobian = jit(jacfwd(self._backup_state_transition), static_argnums=[1], static_argnames=['step_size'])
+        if self.jit_enable and self.jit_compile_dict.get('jacobian', True):
+            self._jacobian = jit(jacfwd(self._backup_state_transition), static_argnums=[1], static_argnames=['step_size'])
+        else:
+            self._jacobian = jacfwd(self._backup_state_transition)
 
         self.jit_compile_dict.setdefault('generate_barrier_constraint_mats', False)
 
-        if self.jit_compile_dict.get('generate_ineq_constraint_mats', True):
+        if self.jit_enable and self.jit_compile_dict.get('generate_ineq_constraint_mats', True):
             self._generate_ineq_constraint_mats_fn = jit(self._generate_ineq_constraint_mats, static_argnames=['num_steps'])
         else:
             self._generate_ineq_constraint_mats_fn = self._generate_ineq_constraint_mats
@@ -356,15 +359,20 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         else:
             raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
 
-        if self.jit_compile_dict.get('pred_state', default_int):
+        if self.jit_enable and self.jit_compile_dict.get('pred_state', default_int):
             self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
         else:
             self._pred_state_fn = self._pred_state
 
-        if self.jit_compile_dict.get('integrate', default_int):
+        if self.jit_enable and self.jit_compile_dict.get('integrate', default_int):
             self._integrate_fn = jit(self.integrate, static_argnames=['step_size', 'Nsteps'])
         else:
             self._integrate_fn = self.integrate
+
+        if self.jit_enable:
+            self._get_ineq_mats_fn = self._get_constraint_ineq_mats
+        else:
+            self._get_ineq_mats_fn = self._get_constraint_ineq_mats_no_vmap
 
         super().compose()
 
@@ -461,8 +469,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         traj_sensitivities = jnp.array(traj_sensitivities)[check_points, :]
 
         for i in range(num_constraints):
-            constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0), (0, 0, 0))
-            point_ineq_weight, point_ineq_constant, point_constraint_vals = constraint_vmapped(
+            point_ineq_weight, point_ineq_constant, point_constraint_vals = self._get_ineq_mats_fn(
                 constraint_list[i], state, traj_states, traj_sensitivities)
             ineq_weight_barrier = ineq_weight_barrier.at[i * num_points:(i + 1) * num_points, :].set(point_ineq_weight)
             ineq_constant_barrier = ineq_constant_barrier.at[i * num_points:(i + 1) * num_points].set(point_ineq_constant)
@@ -481,6 +488,72 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
         ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
         return ineq_weight.transpose(), ineq_constant
+
+    def _get_constraint_ineq_mats(
+        self, constraint: ConstraintModule, state: jnp.ndarray, traj_states: jnp.ndarray, traj_sensitivities: jnp.ndarray
+    ) -> tuple[jnp.ndarray, jnp.ndarray, Union[jnp.ndarray, float]]:
+        """Computes inequality constraint matrices for a given constraint using vmap
+
+        Parameters
+        ----------
+        constraint : ConstraintModule
+            constraint to create cbf for
+        initial_state : jnp.ndarray
+            initial state of the backup trajectory
+        traj_state : list
+            array of trajectory states
+        traj_sensitivity : list
+            array of trajectory sensitivities
+
+        Returns
+        -------
+        jnp.ndarray
+            matix C.T of quadprog inequality constraint C.T x >= b
+        jnp.ndarray
+            vector b of quadprog inequality constraint C.T x >= b
+        jnp.ndarray
+            constraint values along trajectory
+        """
+        constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0), (0, 0, 0))
+        point_ineq_weight, point_ineq_constant, point_constraint_vals = constraint_vmapped(
+            constraint, state, traj_states, traj_sensitivities
+        )
+        return point_ineq_weight, point_ineq_constant, point_constraint_vals
+
+    def _get_constraint_ineq_mats_no_vmap(
+        self, constraint: ConstraintModule, state: jnp.ndarray, traj_states: jnp.ndarray, traj_sensitivities: jnp.ndarray
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        """Computes inequality constraint matrices for a given constraint without vmap, allowing easier debugging
+
+        Parameters
+        ----------
+        constraint : ConstraintModule
+            constraint to create cbf for
+        initial_state : jnp.ndarray
+            initial state of the backup trajectory
+        traj_state : list
+            array of trajectory states
+        traj_sensitivity : list
+            array of trajectory sensitivities
+
+        Returns
+        -------
+        jnp.ndarray
+            matix C.T of quadprog inequality constraint C.T x >= b
+        jnp.ndarray
+            vector b of quadprog inequality constraint C.T x >= b
+        jnp.ndarray
+            constraint values along trajectory
+        """
+        point_ineq_weight = []
+        point_ineq_constant = []
+        point_constraint_vals = []
+        for (traj_state, traj_sensitivity) in zip(traj_states, traj_sensitivities):
+            w, c, v = self.invariance_constraints(constraint, state, traj_state, traj_sensitivity)
+            point_ineq_weight.append(w)
+            point_ineq_constant.append(c)
+            point_constraint_vals.append(v)
+        return jnp.array(point_ineq_weight), jnp.array(point_ineq_constant), jnp.array(point_constraint_vals)
 
     def invariance_constraints(
         self, constraint: ConstraintModule, initial_state: jnp.ndarray, traj_state: jnp.ndarray, traj_sensitivity: jnp.ndarray

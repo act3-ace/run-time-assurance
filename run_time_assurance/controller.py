@@ -15,18 +15,23 @@ class RTABackupController(abc.ABC):
     """Base Class for backup controllers used by backup control based RTA methods
     """
 
-    def __init__(self, controller_state_initial: Union[jnp.ndarray, Dict[str, jnp.ndarray], None] = None):
+    def __init__(self, controller_state_initial: Union[jnp.ndarray, Dict[str, jnp.ndarray], None] = None, jit_enable: bool = True):
         self.controller_state_initial = self._copy_controller_state(controller_state_initial)
         self.controller_state_saved = None
+        self.jit_enable = jit_enable
 
         self.controller_state = self._copy_controller_state(self.controller_state_initial)
         self._compose()
 
     def _compose(self):
-        self._jacobian = jit(
-            jacfwd(self._generate_control, has_aux=True), static_argnums=[1, 2], static_argnames=['step_size', 'controller_state']
-        )
-        self._generate_control_fn = jit(self._generate_control, static_argnames=['step_size', 'controller_state'])
+        if self.jit_enable:
+            self._jacobian = jit(
+                jacfwd(self._generate_control, has_aux=True), static_argnums=[1, 2], static_argnames=['step_size', 'controller_state']
+            )
+            self._generate_control_fn = jit(self._generate_control, static_argnames=['step_size', 'controller_state'])
+        else:
+            self._jacobian = jacfwd(self._generate_control, has_aux=True)
+            self._generate_control_fn = self._generate_control
 
     def reset(self):
         """Resets the backup controller to its initial state for a new episode
