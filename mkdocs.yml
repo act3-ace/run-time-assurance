@@ -129,3 +129,5 @@ nav:
         - reference/zoo/cwh/docking_2d.md
         - reference/zoo/cwh/docking_3d.md
         - reference/zoo/cwh/inspection_3d.md
+      - integrators:
+        - reference/zoo/integrators/integrator_1d.md
