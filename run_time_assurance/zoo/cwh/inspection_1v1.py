@@ -15,6 +15,7 @@ from run_time_assurance.constraint import (
     ConstraintMaxStateLimit,
     ConstraintModule,
     ConstraintStrengthener,
+    HOCBFConstraint,
     PolynomialConstraintStrengthener,
 )
 from run_time_assurance.controller import RTABackupController
@@ -163,6 +164,8 @@ class Inspection1v1RTA(ExplicitASIFModule):
         Specific impulse of thrusters in seconds, by default SPECIFIC_IMPULSE_DEFAULT
     sun_vel : float, optional
         velocity of sun in x-y plane (rad/sec), by default SUN_VEL_DEFAULT
+    use_hocbf : bool, optional
+        True to use example HOCBF for collision avoidance, by default False
     control_bounds_high : float, optional
         upper bound of allowable control. Pass a list for element specific limit. By default U_MAX_DEFAULT
     control_bounds_low : float, optional
@@ -187,6 +190,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         gravity: float = GRAVITY,
         isp: float = SPECIFIC_IMPULSE_DEFAULT,
         sun_vel: float = SUN_VEL_DEFAULT,
+        use_hocbf: bool = False,
         control_bounds_high: Union[float, list, np.ndarray, jnp.ndarray] = U_MAX_DEFAULT,
         control_bounds_low: Union[float, list, np.ndarray, jnp.ndarray] = -U_MAX_DEFAULT,
         **kwargs
@@ -207,6 +211,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         self.gravity = gravity
         self.isp = isp
         self.sun_vel = sun_vel
+        self.use_hocbf = use_hocbf
 
         self.u_max = U_MAX_DEFAULT
         self.a_max = self.u_max / self.m - (3 * self.n**2 + 2 * self.n * self.v1) * self.r_max - 2 * self.n * self.v0
@@ -226,7 +231,6 @@ class Inspection1v1RTA(ExplicitASIFModule):
     def _setup_constraints(self) -> OrderedDict:
         constraint_dict = OrderedDict(
             [
-                ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
                 ('rel_vel', ConstraintCWH3dRelativeVelocity(v0=self.v0, v1=self.v1, v0_distance=self.v0_distance, bias=-1e-3)),
                 (
                     'sun',
@@ -267,6 +271,19 @@ class Inspection1v1RTA(ExplicitASIFModule):
                 ),
             ]
         )
+
+        if self.use_hocbf:
+            constraint_dict['chief_collision_hocbf'] = HOCBFConstraint(
+                HOCBFExampleChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max),
+                relative_degree=2,
+                state_transition_system=self.state_transition_system,
+                alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.1])
+            )
+        else:
+            constraint_dict['chief_collision'] = ConstraintCWHChiefCollision(
+                collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max
+            )
+
         return constraint_dict
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
@@ -641,3 +658,30 @@ class ConstraintCWHMaxDistance(ConstraintModule):
     def _phi(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3]
         return self.r_max - jnp.linalg.norm(delta_p)
+
+
+class HOCBFExampleChiefCollision(ConstraintModule):
+    """Example HOCBF for CWH chief collision avoidance constraint
+
+    Parameters
+    ----------
+    collision_radius: float
+        radius of collision for chief spacecraft. m
+    a_max: float
+        Maximum braking acceleration for deputy spacecraft. m/s^2
+    alpha : ConstraintStrengthener
+        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
+        Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.01])
+    """
+
+    def __init__(self, collision_radius: float, a_max: float, alpha: ConstraintStrengthener = None, **kwargs):
+        self.collision_radius = collision_radius
+        self.a_max = a_max
+
+        if alpha is None:
+            alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.01])
+        super().__init__(alpha=alpha, **kwargs)
+
+    def _compute(self, state: jnp.ndarray) -> float:
+        delta_p = state[0:3]
+        return jnp.linalg.norm(delta_p) - self.collision_radius
