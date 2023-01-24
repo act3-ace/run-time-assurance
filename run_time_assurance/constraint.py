@@ -288,3 +288,59 @@ class PolynomialConstraintStrengthener(ConstraintStrengthener):
         for n, c in enumerate(self.coefs):
             output += c * x**n
         return output
+
+
+class HOCBFConstraint(ConstraintModule):
+    """Constraint for use with Higher Order Control Barrier Functions
+    Uses Jax to compute gradients
+
+    Parameters
+    ----------
+    constraint: ConstraintModule
+        Current constraint to transform into higher order CBF
+    relative_degree: int
+        Defines the relative degree of the constraint with respect to the system
+    state_transition_system:
+        Function to compute the control input matrix contribution to the system state's time derivative
+    alpha: ConstraintStrengthener
+        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
+    """
+
+    def __init__(self, constraint: ConstraintModule, relative_degree: int, state_transition_system, alpha: ConstraintStrengthener):
+        self.initial_constraint = constraint
+        hocbf_constraint_dict = {"constraint_0": constraint}
+        for i in range(1, relative_degree):
+            psi = HOCBFConstraintHelper(
+                constraint=hocbf_constraint_dict["constraint_" + str(i - 1)], state_transition_system=state_transition_system, alpha=alpha
+            )
+            hocbf_constraint_dict["constraint_" + str(i)] = psi
+        self.final_constraint = psi
+        super().__init__(alpha=alpha)
+
+    def _compute(self, state: jnp.ndarray) -> float:
+        return self.final_constraint(state)
+
+    def _phi(self, state: jnp.ndarray) -> float:
+        return self.initial_constraint.phi(state)
+
+
+class HOCBFConstraintHelper(ConstraintModule):
+    """Constraint helper class for use with Higher Order Control Barrier Functions
+
+    Parameters
+    ----------
+    constraint: ConstraintModule
+        Current constraint to transform into higher order CBF
+    state_transition_system:
+        Function to compute the control input matrix contribution to the system state's time derivative
+    alpha: ConstraintStrengthener
+        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
+    """
+
+    def __init__(self, constraint: ConstraintModule, state_transition_system, alpha: ConstraintStrengthener):
+        self.constraint = constraint
+        self.state_transition_system = state_transition_system
+        super().__init__(alpha=alpha)
+
+    def _compute(self, state: jnp.ndarray) -> float:
+        return self.constraint.grad(state) @ self.state_transition_system(state) + self.alpha(self.constraint(state))
