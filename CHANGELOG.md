@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/act3-ace/run-time-assurance/compare/v1.8.0...v1.9.0) (2023-01-25)
+
+
+### Features
+
+* **constraint:** Created inequality constraint class that can be added to QP ([e60fb7f](https://github.com/act3-ace/run-time-assurance/commit/e60fb7fefe97cb00499f1720aa47fe48dc83c38e))
+
 # [1.8.0](https://github.com/act3-ace/run-time-assurance/compare/v1.7.0...v1.8.0) (2023-01-24)
 
 
