@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import abc
 import warnings
+from collections import OrderedDict
 from typing import Any, Dict, Union
 
 import jax.numpy as jnp
@@ -17,7 +18,7 @@ import scipy
 from jax import jacfwd, jit, vmap
 from jax.experimental.ode import odeint
 
-from run_time_assurance.constraint import ConstraintModule
+from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint
 from run_time_assurance.controller import RTABackupController
 from run_time_assurance.rta.base import BackupControlBasedRTA, ConstraintBasedRTA
 from run_time_assurance.utils import SolverError, SolverWarning, to_jnp_array_jit
@@ -50,6 +51,12 @@ class ASIFModule(ConstraintBasedRTA):
         self.obj_weight = np.eye(self.control_dim)
         self.ineq_weight_actuation, self.ineq_constant_actuation = self._generate_actuation_constraint_mats()
 
+        self.direct_inequality_constraints = OrderedDict()
+        for k, c in self.constraints.items():
+            if isinstance(c, DirectInequalityConstraint):
+                self.direct_inequality_constraints[k] = c
+                self.constraints.pop(k)
+
     def compose(self):
         """
         applies jax composition transformations (grad, jit, jacobian etc.)
@@ -65,8 +72,14 @@ class ASIFModule(ConstraintBasedRTA):
         else:
             self._generate_barrier_constraint_mats_fn = self._generate_barrier_constraint_mats
 
+        if self.jit_enable and self.jit_compile_dict.get('update_ineq_mats', True):
+            self._update_ineq_mats_fn = jit(self._update_ineq_mats)
+        else:
+            self._update_ineq_mats_fn = self._update_ineq_mats
+
     def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         ineq_weight, ineq_constant = self._generate_barrier_constraint_mats_fn(state, step_size)
+        ineq_weight, ineq_constant = self._update_ineq_mats_fn(ineq_weight, ineq_constant, state)
         desired_control = np.array(control, dtype=np.float64)
         actual_control = self._optimize(self.obj_weight, desired_control, ineq_weight, ineq_constant)
         self.intervening = self.monitor(desired_control, actual_control)
@@ -99,6 +112,31 @@ class ASIFModule(ConstraintBasedRTA):
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
 
+        return ineq_weight, ineq_constant
+
+    def _update_ineq_mats(self, ineq_weight: jnp.ndarray, ineq_constant: jnp.ndarray,
+                          state: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Update inequality matrices before sending to solver: adds any direct inequality constraints
+
+        Parameters
+        ----------
+        ineq_weight : jnp.ndarray
+            matix C.T of quadprog inequality constraint C.T x >= b
+        ineq_constant : jnp.ndarray
+            vector b of quadprog inequality constraint C.T x >= b
+
+        Returns
+        -------
+        jnp.ndarray
+            updated ineq_weight
+        jnp.ndarray
+            updated ineq_constant
+        """
+        for c in self.direct_inequality_constraints.values():
+            temp1 = c.ineq_weight(state)
+            temp2 = c.ineq_constant(state)
+            ineq_weight = jnp.append(ineq_weight, temp1[:, None], axis=1)
+            ineq_constant = jnp.append(ineq_constant, temp2)
         return ineq_weight, ineq_constant
 
     def _optimize(

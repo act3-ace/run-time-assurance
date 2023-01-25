@@ -352,3 +352,30 @@ class HOCBFConstraintHelper(ConstraintModule):
 
     def _compute(self, state: jnp.ndarray) -> float:
         return self.constraint.grad(state) @ self.state_transition_system(state) + self.alpha(self.constraint(state))
+
+
+class DirectInequalityConstraint():
+    """Base class for inequality constraints, to be used in the QP for ASIF
+    Constraints in the form: ineq_weight * u >= ineq_constant
+    """
+
+    @abc.abstractmethod
+    def ineq_weight(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Inequality constraint weight array
+
+        Returns
+        -------
+        jnp.ndarray
+            1 x m array, where m is the length of the control vector
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def ineq_constant(self, state: jnp.ndarray) -> float:
+        """Inequality constraint constant
+
+        Returns
+        -------
+        float
+        """
+        raise NotImplementedError()
