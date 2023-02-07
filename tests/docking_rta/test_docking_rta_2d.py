@@ -7,15 +7,13 @@ import os
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 from run_time_assurance.zoo.cwh.docking_2d import Docking2dExplicitSwitchingRTA, Docking2dImplicitSwitchingRTA, \
                                                  Docking2dExplicitOptimizationRTA, Docking2dImplicitOptimizationRTA
+from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
 
 
-theta_init = 4.298
-
-class Env():
-    def __init__(self, random_init=False):
+class Env(DataTrackingSampleTestingModule):
+    def __init__(self, rta, random_init=False):
         self.random_init = random_init
 
-        self.dt = 1  # Time step
         self.u_max = 1  # Actuation constraint
         self.docking_region = 1  # m
 
@@ -29,65 +27,33 @@ class Env():
         Xare = np.matrix(scipy.linalg.solve_continuous_are(self.A, self.B, Q, R))
         self.Klqr = np.array(-scipy.linalg.inv(R)*(self.B.T*Xare))
 
-    def u_des(self, x):
+        super().__init__(rta=rta, simulation_time=5000, step_size=1, control_dim=2, state_dim=4)
+
+    def _desired_control(self, state):
         # LQR to origin
-        u = self.Klqr @ x
+        u = self.Klqr @ state
         return np.clip(u, -self.u_max, self.u_max)
 
-    def reset(self):
+    def _get_initial_state(self):
         # Random point 10km away from origin
         if self.random_init:
             theta = np.random.rand()*2*np.pi
         else:
-            theta = theta_init
+            theta = 4.298
 
-        x = np.array([[10000*np.cos(theta)], [10000*np.sin(theta)], [0], [0]])
-        return x, False
+        x = np.array([10000*np.cos(theta), 10000*np.sin(theta), 0, 0])
+        return x
 
-    def step(self, x, u):
-        # Euler integration
-        xd = self.A @ x + self.B @ u
-        x1 = x + xd * self.dt
+    def _pred_state(self, state, step_size, control):
+        state_dot = self.A @ state + self.B @ control
+        next_state = state + state_dot * step_size
 
-        if np.linalg.norm(x1[0:2, 0]) < self.docking_region:
-            done = True
-        else:
-            done = False
-
-        return x1, done
-
-    def run_one_step(self):
-        x, _ = self.reset()
-        u_des = self.u_des(x)
-        u_safe = np.vstack(self.rta.filter_control(x.flatten(), self.dt, u_des.flatten()))
-        x, _ = self.step(x, u_safe)
-
-    def run_episode(self, rta):
-        self.rta = rta
-        # Track time
-        start_time = time.time()
-        # Track initial values
-        x, done = self.reset()
-        array = [x.flatten()]
-        control = [self.u_des(x).flatten()]
-        intervening = [False]
-
-        # Run episode
-        while not done:
-            # Get u_des
-            u_des = self.u_des(x)
-            # Use RTA
-            u_safe = np.vstack(self.rta.filter_control(x.flatten(), self.dt, u_des.flatten()))
-            # Take step using safe action
-            x, done = self.step(x, u_safe)
-            # Track values
-            array = np.append(array, [x.flatten()], axis=0)
-            control = np.append(control, [u_safe.flatten()], axis=0)
-            intervening.append(self.rta.intervening)
-
-        # Print final time, plot
-        print(f"Simulation time: {time.time()-start_time:2.3f} sec")
-        self.plotter(array, control, np.array(intervening))
+        return next_state
+    
+    def _check_done_conditions(self, state, time):
+        docking_done = np.linalg.norm(state[0:2]) < self.docking_region
+        time_done = super()._check_done_conditions(state, time)
+        return bool(docking_done or time_done)
 
     def plotter(self, array, control, intervening):
         fig = plt.figure(figsize=(15, 10))
@@ -192,19 +158,20 @@ rtas = [Docking2dExplicitSwitchingRTA(), Docking2dImplicitSwitchingRTA(),
 output_names = ['rta_test_docking_2d_explicit_switching', 'rta_test_docking_2d_implicit_switching',
                 'rta_test_docking_2d_explicit_optimization', 'rta_test_docking_2d_implicit_optimization']
 
-env = Env()
-
 os.makedirs(output_dir, exist_ok=True)
 
 for rta, output_name in zip(rtas, output_names):
-    env.run_episode(rta)
+    env = Env(rta)
+    start_time = time.time()
+    x, u, i = env.simulate_episode()
+    print(f"Simulation time: {time.time()-start_time:2.3f} sec")
+    env.plotter(x, u, i)
     if plot_fig:
         plt.show()
     if save_fig:
         plt.savefig(os.path.join(output_dir, output_name))
 
-# env = Env()
-# env.rta = Docking2dExplicitOptimizationRTA()
+# env = Env(Docking2dExplicitOptimizationRTA())
 # env.run_one_step()
 # import cProfile
 # cProfile.run('env.run_one_step()', filename='docking2d.prof')
