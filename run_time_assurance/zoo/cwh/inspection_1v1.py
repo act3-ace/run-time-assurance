@@ -616,7 +616,7 @@ class ConstraintPassivelySafeManeuver(ConstraintModule):
         y = 6 * (jnp.sin(self.n * t) - self.n * t) * state[0] + state[
             1] - 2 / self.n * (1 - jnp.cos(self.n * t)) * state[3] + (4 * jnp.sin(self.n * t) - 3 * self.n * t) * state[4] / self.n
         z = state[2] * jnp.cos(self.n * t) + state[5] / self.n * jnp.sin(self.n * t)
-        return jnp.linalg.norm([x, y, z]) - self.collision_radius
+        return jnp.linalg.norm(jnp.array([x, y, z])) - self.collision_radius
 
     def get_array(self, state: jnp.ndarray) -> float:
         """Gets entire trajectory array

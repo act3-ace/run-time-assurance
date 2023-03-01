@@ -355,7 +355,7 @@ class ConstraintPSMDeputy(ConstraintModule):
         ) * state[int(self.deputy * 6) + 3] + (4 * jnp.sin(self.n * t) - 3 * self.n * t) * state[int(self.deputy * 6) + 4] / self.n
         zd = state[int(self.deputy * 6) + 2] * jnp.cos(self.n * t) + state[int(self.deputy * 6) + 5] / self.n * jnp.sin(self.n * t)
 
-        return jnp.linalg.norm([x - xd, y - yd, z - zd]) - self.collision_radius
+        return jnp.linalg.norm(jnp.array([x - xd, y - yd, z - zd])) - self.collision_radius
 
     def get_array(self, state: jnp.ndarray) -> float:
         """Gets entire trajectory array
