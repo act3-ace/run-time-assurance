@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/act3-ace/run-time-assurance/compare/v1.9.0...v1.9.1) (2023-03-01)
+
+
+### Bug Fixes
+
+* Use jnp array instead of list for PSM ([f60d869](https://github.com/act3-ace/run-time-assurance/commit/f60d869a0c52ab1f0e2b6ede91457fed0429556c))
+
 # [1.9.0](https://github.com/act3-ace/run-time-assurance/compare/v1.8.0...v1.9.0) (2023-01-25)
 
 
