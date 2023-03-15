@@ -5,6 +5,7 @@ import time
 import os
 
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from run_time_assurance.zoo.cwh.docking_2d import Docking2dExplicitSwitchingRTA, Docking2dImplicitSwitchingRTA, \
                                                  Docking2dExplicitOptimizationRTA, Docking2dImplicitOptimizationRTA
 from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
@@ -17,15 +18,16 @@ class Env(DataTrackingSampleTestingModule):
         self.u_max = 1  # Actuation constraint
         self.docking_region = 1  # m
 
-        self.A, self.B = generate_cwh_matrices(M_DEFAULT, N_DEFAULT, mode="2d")
+        A, B = generate_cwh_matrices(M_DEFAULT, N_DEFAULT, mode="2d")
+        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method='RK45')
 
         # Specify LQR gains
         Q = np.eye(4) * 0.05  # State cost
         R = np.eye(2) * 1000  # Control cost
 
         # Solve ARE
-        Xare = np.matrix(scipy.linalg.solve_continuous_are(self.A, self.B, Q, R))
-        self.Klqr = np.array(-scipy.linalg.inv(R)*(self.B.T*Xare))
+        Xare = np.matrix(scipy.linalg.solve_continuous_are(A, B, Q, R))
+        self.Klqr = np.array(-scipy.linalg.inv(R)*(B.T*Xare))
 
         super().__init__(rta=rta, simulation_time=5000, step_size=1, control_dim=2, state_dim=4)
 
@@ -45,10 +47,9 @@ class Env(DataTrackingSampleTestingModule):
         return x
 
     def _pred_state(self, state, step_size, control):
-        state_dot = self.A @ state + self.B @ control
-        next_state = state + state_dot * step_size
-
-        return next_state
+        # return next_state
+        out, _ = self.dynamics.step(step_size, state, control)
+        return out
     
     def _check_done_conditions(self, state, time):
         docking_done = np.linalg.norm(state[0:2]) < self.docking_region
@@ -149,29 +150,30 @@ class Env(DataTrackingSampleTestingModule):
         ax6.set_ylim([1, 2])
 
 
-plot_fig = True
-save_fig = True
-output_dir = 'figs/2d'
+if __name__ == '__main__':
+    plot_fig = True
+    save_fig = True
+    output_dir = 'figs/2d'
 
-rtas = [Docking2dExplicitSwitchingRTA(), Docking2dImplicitSwitchingRTA(), 
-        Docking2dExplicitOptimizationRTA(), Docking2dImplicitOptimizationRTA()]
-output_names = ['rta_test_docking_2d_explicit_switching', 'rta_test_docking_2d_implicit_switching',
-                'rta_test_docking_2d_explicit_optimization', 'rta_test_docking_2d_implicit_optimization']
+    rtas = [Docking2dExplicitSwitchingRTA(), Docking2dImplicitSwitchingRTA(), 
+            Docking2dExplicitOptimizationRTA(), Docking2dImplicitOptimizationRTA()]
+    output_names = ['rta_test_docking_2d_explicit_switching', 'rta_test_docking_2d_implicit_switching',
+                    'rta_test_docking_2d_explicit_optimization', 'rta_test_docking_2d_implicit_optimization']
 
-os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
 
-for rta, output_name in zip(rtas, output_names):
-    env = Env(rta)
-    start_time = time.time()
-    x, u, i = env.simulate_episode()
-    print(f"Simulation time: {time.time()-start_time:2.3f} sec")
-    env.plotter(x, u, i)
-    if plot_fig:
-        plt.show()
-    if save_fig:
-        plt.savefig(os.path.join(output_dir, output_name))
+    for rta, output_name in zip(rtas, output_names):
+        env = Env(rta)
+        start_time = time.time()
+        x, u, i = env.simulate_episode()
+        print(f"Simulation time: {time.time()-start_time:2.3f} sec")
+        env.plotter(x, u, i)
+        if plot_fig:
+            plt.show()
+        if save_fig:
+            plt.savefig(os.path.join(output_dir, output_name))
 
-# env = Env(Docking2dExplicitOptimizationRTA())
-# env.run_one_step()
-# import cProfile
-# cProfile.run('env.run_one_step()', filename='docking2d.prof')
+    # env = Env(Docking2dExplicitOptimizationRTA())
+    # env.run_one_step()
+    # import cProfile
+    # cProfile.run('env.run_one_step()', filename='docking2d.prof')

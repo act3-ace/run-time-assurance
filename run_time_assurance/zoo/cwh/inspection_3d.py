@@ -2,7 +2,7 @@
 """
 from collections import OrderedDict
 from functools import partial
-from typing import Union
+from typing import Any, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -17,7 +17,7 @@ from run_time_assurance.constraint import (
     ConstraintStrengthener,
     PolynomialConstraintStrengthener,
 )
-from run_time_assurance.rta import ExplicitASIFModule
+from run_time_assurance.rta import ExplicitASIFModule, RTAModule
 from run_time_assurance.utils import to_jnp_array_jit
 from run_time_assurance.zoo.cwh.docking_3d import ConstraintCWH3dRelativeVelocity
 from run_time_assurance.zoo.cwh.inspection_1v1 import (
@@ -48,7 +48,7 @@ class InspectionRTA(ExplicitASIFModule):
 
     Parameters
     ----------
-    num_deputies : float, optional
+    num_deputies : int, optional
         number of deputies in simulation, by default NUM_DEPUTIES_DEFAULT
     m : float, optional
         mass in kg of spacecraft, by default M_DEFAULT
@@ -83,7 +83,7 @@ class InspectionRTA(ExplicitASIFModule):
     def __init__(
         self,
         *args,
-        num_deputies=NUM_DEPUTIES_DEFAULT,
+        num_deputies: int = NUM_DEPUTIES_DEFAULT,
         m: float = M_DEFAULT,
         n: float = N_DEFAULT,
         chief_radius: float = CHIEF_RADIUS_DEFAULT,
@@ -363,3 +363,48 @@ class ConstraintPSMDeputy(ConstraintModule):
         vmapped_get_future_state = vmap(self.get_future_state, (None, 0), 0)
         phi_array = vmapped_get_future_state(state, jnp.linspace(0, self.steps * self.dt, self.steps + 1))
         return phi_array
+
+
+class CombinedInspectionRTA(RTAModule):
+    """
+    Combines each individual deputy RTA into one module
+
+    Parameters
+    ----------
+    num_deputies : int, optional
+        number of deputies in simulation, by default NUM_DEPUTIES_DEFAULT
+    deputy_rta: RTAModule, optional
+        RTA used by each individual deputy
+    control_bounds_high : float, optional
+        upper bound of allowable control. Pass a list for element specific limit. By default U_MAX_DEFAULT
+    control_bounds_low : float, optional
+        lower bound of allowable control. Pass a list for element specific limit. By default -U_MAX_DEFAULT
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        num_deputies: int = NUM_DEPUTIES_DEFAULT,
+        deputy_rta: RTAModule = InspectionRTA(),
+        control_bounds_high: Union[float, int, list, np.ndarray] = U_MAX_DEFAULT,
+        control_bounds_low: Union[float, int, list, np.ndarray] = -U_MAX_DEFAULT,
+        **kwargs: Any
+    ):
+        self.num_deputies = num_deputies
+        self.deputy_rta = deputy_rta
+        super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
+
+    def compute_filtered_control(self, input_state: Any, step_size: float, control_desired: np.ndarray) -> np.ndarray:
+        u_act = np.zeros(self.num_deputies * 3)
+        for i in range(self.num_deputies):
+            u_des = control_desired[3 * i:3 * i + 3]
+            x_new = self.get_agent_state(input_state, i)
+            u_act[3 * i:3 * i + 3] = self.deputy_rta.filter_control(x_new, step_size, u_des)
+        return u_act
+
+    def get_agent_state(self, state, i):
+        """Places current agent state at beginning of array"""
+        x_i = state[6 * i:6 * i + 6]
+        x_old = np.delete(state, np.s_[6 * i:6 * i + 6], 0)
+        x = np.concatenate((x_i, x_old))
+        return x

@@ -4,67 +4,38 @@ import time
 import os
 
 from safe_autonomy_dynamics.integrators import M_DEFAULT, generate_dynamics_matrices
+from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from run_time_assurance.zoo.integrators.integrator_1d import Integrator1dDockingExplicitSwitchingRTA, Integrator1dDockingImplicitSwitchingRTA, \
                                                  Integrator1dDockingExplicitOptimizationRTA, Integrator1dDockingImplicitOptimizationRTA
+from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
 
 
-class Env():
-    def __init__(self):
-        self.dt = 0.02  # Time step
-        self.max_time = 4
+class Env(DataTrackingSampleTestingModule):
+    def __init__(self, rta):
         self.u_max = 1  # Actuation constraint
         self.docking_region = 0.1
         self.docking_max_vel = 0.1
-        self.A, self.B = generate_dynamics_matrices(m=M_DEFAULT, mode='1d')
 
-    def u_des(self, x):
+        A, B = generate_dynamics_matrices(m=M_DEFAULT, mode='1d')
+        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method='RK45')
+
+        super().__init__(rta=rta, simulation_time=4, step_size=0.02, control_dim=1, state_dim=2)
+
+    def _desired_control(self, state):
         return np.array([self.u_max])
 
-    def reset(self):
-        x = np.array([[-1.75], [0.]])
-        return x, False
+    def _get_initial_state(self):
+        return np.array([-1.75, 0.])
 
-    def step(self, x, u):
-        # Euler integration
-        xd = self.A @ x + self.B @ u
-        x1 = x + xd * self.dt
-
-        if abs(x1[0, 0]) < self.docking_region and x1[1, 0] < self.docking_max_vel:
-            done = True
-        else:
-            done = False
-        print('step')
-
-        return x1, done
-
-    def run_episode(self, rta):
-        self.rta = rta
-        # Track time
-        start_time = time.time()
-        # Track initial values
-        x, done = self.reset()
-        array = [x.flatten()]
-        control = [self.u_des(x).flatten()]
-        intervening = [False]
-
-        # Run episode
-        for _ in range(int(self.max_time/self.dt)):
-            # Get u_des
-            u_des = self.u_des(x)
-            # Use RTA
-            u_safe = np.vstack(self.rta.filter_control(x.flatten(), self.dt, u_des.flatten()))
-            # Take step using safe action
-            x, done = self.step(x, u_safe)
-            # Track values
-            array = np.append(array, [x.flatten()], axis=0)
-            control = np.append(control, [u_safe.flatten()], axis=0)
-            intervening.append(self.rta.intervening)
-            if done:
-                break
-
-        # Print final time, plot
-        print(f"Simulation time: {time.time()-start_time:2.3f} sec")
-        self.plotter(array, control, np.array(intervening))
+    def _pred_state(self, state, step_size, control):
+        # return next_state
+        out, _ = self.dynamics.step(step_size, state, control)
+        return out
+    
+    def _check_done_conditions(self, state, time):
+        docking_done = abs(state[0]) < self.docking_region and state[1] < self.docking_max_vel
+        time_done = super()._check_done_conditions(state, time)
+        return bool(docking_done or time_done)
 
     def plotter(self, array, control, intervening):
         fig = plt.figure(figsize=(20, 10))
@@ -90,13 +61,13 @@ class Env():
         ax1.legend()
 
         ax2 = fig.add_subplot(122)
-        xlim = len(control[:, 0]) * self.dt * 1.1
+        xlim = len(control[:, 0]) * self.step_size * 1.1
         ax2.plot([0, xlim], [1, 1], 'k--', linewidth=2)
         ax2.plot([0, xlim], [-1, -1], 'k--', linewidth=2)
         ax2.fill_between([0, xlim], -1, 1, color=(244/255, 249/255, 241/255)) # green
         ax2.fill_between([0, xlim], -2, -1, color=(255/255, 239/255, 239/255)) # red
         ax2.fill_between([0, xlim], 1, 2, color=(255/255, 239/255, 239/255)) # red
-        ax2.plot(np.array(range(len(control[:, 0])))*self.dt, control[:, 0], 'b', linewidth=2)
+        ax2.plot(np.array(range(len(control[:, 0])))*self.step_size, control[:, 0], 'b', linewidth=2)
         ax2.grid(True)
         ax2.set_xlim([0, xlim])
         ax2.set_ylim([-1.1, 1.1])
@@ -105,22 +76,25 @@ class Env():
         ax2.set_title('Control')  
 
 
-plot_fig = True
-save_fig = True
-output_dir = 'figs/1d'
+if __name__ == '__main__':
+    plot_fig = True
+    save_fig = True
+    output_dir = 'figs/1d'
 
-rtas = [Integrator1dDockingExplicitSwitchingRTA(), Integrator1dDockingImplicitSwitchingRTA(), 
-        Integrator1dDockingExplicitOptimizationRTA(), Integrator1dDockingImplicitOptimizationRTA()]
-output_names = ['rta_test_integrator_1d_explicit_switching', 'rta_test_integrator_1d_implicit_switching',
-                'rta_test_integrator_1d_explicit_optimization', 'rta_test_integrator_1d_implicit_optimization']
+    rtas = [Integrator1dDockingExplicitSwitchingRTA(), Integrator1dDockingImplicitSwitchingRTA(), 
+            Integrator1dDockingExplicitOptimizationRTA(), Integrator1dDockingImplicitOptimizationRTA()]
+    output_names = ['rta_test_integrator_1d_explicit_switching', 'rta_test_integrator_1d_implicit_switching',
+                    'rta_test_integrator_1d_explicit_optimization', 'rta_test_integrator_1d_implicit_optimization']
 
-env = Env()
+    os.makedirs(output_dir, exist_ok=True)
 
-os.makedirs(output_dir, exist_ok=True)
-
-for rta, output_name in zip(rtas, output_names):
-    env.run_episode(rta)
-    if plot_fig:
-        plt.show()
-    if save_fig:
-        plt.savefig(os.path.join(output_dir, output_name))
+    for rta, output_name in zip(rtas, output_names):
+        env = Env(rta)
+        start_time = time.time()
+        x, u, i = env.simulate_episode()
+        print(f"Simulation time: {time.time()-start_time:2.3f} sec")
+        env.plotter(x, u, i)
+        if plot_fig:
+            plt.show()
+        if save_fig:
+            plt.savefig(os.path.join(output_dir, output_name))
