@@ -1,3 +1,10 @@
+## [1.9.2](https://github.com/act3-ace/run-time-assurance/compare/v1.9.1...v1.9.2) (2023-03-15)
+
+
+### Bug Fixes
+
+* Refactor tests to use DataTrackingSampleTestingModule ([4f848bc](https://github.com/act3-ace/run-time-assurance/commit/4f848bcc2374f1db6c033836a4ba0e113fb256c0))
+
 ## [1.9.1](https://github.com/act3-ace/run-time-assurance/compare/v1.9.0...v1.9.1) (2023-03-01)
 
 
