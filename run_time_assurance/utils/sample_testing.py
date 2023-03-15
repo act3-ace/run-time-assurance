@@ -110,10 +110,13 @@ class DataTrackingSampleTestingModule(BaseSampleTestingModule):
     ----------
     rta: RTAModule
         RTA module to test
+    check_init_state: bool
+        Resamples initial state if it is initially unsafe. Default True
     """
 
-    def __init__(self, *args, rta: RTAModule, **kwargs):
+    def __init__(self, *args, rta: RTAModule, check_init_state: bool = True, **kwargs):
         self.rta = rta
+        self.check_init_state = check_init_state
         super().__init__(*args, **kwargs)
 
     def simulate_episode(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -129,7 +132,18 @@ class DataTrackingSampleTestingModule(BaseSampleTestingModule):
             Array tracking if RTA is intervening at each time step.
         """
 
-        state = self._get_initial_state()
+        if self.check_init_state:
+            safe_state = False
+            check_counter = 0
+            while not safe_state:
+                check_counter += 1
+                if check_counter >= 100:
+                    raise ValueError('Unable to find safe initial state. To disable, set check_init_state = False.')
+                state = self._get_initial_state()
+                safe_state = self.check_if_safe_state(state)
+        else:
+            state = self._get_initial_state()
+
         done = False
         current_time = 0.
 
@@ -143,6 +157,7 @@ class DataTrackingSampleTestingModule(BaseSampleTestingModule):
             state = self._pred_state(state, self.step_size, rta_control)
             current_time += self.step_size
             done = self._check_done_conditions(state, current_time)
+            self._update_status(state, current_time)
 
             state_array = np.append(state_array, [state], axis=0)
             control_array = np.append(control_array, [rta_control], axis=0)
@@ -158,6 +173,42 @@ class DataTrackingSampleTestingModule(BaseSampleTestingModule):
         desired_control = self._desired_control(state)
         rta_control = self.rta.filter_control(state, self.step_size, desired_control)
         state = self._pred_state(state, self.step_size, rta_control)
+
+    def _update_status(self, state: np.ndarray, time: float):  # pylint: disable=unused-argument
+        """Update sim variables at each step, if desired
+
+        Parameters
+        ----------
+        state: np.ndarray
+            Current system state
+        time: float
+            Current simulation time
+        """
+        ...
+
+    def check_if_safe_state(self, state: np.ndarray):
+        """
+        Determines if state is safe or not.
+        Overwrite this method when checking safety for non ContraintBasedRTA modules.
+
+        Parameters
+        ----------
+        state: np.ndarray
+            Current system state
+
+        Returns
+        -------
+        bool
+            True if state is safe, False if not.
+        """
+        assert isinstance(self.rta, ConstraintBasedRTA
+                          ), ("Must use constraint based rta with default check_state method. To disable, set check_init_state = False.")
+        init_state_safe = True
+        for c in self.rta.constraints.values():
+            if c.phi(to_jnp_array_jit(state)) < 0 or c(to_jnp_array_jit(state)) < 0:
+                init_state_safe = False
+                break
+        return init_state_safe
 
 
 class SafetyAssuranceSampleTestingModule(BaseSampleTestingModule):

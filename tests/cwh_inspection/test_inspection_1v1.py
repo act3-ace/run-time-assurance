@@ -3,25 +3,23 @@ import scipy
 import matplotlib.pyplot as plt
 import time
 from collections import OrderedDict
-import glob
 import os
-import csv
 
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
-from run_time_assurance.zoo.cwh.inspection_1v1 import U_MAX_DEFAULT, Inspection1v1RTA, SwitchingFuelLimitRTA, InspectionCascadedRTA
-from run_time_assurance.utils import to_jnp_array_jit, SolverError
+from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
+from run_time_assurance.zoo.cwh.inspection_1v1 import U_MAX_DEFAULT, Inspection1v1RTA, InspectionCascadedRTA
+from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
+from run_time_assurance.utils import to_jnp_array_jit
 
 # from jax.config import config
 # config.update('jax_disable_jit', True)
 
 
-class Env():
-    def __init__(self, rta, dt=1, time=3000, constraint_keys=[]):
-        self.rta = rta
-        self.dt = dt  # Time step
-        self.time = time # Total sim time
+class Env(DataTrackingSampleTestingModule):
+    def __init__(self, rta, constraint_keys=[], **kwargs):
         self.u_max = U_MAX_DEFAULT  # Actuation constraint
         self.inspection_rta = Inspection1v1RTA()
+        self.state_des = np.array([0, 0, 0, 0, 0, 0])
 
         # Update constraints
         new_constraints = OrderedDict()
@@ -30,204 +28,39 @@ class Env():
         if len(new_constraints) != 0:
             self.rta.constraints = new_constraints
 
-        # Generate dynamics matrices
-        self.A, self.B = generate_cwh_matrices(M_DEFAULT, N_DEFAULT, mode="3d")
+        A, B = generate_cwh_matrices(M_DEFAULT, N_DEFAULT, mode="3d")
+        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method='RK45')
 
         # Specify LQR gains
         Q = np.eye(6) * 0.05  # State cost
         R = np.eye(3) * 1000  # Control cost
 
         # Solve ARE
-        Xare = np.matrix(scipy.linalg.solve_continuous_are(self.A, self.B, Q, R))
-        # Get LQR gain
-        self.Klqr = np.array(-scipy.linalg.inv(R)*(self.B.T*Xare))
+        Xare = np.matrix(scipy.linalg.solve_continuous_are(A, B, Q, R))
+        self.Klqr = np.array(-scipy.linalg.inv(R)*(B.T*Xare))
 
-    def u_des(self, x, x_des=np.array([0, 0, 0, 0, 0, 0, 0, 0])):
-        # LQR to desired state
-        u = self.Klqr @ (x[0:6] - x_des[0:6])
+        super().__init__(rta=rta, simulation_time=3000, step_size=1, control_dim=3, state_dim=8, **kwargs)
+
+    def _desired_control(self, state):
+        # LQR to origin
+        u = self.Klqr @ (state[0:6] - self.state_des)
         return np.clip(u, -self.u_max, self.u_max)
 
-    def reset(self):
+    def _get_initial_state(self):
+        # Random point 10km away from origin
         theta = np.random.rand(2) * 2 * np.pi
+
         p = np.array([np.cos(theta[0])*np.sin(theta[1]), np.sin(theta[0])*np.sin(theta[1]), np.cos(theta[1])]) * 100
         v = np.array([0, 0, 0])
         return np.concatenate((p, v, np.array([0, 0])))
 
-    def run_episode(self, plotter=True, init_state=None):
-        # Track time
-        start_time = time.time()
-        # Track initial values
-        if init_state is None:
-            x = self.reset()
-        else:
-            x = init_state
-
-        for c in self.rta.constraints.values():
-            if c.phi(x) < 0 or c(x) < 0:
-                print("Initial state unsafe")
-                return None
-        if plotter:
-            # Data tracking arrays
-            array = [x]
-            control = [np.zeros(3)]
-            intervening = [False]
-
-        # Run episode
-        for t in range(int(self.time/self.dt)):
-            if t < 1000:
-                x_des = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
-            else:
-                x_des = np.array([-1500*np.cos(x[6]), -1500*np.sin(x[6]), 0., 0., 0., 0., 0., 0.])
-            if init_state is None:
-                u_des = self.u_des(x, x_des)
-            else:
-                u_des = np.array([0, 0, 0])
-            u_safe = self.rta.filter_control(x, self.dt, u_des)
-            # Take step using safe action
-            x = np.array(self.inspection_rta._pred_state_fn(to_jnp_array_jit(x), self.dt, to_jnp_array_jit(u_safe)))
-            if plotter:
-                # Track data
-                array = np.append(array, [x], axis=0)
-                control = np.append(control, [u_safe], axis=0)
-                intervening.append(self.rta.intervening)
-
-            # for k, c in self.rta.constraints.items():
-            #     if c.phi(to_jnp_array_jit(x)) < 0:
-            #         print(t, k, c.phi(to_jnp_array_jit(x)))
-
-        # Print final time, plot
-        print(f"Simulation time: {time.time()-start_time:2.3f} sec")
-        if plotter:
-            self.plotter(array, control, np.array(intervening))
-
-    def run_mc(self, x):
-        self.rta.solver_exception = True
-        # Check if initial state is safe
-        for c in self.rta.constraints.values():
-            if c.phi(x) < 0 or c(x) < 0:
-                # print("Initial state unsafe")
-                return None
-        
-        # Run episode
-        for t in range(int(self.time/self.dt)):
-            # Use RTA
-            try:
-                act =  np.array([0, 0, 0])
-                # act = np.random.rand(3)*2-1
-                # act = self.u_des(x)
-                u = self.rta.filter_control(x, self.dt, act)
-            except SolverError:
-                print('Solver failed')
-                return False
-            # Take step using safe action (**Euler integration**)
-            x = np.array(self.inspection_rta._pred_state_fn(to_jnp_array_jit(x), self.dt, to_jnp_array_jit(u)))
-            # Check if current state is safe
-            for c in self.rta.constraints.values():
-                if c.phi(x) < 0:
-                    # print("Current state unsafe, RTA failed")
-                    return False
-            
-        # If all states are safe, returns True
-        return True
-
-    def run_fuel_sim(self):
-        self.rta = InspectionCascadedRTA()
-        x = np.array([-500., -500., 700., 0, 0, 0, 0, 0])
-        x_des = np.array([500, 500, 700, 0, 0, 0, 0, 0])
-        array = [x]
-        control = [np.zeros(3)]
-        intervening = [False]
-        for t in range(7000):
-            if t % 100 == 0:
-                x_des *= -1
-            u_des = self.u_des(x, x_des)
-            u_safe = self.rta.filter_control(x, self.dt, u_des)
-            x = np.array(self.inspection_rta._pred_state_fn(to_jnp_array_jit(x), self.dt, to_jnp_array_jit(u_safe)))
-            array = np.append(array, [x], axis=0)
-            control = np.append(control, [u_safe], axis=0)
-            intervening.append(self.rta.intervening)
-
-        paper_plot=False
-        fast_plot=True
-        if not paper_plot:
-            fig = plt.figure(figsize=(15, 15))
-            ax1 = fig.add_subplot(331, projection='3d')
-            ax4 = fig.add_subplot(334)
-            ax9 = fig.add_subplot(339)
-            lw = 2
-        else:
-            plt.rcParams.update({'font.size': 25, 'text.usetex': True})
-            lw = 4
-            hp = 0.1
-        
-        if not fast_plot:
-            if paper_plot:
-                fig = plt.figure()
-                ax1 = fig.add_subplot(111, projection='3d')
-            for i in range(len(array)-1):
-                ax1.plot(array[i:i+2, 0], array[i:i+2, 1], array[i:i+2, 2], color=plt.cm.cool(i/len(array)), linewidth=lw)
-            # max = np.max(np.abs(array[:, 0:3]))*1.1
-            max = 1100
-            ax1.plot(0, 0, 0, 'k*', markersize=15)
-            ax1.set_xlabel(r'$x$ [km]')
-            ax1.set_ylabel(r'$y$ [km]')
-            ax1.set_zlabel(r'$z$ [km]')
-            ax1.set_xticks([-1000, 0, 1000])
-            ax1.set_yticks([-1000, 0, 1000])
-            ax1.set_zticks([-1000, 0, 1000])
-            ax1.set_xticklabels([-1, 0, 1])
-            ax1.set_yticklabels([-1, 0, 1])
-            ax1.set_zticklabels([-1, 0, 1])
-            ax1.set_xlim([-max, max])
-            ax1.set_ylim([-max, max])
-            ax1.set_zlim([-max, max])
-            ax1.set_box_aspect((1,1,1))
-            ax1.grid(True)
-            if paper_plot:
-                ax1.xaxis.labelpad = 10
-                ax1.yaxis.labelpad = 10
-                ax1.zaxis.labelpad = 10
-                plt.tight_layout(pad=hp)
-
-        if paper_plot:
-            fig = plt.figure()
-            ax4 = fig.add_subplot(111)
-        xmax = len(array)*1.1
-        ymax = np.maximum(self.inspection_rta.fuel_limit, np.max(array[:, 7]))*1.1
-        ax4.plot(range(len(array)), array[:, 7], linewidth=lw)
-        ax4.fill_between([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax4.fill_between([0, xmax], [0, 0], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], color=(244/255, 249/255, 241/255))
-        ax4.plot([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], 'k--', linewidth=lw)
-        ax4.plot([0, xmax], [self.inspection_rta.fuel_switching_threshold, self.inspection_rta.fuel_switching_threshold], 'r--', linewidth=lw)
-        ax4.set_xlim([0, xmax])
-        ax4.set_ylim([0, ymax])
-        ax4.set_xlabel('Time [s]')
-        ax4.set_ylabel(r'Fuel Used ($m_f$) [kg]')
-        ax4.grid(True)
-        if paper_plot:
-            plt.tight_layout(pad=hp)
-
-        if paper_plot:
-            fig = plt.figure()
-            ax9 = fig.add_subplot(111)
-        xmax = len(array)*1.1
-        ymax = self.inspection_rta.u_max*1.2
-        ax9.plot(range(len(control)), control[:, 0], linewidth=lw, label=r'$F_x$')
-        ax9.plot(range(len(control)), control[:, 1], linewidth=lw, label=r'$F_y$')
-        ax9.plot(range(len(control)), control[:, 2], linewidth=lw, label=r'$F_z$')
-        ax9.fill_between([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax9.fill_between([0, xmax], [-ymax, -ymax], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(255/255, 239/255, 239/255))
-        ax9.fill_between([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(244/255, 249/255, 241/255))
-        ax9.plot([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], 'k--', linewidth=lw)
-        ax9.plot([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], 'k--', linewidth=lw)
-        ax9.set_xlim([0, xmax])
-        ax9.set_ylim([-ymax, ymax])
-        ax9.set_xlabel('Time [s]')
-        ax9.set_ylabel(r'$\mathbf{u}$ [N]')
-        ax9.grid(True)
-        ax9.legend()
-        if paper_plot:
-            plt.tight_layout(pad=hp)
+    def _pred_state(self, state, step_size, control):
+        out = np.array(self.inspection_rta._pred_state_fn(to_jnp_array_jit(state), step_size, to_jnp_array_jit(control)))
+        return out
+    
+    def _update_status(self, state: np.ndarray, time: float):
+        if time >= 1000:
+            self.state_des = np.array([-1500*np.cos(state[6]), -1500*np.sin(state[6]), 0., 0., 0., 0.])
 
     def plotter(self, array, control, intervening, paper_plot=False, fast_plot=True):
         if not paper_plot:
@@ -342,16 +175,15 @@ class Env():
             fig = plt.figure()
             ax4 = fig.add_subplot(111)
         xmax = len(array)*1.1
-        ymax = np.maximum(self.inspection_rta.fuel_limit, np.max(array[:, 7]))*1.1
+        ymax = np.maximum(self.inspection_rta.delta_v_limit, np.max(array[:, 7]))*1.1
         ax4.plot(range(len(array)), array[:, 7], linewidth=lw)
-        ax4.fill_between([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
-        ax4.fill_between([0, xmax], [0, 0], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], color=(244/255, 249/255, 241/255))
-        ax4.plot([0, xmax], [self.inspection_rta.fuel_limit, self.inspection_rta.fuel_limit], 'k--', linewidth=lw)
-        ax4.plot([0, xmax], [self.inspection_rta.fuel_switching_threshold, self.inspection_rta.fuel_switching_threshold], 'r--', linewidth=lw)
+        ax4.fill_between([0, xmax], [self.inspection_rta.delta_v_limit, self.inspection_rta.delta_v_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax4.fill_between([0, xmax], [0, 0], [self.inspection_rta.delta_v_limit, self.inspection_rta.delta_v_limit], color=(244/255, 249/255, 241/255))
+        ax4.plot([0, xmax], [self.inspection_rta.delta_v_limit, self.inspection_rta.delta_v_limit], 'k--', linewidth=lw)
         ax4.set_xlim([0, xmax])
         ax4.set_ylim([0, ymax])
         ax4.set_xlabel('Time [s]')
-        ax4.set_ylabel(r'Fuel Used ($m_f$) [kg]')
+        ax4.set_ylabel(r'$\Delta$ V Used [m/s]')
         ax4.grid(True)
         if paper_plot:
             plt.tight_layout(pad=hp)
@@ -458,7 +290,7 @@ class Env():
             ax1.set_title('Trajectory')
             ax2.set_title('Safe Separation')
             ax3.set_title('Dynamic Speed Constraint')
-            ax4.set_title('Fuel Limit')
+            ax4.set_title('Delta V Limit')
             ax5.set_title('Keep Out Zone (Sun Avoidance)')
             ax6.set_title('Keep In Zone')
             ax7.set_title('Passively Safe Maneuvers')
@@ -467,26 +299,115 @@ class Env():
             fig.tight_layout(h_pad=2)
 
 
+class FuelEnv(Env):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, check_init_state = False, **kwargs)
+        self.state_des = np.array([500, 500, 700, 0, 0, 0])
+    
+    def _get_initial_state(self):
+        return np.array([-500., -500., 700., 0, 0, 0, 0, 0])
+    
+    def _update_status(self, state: np.ndarray, time: float):
+        if time % 100 == 0:
+            self.state_des *= -1
+
+    def plotter(self, array, control, intervening, paper_plot=False, fast_plot=False):
+        if not paper_plot:
+            fig = plt.figure(figsize=(15, 6))
+            ax1 = fig.add_subplot(131, projection='3d')
+            ax4 = fig.add_subplot(132)
+            ax9 = fig.add_subplot(133)
+            lw = 2
+        else:
+            plt.rcParams.update({'font.size': 25, 'text.usetex': True})
+            lw = 4
+            hp = 0.1
+        
+        if not fast_plot:
+            if paper_plot:
+                fig = plt.figure()
+                ax1 = fig.add_subplot(111, projection='3d')
+            for i in range(len(array)-1):
+                ax1.plot(array[i:i+2, 0], array[i:i+2, 1], array[i:i+2, 2], color=plt.cm.cool(i/len(array)), linewidth=lw)
+            # max = np.max(np.abs(array[:, 0:3]))*1.1
+            max = 1100
+            ax1.plot(0, 0, 0, 'k*', markersize=15)
+            ax1.set_xlabel(r'$x$ [km]')
+            ax1.set_ylabel(r'$y$ [km]')
+            ax1.set_zlabel(r'$z$ [km]')
+            ax1.set_xticks([-1000, 0, 1000])
+            ax1.set_yticks([-1000, 0, 1000])
+            ax1.set_zticks([-1000, 0, 1000])
+            ax1.set_xticklabels([-1, 0, 1])
+            ax1.set_yticklabels([-1, 0, 1])
+            ax1.set_zticklabels([-1, 0, 1])
+            ax1.set_xlim([-max, max])
+            ax1.set_ylim([-max, max])
+            ax1.set_zlim([-max, max])
+            ax1.set_box_aspect((1,1,1))
+            ax1.grid(True)
+            if paper_plot:
+                ax1.xaxis.labelpad = 10
+                ax1.yaxis.labelpad = 10
+                ax1.zaxis.labelpad = 10
+                plt.tight_layout(pad=hp)
+
+        if paper_plot:
+            fig = plt.figure()
+            ax4 = fig.add_subplot(111)
+        xmax = len(array)*1.1
+        ymax = np.maximum(self.inspection_rta.delta_v_limit, np.max(array[:, 7]))*1.1
+        ax4.plot(range(len(array)), array[:, 7], linewidth=lw)
+        ax4.fill_between([0, xmax], [self.inspection_rta.delta_v_limit, self.inspection_rta.delta_v_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax4.fill_between([0, xmax], [0, 0], [self.inspection_rta.delta_v_limit, self.inspection_rta.delta_v_limit], color=(244/255, 249/255, 241/255))
+        ax4.plot([0, xmax], [self.inspection_rta.delta_v_limit, self.inspection_rta.delta_v_limit], 'k--', linewidth=lw)
+        ax4.set_xlim([0, xmax])
+        ax4.set_ylim([0, ymax])
+        ax4.set_xlabel('Time [s]')
+        ax4.set_ylabel(r'$\Delta$ V Used [m/s]')
+        ax4.grid(True)
+        if paper_plot:
+            plt.tight_layout(pad=hp)
+
+        if paper_plot:
+            fig = plt.figure()
+            ax9 = fig.add_subplot(111)
+        xmax = len(array)*1.1
+        ymax = self.inspection_rta.u_max*1.2
+        ax9.plot(range(len(control)), control[:, 0], linewidth=lw, label=r'$F_x$')
+        ax9.plot(range(len(control)), control[:, 1], linewidth=lw, label=r'$F_y$')
+        ax9.plot(range(len(control)), control[:, 2], linewidth=lw, label=r'$F_z$')
+        ax9.fill_between([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
+        ax9.fill_between([0, xmax], [-ymax, -ymax], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(255/255, 239/255, 239/255))
+        ax9.fill_between([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(244/255, 249/255, 241/255))
+        ax9.plot([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], 'k--', linewidth=lw)
+        ax9.plot([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], 'k--', linewidth=lw)
+        ax9.set_xlim([0, xmax])
+        ax9.set_ylim([-ymax, ymax])
+        ax9.set_xlabel('Time [s]')
+        ax9.set_ylabel(r'$\mathbf{u}$ [N]')
+        ax9.grid(True)
+        ax9.legend()
+        if paper_plot:
+            plt.tight_layout(pad=hp)
+
+
 if __name__ == '__main__':
-    rta = Inspection1v1RTA()
-    # rta = SwitchingFuelLimitRTA()
-    # rta = InspectionCascadedRTA()
-    env = Env(rta)
+    plot_fig = True
+    save_fig = True
+    output_dir = 'figs/inspection_1v1'
 
-    env.run_episode()
-    # env.run_fuel_sim()
-    plt.show()
+    envs = [Env(Inspection1v1RTA()), FuelEnv(InspectionCascadedRTA())]
+    output_names = ['rta_test_inspection_1v1', 'rta_test_cascaded_rta']
 
-    # list_of_files = glob.glob('*.csv')
-    # latest_file = max(list_of_files, key=os.path.getctime)
-    # with open(latest_file, newline='') as csvfile:
-    #     array = csv.reader(csvfile, delimiter=',')
-    #     for row in array:
-    #         if row[0] == 'False':
-    #             x = row[1]
-    #             x = x.replace('[', '')
-    #             x = x.replace(']', '')
-    #             x = x.replace(',', '')
-    #             x = np.array([float(val) for val in x.split()])
-    #             env.run_episode(init_state=x)
-    #             plt.show()
+    os.makedirs(output_dir, exist_ok=True)
+
+    for env, output_name in zip(envs, output_names):
+        start_time = time.time()
+        x, u, i = env.simulate_episode()
+        print(f"Simulation time: {time.time()-start_time:2.3f} sec")
+        env.plotter(x, u, i)
+        if plot_fig:
+            plt.show()
+        if save_fig:
+            plt.savefig(os.path.join(output_dir, output_name))

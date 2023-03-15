@@ -1,7 +1,7 @@
 """This module implements RTA methods for the single-agent inspection problem with 3D CWH dynamics models
 """
 from collections import OrderedDict
-from typing import Dict, Tuple, Union
+from typing import Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -12,14 +12,12 @@ from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generat
 
 from run_time_assurance.constraint import (
     ConstraintMagnitudeStateLimit,
-    ConstraintMaxStateLimit,
     ConstraintModule,
     ConstraintStrengthener,
     HOCBFConstraint,
     PolynomialConstraintStrengthener,
 )
-from run_time_assurance.controller import RTABackupController
-from run_time_assurance.rta import CascadedRTA, ExplicitASIFModule, ExplicitSimplexModule
+from run_time_assurance.rta import CascadedRTA, ExplicitASIFModule, RTAModule
 from run_time_assurance.state import RTAStateWrapper
 from run_time_assurance.utils import to_jnp_array_jit
 from run_time_assurance.zoo.cwh.docking_3d import ConstraintCWH3dRelativeVelocity
@@ -33,10 +31,7 @@ R_MAX_DEFAULT = 1000  # max distance from chief [m] (translational keep out zone
 FOV_DEFAULT = 60 * jnp.pi / 180  # sun avoidance angle [rad] (translational keep out zone)
 U_MAX_DEFAULT = 1  # Max thrust [N] (avoid actuation saturation)
 VEL_LIMIT_DEFAULT = 1  # Maximum velocity limit [m/s] (Avoid aggressive maneuvering)
-FUEL_LIMIT_DEFAULT = 0.1  # Maximum fuel use limit [kg]
-FUEL_THRESHOLD_DEFAULT = 0.09  # Fuel use threshold, to switch to backup controller [kg]
-GRAVITY = 9.81  # Gravity at Earth's surface [m/s^2]
-SPECIFIC_IMPULSE_DEFAULT = 220  # Specific Impulse of thrusters [s]
+DELTA_V_LIMIT_DEFAULT = 20  # Delta v limit [m/s]
 SUN_VEL_DEFAULT = -N_DEFAULT  # Speed of sun rotation in x-y plane
 
 
@@ -114,13 +109,13 @@ class Inspection3dState(RTAStateWrapper):
         self.vector[6] = val
 
     @property
-    def m_fuel(self) -> float:
-        """Getter for fuel mass component"""
+    def delta_v(self) -> float:
+        """Getter for delta_v component"""
         return self.vector[7]
 
-    @m_fuel.setter
-    def m_fuel(self, val: float):
-        """Setter for fuel mass component"""
+    @delta_v.setter
+    def delta_v(self, val: float):
+        """Setter for delta_v component"""
         self.vector[7] = val
 
 
@@ -154,14 +149,8 @@ class Inspection1v1RTA(ExplicitASIFModule):
         sensor field of view, by default FOV_DEFAULT
     vel_limit : float, optional
         max velocity magnitude, by default VEL_LIMIT_DEFAULT
-    fuel_limit : float, optional
-        maximum fuel used limit, by default FUEL_LIMIT_DEFAULT
-    fuel_switching_threshold : float, optional
-        fuel threshold at which to switch to backup controller
-    gravity : float, optional
-        gravity at Earth's surface, by default GRAVITY
-    isp : float, optional
-        Specific impulse of thrusters in seconds, by default SPECIFIC_IMPULSE_DEFAULT
+    delta_v_limit : float, optional
+        maximum delta_v used limit, by default DELTA_V_LIMIT_DEFAULT
     sun_vel : float, optional
         velocity of sun in x-y plane (rad/sec), by default SUN_VEL_DEFAULT
     use_hocbf : bool, optional
@@ -185,10 +174,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         r_max: float = R_MAX_DEFAULT,
         fov: float = FOV_DEFAULT,
         vel_limit: float = VEL_LIMIT_DEFAULT,
-        fuel_limit: float = FUEL_LIMIT_DEFAULT,
-        fuel_switching_threshold: float = FUEL_THRESHOLD_DEFAULT,
-        gravity: float = GRAVITY,
-        isp: float = SPECIFIC_IMPULSE_DEFAULT,
+        delta_v_limit: float = DELTA_V_LIMIT_DEFAULT,
         sun_vel: float = SUN_VEL_DEFAULT,
         use_hocbf: bool = False,
         control_bounds_high: Union[float, list, np.ndarray, jnp.ndarray] = U_MAX_DEFAULT,
@@ -206,10 +192,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         self.r_max = r_max
         self.fov = fov
         self.vel_limit = vel_limit
-        self.fuel_limit = fuel_limit
-        self.fuel_switching_threshold = fuel_switching_threshold
-        self.gravity = gravity
-        self.isp = isp
+        self.delta_v_limit = delta_v_limit
         self.sun_vel = sun_vel
         self.use_hocbf = use_hocbf
 
@@ -294,8 +277,8 @@ class Inspection1v1RTA(ExplicitASIFModule):
         """Computes state dot for ODE integration
         """
         xd = self.A @ x[0:6] + self.B @ u + 0 * t
-        fuel = jnp.sum(jnp.abs(u)) / (self.gravity * self.isp)
-        return jnp.concatenate((xd, jnp.array([self.sun_vel, fuel])))
+        delta_v = jnp.sum(jnp.abs(u)) / (self.m)
+        return jnp.concatenate((xd, jnp.array([self.sun_vel, delta_v])))
 
     def _pred_state_cwh(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Predicted state for only CWH equations
@@ -339,8 +322,8 @@ class Inspection1v1RTA(ExplicitASIFModule):
         return state[3:6]
 
 
-class SwitchingFuelLimitRTA(ExplicitSimplexModule):
-    """Explicit Simplex RTA Filter for fuel use
+class SwitchingDeltaVLimitRTA(RTAModule):
+    """Explicit Simplex RTA Filter for delta v use
     Switches to NMT tracking backup controller
 
     Parameters
@@ -349,14 +332,8 @@ class SwitchingFuelLimitRTA(ExplicitSimplexModule):
         mass in kg of spacecraft, by default M_DEFAULT
     n : float, optional
         orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
-    fuel_limit : float, optional
-        maximum fuel used limit, by default FUEL_LIMIT_DEFAULT
-    fuel_switching_threshold : float, optional
-        fuel threshold at which to switch to backup controller
-    gravity : float, optional
-        gravity at Earth's surface, by default GRAVITY
-    isp : float, optional
-        Specific impulse of thrusters in seconds, by default SPECIFIC_IMPULSE_DEFAULT
+    delta_v_limit : float, optional
+        maximum delta_v used limit, by default DELTA_V_LIMIT_DEFAULT
     control_bounds_high : float, optional
         upper bound of allowable control. Pass a list for element specific limit. By default U_MAX_DEFAULT
     control_bounds_low : float, optional
@@ -368,69 +345,15 @@ class SwitchingFuelLimitRTA(ExplicitSimplexModule):
         *args,
         m: float = M_DEFAULT,
         n: float = N_DEFAULT,
-        fuel_limit: float = FUEL_LIMIT_DEFAULT,
-        fuel_switching_threshold: float = FUEL_THRESHOLD_DEFAULT,
-        gravity: float = GRAVITY,
-        isp: float = SPECIFIC_IMPULSE_DEFAULT,
+        delta_v_limit: float = DELTA_V_LIMIT_DEFAULT,
         control_bounds_high: Union[float, np.ndarray] = U_MAX_DEFAULT,
         control_bounds_low: Union[float, np.ndarray] = -U_MAX_DEFAULT,
-        backup_controller: RTABackupController = None,
-        jit_compile_dict: Dict[str, bool] = None,
         **kwargs
     ):
         self.m = m
         self.n = n
-        self.fuel_limit = fuel_limit
-        self.fuel_switching_threshold = fuel_switching_threshold
-        self.gravity = gravity
-        self.isp = isp
-
-        if backup_controller is None:
-            backup_controller = LatchedENMTBackupController(m=self.m, n=self.n)
-
-        if jit_compile_dict is None:
-            jit_compile_dict = {'pred_state': True}
-
-        super().__init__(
-            *args,
-            control_bounds_high=control_bounds_high,
-            control_bounds_low=control_bounds_low,
-            backup_controller=backup_controller,
-            jit_compile_dict=jit_compile_dict,
-            **kwargs
-        )
-
-    def _setup_constraints(self) -> OrderedDict:
-        return OrderedDict([('fuel', ConstraintMaxStateLimit(limit_val=self.fuel_switching_threshold, state_index=7))])
-
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        m_f = state[7]
-        m_dot_f = jnp.sum(jnp.abs(control)) / (self.gravity * self.isp)
-        return jnp.array([0, 0, 0, 0, 0, 0, 0, m_f + m_dot_f * step_size])
-
-
-class InspectionCascadedRTA(CascadedRTA):
-    """Combines ASIF Inspection RTA with switching-based fuel limit
-    """
-
-    def _setup_rta_list(self):
-        return [Inspection1v1RTA(), SwitchingFuelLimitRTA()]
-
-
-class LatchedENMTBackupController(RTABackupController):
-    """Tracking LQR controller that tracks closest eNMT for 3d CWHSpacecraft
-
-    Parameters
-    ----------
-    m : float, optional
-        mass in kg of spacecraft, by default M_DEFAULT
-    n : float, optional
-        orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
-    """
-
-    def __init__(self, m: float = M_DEFAULT, n: float = N_DEFAULT):
-
-        self.n = n
+        self.delta_v_limit = delta_v_limit
+        self.n_steps = 500
 
         self.error_integral = np.zeros(6)
 
@@ -438,10 +361,10 @@ class LatchedENMTBackupController(RTABackupController):
         Q = np.eye(12) * 1e-5
         R = np.eye(3) * 1e5
         C = np.eye(6)
-        A, B = generate_cwh_matrices(m, self.n, mode="3d")
+        self.A, self.B = generate_cwh_matrices(m, self.n, mode="3d")
 
-        A_int = np.vstack((np.hstack((A, np.zeros((6, 6)))), np.hstack((C, np.zeros((6, 6))))))
-        B_int = np.vstack((B, np.zeros((6, 3))))
+        A_int = np.vstack((np.hstack((self.A, np.zeros((6, 6)))), np.hstack((C, np.zeros((6, 6))))))
+        B_int = np.vstack((self.B, np.zeros((6, 3))))
         # Solve the Algebraic Ricatti equation for the given system
         P = scipy.linalg.solve_continuous_are(A_int, B_int, Q, R)
         # Construct the constain gain matrix, K
@@ -449,20 +372,48 @@ class LatchedENMTBackupController(RTABackupController):
         self.K_1 = K[:, 0:6]
         self.K_2 = K[:, 6:]
 
-        super().__init__()
+        self.latched = False
 
-    def _generate_control(
-        self,
-        state: jnp.ndarray,
-        step_size: float,
-        controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray], None] = None
-    ) -> Tuple[jnp.ndarray, None]:
+        super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
 
-        error = jnp.array([0, 0, 0, state[3] - self.n / 2 * state[1], state[4] + 2 * self.n * state[0], 0])
-        backup_action = -self.K_1 @ error - self.K_2 @ self.error_integral
-        self.error_integral = self.error_integral + error * step_size
+    def _pred_state(self, state: np.ndarray, step_size: float, control: np.ndarray) -> np.ndarray:
+        xd = self.A @ state[0:6] + self.B @ control
+        sun_dot = np.array([-self.n])
+        delta_v_dot = np.array([np.sum(np.abs(control)) / (self.m)])
+        return state + np.concatenate((xd, sun_dot, delta_v_dot)) * step_size
 
-        return backup_action, None
+    def compute_filtered_control(self, input_state, step_size: float, control_desired: np.ndarray) -> np.ndarray:
+        if not self.latched:
+            pred_state = self._pred_state(input_state, step_size, control_desired)
+            error_integral = self.error_integral
+            for _ in range(self.n_steps):
+                ub, error_integral = self.backup_control(pred_state, step_size, error_integral)
+                pred_state = self._pred_state(pred_state, step_size, ub)
+                if pred_state[7] > self.delta_v_limit:
+                    ub, self.error_integral = self.backup_control(input_state, step_size, self.error_integral)
+                    self.latched = True
+                    self.intervening = True
+                    out = ub
+            out = control_desired
+        else:
+            ub, self.error_integral = self.backup_control(input_state, step_size, self.error_integral)
+            out = ub
+        return out
+
+    def backup_control(self, state, step_size, error_integral):
+        """LQT backup controller to eNMT"""
+        error = np.array([0, 0, 0, state[3] - self.n / 2 * state[1], state[4] + 2 * self.n * state[0], 0])
+        backup_action = -self.K_1 @ error - self.K_2 @ error_integral
+        error_integral = error_integral + error * step_size
+        return np.clip(backup_action, -1, 1), error_integral
+
+
+class InspectionCascadedRTA(CascadedRTA):
+    """Combines ASIF Inspection RTA with switching-based delta v limit
+    """
+
+    def _setup_rta_list(self):
+        return [Inspection1v1RTA(), SwitchingDeltaVLimitRTA()]
 
 
 class ConstraintCWHChiefCollision(ConstraintModule):
