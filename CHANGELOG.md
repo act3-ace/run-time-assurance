@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/act3-ace/run-time-assurance/compare/v1.9.2...v1.10.0) (2023-03-16)
+
+
+### Features
+
+* Created SA-Dynamics ASIF ode solver with support for jax ode integration ([1b45175](https://github.com/act3-ace/run-time-assurance/commit/1b45175f5cf3cf4277e08bda8e713d03f75ce432))
+
 ## [1.9.2](https://github.com/act3-ace/run-time-assurance/compare/v1.9.1...v1.9.2) (2023-03-15)
 
 
