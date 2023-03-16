@@ -4,9 +4,7 @@ from collections import OrderedDict
 from typing import Dict, Tuple, Union
 
 import jax.numpy as jnp
-import numpy as np
 import scipy
-from jax.experimental.ode import odeint
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
@@ -19,7 +17,7 @@ from run_time_assurance.constraint import (
 from run_time_assurance.controller import RTABackupController
 from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule
 from run_time_assurance.state import RTAStateWrapper
-from run_time_assurance.utils import norm_with_delta, to_jnp_array_jit
+from run_time_assurance.utils import norm_with_delta
 from run_time_assurance.zoo.cwh.docking_2d import V0_DEFAULT, X_VEL_LIMIT_DEFAULT, Y_VEL_LIMIT_DEFAULT
 
 Z_VEL_LIMIT_DEFAULT = 10
@@ -105,7 +103,7 @@ class Docking3dRTAMixin:
         self.A = jnp.array(A)
         self.B = jnp.array(B)
 
-        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method=integration_method)
+        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method=integration_method, use_jax=True)
 
         if integration_method == 'RK45':
             jit_compile_dict.setdefault('pred_state', False)
@@ -133,19 +131,9 @@ class Docking3dRTAMixin:
             ]
         )
 
-    def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, integration_method: str) -> jnp.ndarray:
+    def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Predicts the next state given the current state and control action"""
-        if integration_method == 'RK45':
-            next_state_vec, _ = self.dynamics.step(step_size, np.array(state), np.array(control))
-            out = to_jnp_array_jit(next_state_vec)
-        elif integration_method == 'Euler':
-            state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
-            out = state + state_dot * step_size
-        elif integration_method == 'RK45_JAX':
-            sol = odeint(self._docking_state_dot, state, jnp.linspace(0., step_size, 11), control)
-            out = sol[-1, :]
-        else:
-            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
+        out, _ = self.dynamics.step(step_size, state, control)
         return out
 
     def _docking_f_x(self, state: jnp.ndarray) -> jnp.ndarray:
@@ -155,15 +143,6 @@ class Docking3dRTAMixin:
     def _docking_g_x(self, _: jnp.ndarray) -> jnp.ndarray:
         """Computes the control input contribution to the state transition: g(x) of dx/dt = f(x) + g(x)u"""
         return jnp.copy(self.B)
-
-    def _docking_state_dot(
-        self,
-        state: jnp.ndarray,
-        t: float,  # pylint: disable=unused-argument
-        control: jnp.ndarray
-    ) -> jnp.ndarray:
-        """Computes the instantaneous time derivative of the state vector for jax odeint"""
-        return self._docking_f_x(state) + self._docking_g_x(state) @ control
 
 
 class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
@@ -253,7 +232,7 @@ class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.v0_distance, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control, self.integration_method)
+        return self._docking_pred_state(state, step_size, control)
 
 
 class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
@@ -347,7 +326,7 @@ class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
         return self._setup_docking_constraints(self.v0, self.v1, self.v0_distance, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control, self.integration_method)
+        return self._docking_pred_state(state, step_size, control)
 
 
 class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
@@ -423,7 +402,7 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
         )
 
     def _setup_properties(self):
-        self._setup_docking_properties(self.m, self.n, self.v1_coef, self.jit_compile_dict, 'RK45')
+        self._setup_docking_properties(self.m, self.n, self.v1_coef, self.jit_compile_dict, 'RK45_JAX')
 
     def _setup_constraints(self) -> OrderedDict:
         return self._setup_docking_constraints(self.v0, self.v1, self.v0_distance, self.x_vel_limit, self.y_vel_limit, self.z_vel_limit)

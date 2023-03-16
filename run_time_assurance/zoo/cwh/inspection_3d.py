@@ -8,7 +8,6 @@ import jax.numpy as jnp
 import numpy as np
 import scipy
 from jax import lax, vmap
-from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
 from run_time_assurance.constraint import (
@@ -118,8 +117,6 @@ class InspectionRTA(ExplicitASIFModule):
         A, B = generate_cwh_matrices(self.m, self.n, mode="3d")
         self.A = jnp.array(A)
         self.B = jnp.array(B)
-
-        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method="RK45")
 
         A_n = jnp.copy(self.A)
         for _ in range(self.num_deputies - 1):

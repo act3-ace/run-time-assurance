@@ -5,7 +5,6 @@ from typing import Dict, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
-from jax.experimental.ode import odeint
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
 from safe_autonomy_dynamics.integrators import M_DEFAULT, generate_dynamics_matrices
 
@@ -13,7 +12,6 @@ from run_time_assurance.constraint import ConstraintModule, ConstraintStrengthen
 from run_time_assurance.controller import RTABackupController
 from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule
 from run_time_assurance.state import RTAStateWrapper
-from run_time_assurance.utils import to_jnp_array_jit
 
 
 class Integrator1dDockingState(RTAStateWrapper):
@@ -50,7 +48,7 @@ class Integrator1dDockingRTAMixin:
         A, B = generate_dynamics_matrices(m=m, mode='1d')
         self.A = jnp.array(A)
         self.B = jnp.array(B)
-        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method=integration_method)
+        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method=integration_method, use_jax=True)
 
         if integration_method == 'RK45':
             jit_compile_dict.setdefault('pred_state', False)
@@ -73,19 +71,9 @@ class Integrator1dDockingRTAMixin:
         """generates implicit constraints used in the docking problem"""
         return OrderedDict([('rel_vel', ConstraintIntegrator1dDockingCollisionImplicit())])
 
-    def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, integration_method: str) -> jnp.ndarray:
+    def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Predicts the next state given the current state and control action"""
-        if integration_method == 'RK45':
-            next_state_vec, _ = self.dynamics.step(step_size, np.array(state), np.array(control))
-            out = to_jnp_array_jit(next_state_vec)
-        elif integration_method == 'Euler':
-            state_dot = self._docking_f_x(state) + self._docking_g_x(state) @ control
-            out = state + state_dot * step_size
-        elif integration_method == 'RK45_JAX':
-            sol = odeint(self._docking_state_dot, state, jnp.linspace(0., step_size, 11), control)
-            out = sol[-1, :]
-        else:
-            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
+        out, _ = self.dynamics.step(step_size, state, control)
         return out
 
     def _docking_f_x(self, state: jnp.ndarray) -> jnp.ndarray:
@@ -95,15 +83,6 @@ class Integrator1dDockingRTAMixin:
     def _docking_g_x(self, _: jnp.ndarray) -> jnp.ndarray:
         """Computes the control input contribution to the state transition: g(x) of dx/dt = f(x) + g(x)u"""
         return jnp.copy(self.B)
-
-    def _docking_state_dot(
-        self,
-        state: jnp.ndarray,
-        t: float,  # pylint: disable=unused-argument
-        control: jnp.ndarray
-    ) -> jnp.ndarray:
-        """Computes the instantaneous time derivative of the state vector for jax odeint"""
-        return self._docking_f_x(state) + self._docking_g_x(state) @ control
 
 
 class Integrator1dDockingExplicitSwitchingRTA(ExplicitSimplexModule, Integrator1dDockingRTAMixin):
@@ -158,7 +137,7 @@ class Integrator1dDockingExplicitSwitchingRTA(ExplicitSimplexModule, Integrator1
         return self._setup_docking_constraints_explicit()
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control, self.integration_method)
+        return self._docking_pred_state(state, step_size, control)
 
 
 class Integrator1dDockingImplicitSwitchingRTA(ImplicitSimplexModule, Integrator1dDockingRTAMixin):
@@ -219,7 +198,7 @@ class Integrator1dDockingImplicitSwitchingRTA(ImplicitSimplexModule, Integrator1
         return self._setup_docking_constraints_implicit()
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        return self._docking_pred_state(state, step_size, control, self.integration_method)
+        return self._docking_pred_state(state, step_size, control)
 
 
 class Integrator1dDockingExplicitOptimizationRTA(ExplicitASIFModule, Integrator1dDockingRTAMixin):
