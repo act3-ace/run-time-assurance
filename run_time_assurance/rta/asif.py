@@ -14,9 +14,8 @@ from typing import Any, Dict, Union
 import jax.numpy as jnp
 import numpy as np
 import quadprog
-import scipy
 from jax import jacfwd, jit, vmap
-from jax.experimental.ode import odeint
+from safe_autonomy_dynamics.base_models import BaseControlAffineODESolverDynamics
 
 from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint
 from run_time_assurance.controller import RTABackupController
@@ -356,6 +355,9 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
                (isinstance(subsample_constraints_num_least, int) and subsample_constraints_num_least > 0), \
                "subsample_constraints_num_least must be a positive integer or None"
         self.subsample_constraints_num_least = subsample_constraints_num_least
+
+        self.ode_dynamics = ASIFODESolver(integration_method, self.state_transition_system, self.state_transition_input)
+
         super().__init__(*args, backup_controller=backup_controller, **kwargs)
 
     def reset(self):
@@ -672,71 +674,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         return traj_states, traj_sensitivity
 
     def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        if self.integration_method == 'RK45':
-            sol = scipy.integrate.solve_ivp(self.state_dot_fn, (0, step_size), state, args=(control, ))
-            next_state_vec = sol.y[:, -1]
-            out = to_jnp_array_jit(next_state_vec)
-        elif self.integration_method == 'Euler':
-            state_dot = self.state_dot_fn(0, state, control)
-            out = state + state_dot * step_size
-        elif self.integration_method == 'RK45_JAX':
-            sol = odeint(self.state_dot_fn_jax, state, jnp.linspace(0., step_size, 11), control)
-            out = sol[-1, :]
-        else:
-            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
+        out, _ = self.ode_dynamics.step(step_size, state, control)
         return out
-
-    def state_dot_fn(
-        self,
-        t: float,  # pylint: disable=unused-argument
-        state: Union[np.ndarray, jnp.ndarray],
-        control: Union[np.ndarray, jnp.ndarray]
-    ) -> Union[np.ndarray, jnp.ndarray]:
-        """
-        Computes the instantaneous time derivative of the state vector for scipy solve_ivp
-
-        Parameters
-        ----------
-        t : float
-            Time in seconds since the beginning of the simulation step.
-            Note, this is NOT the total simulation time but the time within the individual step.
-        state : Union[np.ndarray, jnp.ndarray]
-            Current state vector at time t.
-        control : Union[np.ndarray, jnp.ndarray]
-            Control vector.
-
-        Returns
-        -------
-        Union[np.ndarray, jnp.ndarray]
-            Instantaneous time derivative of the state vector.
-        """
-        return self.state_transition_system(to_jnp_array_jit(state)) + self.state_transition_input(to_jnp_array_jit(state)) @ control
-
-    def state_dot_fn_jax(
-        self,
-        state: jnp.ndarray,
-        t: float,  # pylint: disable=unused-argument
-        control: jnp.ndarray
-    ) -> jnp.ndarray:
-        """
-        Computes the instantaneous time derivative of the state vector for jax odeint
-
-        Parameters
-        ----------
-        state : jnp.ndarray
-            Current state vector at time t.
-        t : float
-            Time in seconds since the beginning of the simulation step.
-            Note, this is NOT the total simulation time but the time within the individual step.
-        control : jnp.ndarray
-            Control vector.
-
-        Returns
-        -------
-        jnp.ndarray
-            Instantaneous time derivative of the state vector.
-        """
-        return self.state_transition_system(state) + self.state_transition_input(state) @ control
 
 
 def get_lower_bound_ineq_constraint_mats(bound: Union[int, float, np.ndarray, jnp.ndarray],
@@ -768,3 +707,18 @@ def get_lower_bound_ineq_constraint_mats(bound: Union[int, float, np.ndarray, jn
         b = bound * jnp.ones(vec_len)
 
     return c, b
+
+
+class ASIFODESolver(BaseControlAffineODESolverDynamics):
+    """Control Affine ODE solver for ASIF"""
+
+    def __init__(self, integration_method, state_transition_system, state_transition_input, **kwargs):
+        self.asif_state_transition_system = state_transition_system
+        self.asif_state_transition_input = state_transition_input
+        super().__init__(integration_method=integration_method, use_jax=True, **kwargs)
+
+    def state_transition_system(self, state):
+        return self.asif_state_transition_system(state)
+
+    def state_transition_input(self, state):
+        return self.asif_state_transition_input(state)

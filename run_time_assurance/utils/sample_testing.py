@@ -184,7 +184,6 @@ class DataTrackingSampleTestingModule(BaseSampleTestingModule):
         time: float
             Current simulation time
         """
-        ...
 
     def check_if_safe_state(self, state: np.ndarray):
         """
@@ -256,7 +255,7 @@ class SafetyAssuranceSampleTestingModule(BaseSampleTestingModule):
                 print(str(round(((n + 1) / self.n_points) * 100, 4)), '% complete')
 
         filename = datetime.now().strftime('%Y-%m-%d--%H-%M-%S') + ".csv"
-        with open(os.path.join(output_dir, filename), "w+") as my_csv:
+        with open(os.path.join(output_dir, filename), "w+", encoding="utf-8") as my_csv:
             newarray = csv.writer(my_csv, delimiter=',')
             newarray.writerows(results_array)
 
