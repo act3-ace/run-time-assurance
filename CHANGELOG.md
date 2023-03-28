@@ -1,3 +1,10 @@
+## [1.10.1](https://github.com/act3-ace/run-time-assurance/compare/v1.10.0...v1.10.1) (2023-03-28)
+
+
+### Bug Fixes
+
+* use jax 0.4.3 ([305f017](https://github.com/act3-ace/run-time-assurance/commit/305f0171fc020bab523f22036031451a743e9d34))
+
 # [1.10.0](https://github.com/act3-ace/run-time-assurance/compare/v1.9.2...v1.10.0) (2023-03-16)
 
 
