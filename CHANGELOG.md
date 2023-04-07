@@ -1,3 +1,10 @@
+## 1.10.2 (2023-04-07)
+
+
+### Bug Fixes
+
+* removed semantic release commit message repo links c37d7b6
+
 ## [1.10.1](https://github.com/act3-ace/run-time-assurance/compare/v1.10.0...v1.10.1) (2023-03-28)
 
 
