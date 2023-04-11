@@ -19,11 +19,11 @@ or [conda](https://docs.conda.io/projects/conda/en/latest/index.html) environmen
 Clone a copy of the safe-autonomy-sims source code 
 onto your local machine via SSH:
 ```shell
-git clone git@github.com/act3-ace:rta/run-time-assurance.git
+git clone git@github.com:act3-ace/run-time-assurance.git
 ```
 or HTTPS:
 ```shell
-git clone https://github.com/act3-ace/run-time-assurance.git
+git clone git@github.com:act3-ace/run-time-assurance.git
 ```
 
 Install the run-time-assurance module into your 
@@ -57,7 +57,7 @@ mkdocs serve
 ```
 
 ## Public Release
-. Approved for public release; distribution is unlimited. Case Number: AFRL-2022-3202
+Distribution A. Approved for public release; distribution is unlimited. Case Number: AFRL-2022-3202
 
 ## Team
 Umberto Ravaioli,
