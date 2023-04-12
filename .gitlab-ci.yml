@@ -60,6 +60,7 @@ build tagged image:
   variables:
     TARGET_STAGE: build
     DESTINATION_PATH: /releases
+    BUILDKIT_FLAGS: $BUILDKIT_FLAGS --opt build-arg:ACT3_OCI_REGISTRY=$ACT3_OCI_REGISTRY
 
 package image:
   stage: Containerize
@@ -67,3 +68,4 @@ package image:
   variables:
     TARGET_STAGE: package
     DESTINATION_PATH: /releases/$TARGET_STAGE
+    BUILDKIT_FLAGS: $BUILDKIT_FLAGS --opt build-arg:ACT3_OCI_REGISTRY=$ACT3_OCI_REGISTRY
