@@ -1,0 +1,69 @@
+include:
+  - project: devsecops/cicd/pipeline
+    ref: v8.0.23
+    file: 'main.yml'
+
+variables:
+  KANIKO_ARGS: --cache=true --skip-unused-stages --registry-mirror=$KANIKO_REGISTRY_MIRROR --cache-repo=$CI_REGISTRY_IMAGE/cache --build-arg ACT3_OCI_REGISTRY=$ACT3_OCI_REGISTRY --build-arg IMAGE_REPO_BASE=$IMAGE_REPO_BASE --build-arg PIP_INDEX_URL=$PIP_INDEX_URL --build-arg APT_MIRROR_URL=$APT_MIRROR_URL --build-arg CI_JOB_TOKEN=$CI_JOB_TOKEN
+  APT_MIRROR_URL: http://10.1.3.235:3142/ftp.debian.org/debian
+  DO_RELEASE: "true"
+  KANIKO_REGISTRY_MIRROR: $KANIKO_REGISTRY_MIRROR_VAR
+  PIP_INDEX_URL: https://pypi.org/simple/
+  SRC_DIR: run_time_assurance
+  UNIT_TEST_DIR: tests
+  ACT3_OCI_REGISTRY: $ACT3_OCI_REGISTRY
+
+mkdocs:
+  needs: [ "build image"]
+  image:
+    name: $CI_REGISTRY_IMAGE/cicd:ci-$CI_PIPELINE_ID
+    entrypoint: ['']
+  allow_failure: true
+  variables:
+    ENABLE_PDF_EXPORT: 1
+  script:
+    - pip install -r mkdocs-requirements.txt
+    - python -m mkdocs build
+
+python unit test:
+  rules:
+    - when: never
+  variables:
+    UNIT_TEST_DIR: tests
+  script:
+    - ls
+
+python velin-doc-lint:
+  needs: []
+
+pages:
+  script:
+    # create public directory if needed
+    - mkdir -p public
+    # move contents of directory site to directory public
+    - mv site/* public/
+    # if htmlcov exits (made by the pytest-cov) then move the directory htmlcov to inside directory public (eg. public/htmlcov)
+    - if [ -e htmlcov ]; then mv htmlcov/ public/; fi
+
+semantic release:
+  variables:
+    DO_RELEASE: "true"
+
+# image specifications
+build image:
+  variables:
+    TARGET_STAGE: cicd
+    BUILDKIT_FLAGS: $BUILDKIT_FLAGS --opt build-arg:ACT3_OCI_REGISTRY=$ACT3_OCI_REGISTRY
+
+# release images
+build tagged image:
+  variables:
+    TARGET_STAGE: build
+    DESTINATION_PATH: /releases
+
+package image:
+  stage: Containerize
+  extends: build tagged image
+  variables:
+    TARGET_STAGE: package
+    DESTINATION_PATH: /releases/$TARGET_STAGE
