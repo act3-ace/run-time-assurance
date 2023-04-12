@@ -1,3 +1,10 @@
+## 1.10.5 (2023-04-12)
+
+
+### Bug Fixes
+
+* added build args to build tagged image and package image 5612250
+
 ## 1.10.4 (2023-04-12)
 
 
