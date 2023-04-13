@@ -1,3 +1,10 @@
+## 1.10.6 (2023-04-13)
+
+
+### Bug Fixes
+
+* update dependency to dynamics 0.11.5 c099caf
+
 ## 1.10.5 (2023-04-12)
 
 
