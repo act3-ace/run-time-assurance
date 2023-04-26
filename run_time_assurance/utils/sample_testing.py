@@ -147,9 +147,9 @@ class DataTrackingSampleTestingModule(BaseSampleTestingModule):
         done = False
         current_time = 0.
 
-        state_array = np.zeros((1, self.state_dim))
-        control_array = np.zeros((1, self.control_dim))
-        intervening_array = []
+        state_array = [state]
+        control_array = [np.zeros(self.control_dim)]
+        intervening_array = [False]
 
         while not done:
             desired_control = self._desired_control(state)
@@ -159,13 +159,11 @@ class DataTrackingSampleTestingModule(BaseSampleTestingModule):
             done = self._check_done_conditions(state, current_time)
             self._update_status(state, current_time)
 
-            state_array = np.append(state_array, [state], axis=0)
-            control_array = np.append(control_array, [rta_control], axis=0)
+            state_array.append(state)
+            control_array.append(rta_control)
             intervening_array.append(self.rta.intervening)
 
-        state_array = np.delete(state_array, 0, axis=0)
-        control_array = np.delete(control_array, 0, axis=0)
-        return state_array, control_array, np.array(intervening_array)
+        return np.array(state_array), np.array(control_array), np.array(intervening_array)
 
     def run_one_step(self):
         """Run one step, useful for profiling"""

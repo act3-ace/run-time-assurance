@@ -305,7 +305,7 @@ class ConstraintBasedRTA(RTAModule):
         stale : bool
             True if called before state is updated
         """
-        self.constraint_values = {k: float(v(state)) for k, v in self.constraints.items()}
+        self.constraint_values = {k: float(v.phi(state)) for k, v in self.constraints.items()}
         if stale:
             self.is_stale_constraints = True
         else:
