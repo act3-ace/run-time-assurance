@@ -6,7 +6,7 @@ from typing import Union
 import jax.numpy as jnp
 import numpy as np
 import scipy
-from jax import jit, vmap
+from jax import jit, lax, vmap
 from jax.experimental.ode import odeint
 from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
@@ -197,7 +197,8 @@ class Inspection1v1RTA(ExplicitASIFModule):
         self.use_hocbf = use_hocbf
 
         self.u_max = U_MAX_DEFAULT
-        self.a_max = self.u_max / self.m - (3 * self.n**2 + 2 * self.n * self.v1) * self.r_max - 2 * self.n * self.v0
+        vmax = min(self.vel_limit, self.v0 + self.v1 * self.r_max)
+        self.a_max = self.u_max / self.m - 3 * self.n**2 * self.r_max - 2 * self.n * vmax
         A, B = generate_cwh_matrices(self.m, self.n, mode="3d")
         self.A = jnp.array(A)
         self.B = jnp.array(B)
@@ -227,7 +228,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
                         bias=-1e-3
                     )
                 ),
-                ('r_max', ConstraintCWHMaxDistance(r_max=self.r_max, a_max=self.a_max)),
+                ('r_max', ConstraintCWHMaxDistance(r_max=self.r_max, a_max=self.a_max, bias=-1e-3)),
                 (
                     'PSM',
                     ConstraintPassivelySafeManeuver(
@@ -334,6 +335,8 @@ class SwitchingDeltaVLimitRTA(RTAModule):
         orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
     delta_v_limit : float, optional
         maximum delta_v used limit, by default DELTA_V_LIMIT_DEFAULT
+    n : int, optional
+        Number of steps in backup trajectory. By default 500.
     control_bounds_high : float, optional
         upper bound of allowable control. Pass a list for element specific limit. By default U_MAX_DEFAULT
     control_bounds_low : float, optional
@@ -346,6 +349,7 @@ class SwitchingDeltaVLimitRTA(RTAModule):
         m: float = M_DEFAULT,
         n: float = N_DEFAULT,
         delta_v_limit: float = DELTA_V_LIMIT_DEFAULT,
+        n_steps: int = 500,
         control_bounds_high: Union[float, np.ndarray] = U_MAX_DEFAULT,
         control_bounds_low: Union[float, np.ndarray] = -U_MAX_DEFAULT,
         **kwargs
@@ -353,7 +357,7 @@ class SwitchingDeltaVLimitRTA(RTAModule):
         self.m = m
         self.n = n
         self.delta_v_limit = delta_v_limit
-        self.n_steps = 500
+        self.n_steps = n_steps
 
         self.error_integral = np.zeros(6)
 
@@ -440,14 +444,27 @@ class ConstraintCWHChiefCollision(ConstraintModule):
 
     def _compute(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3]
-        delta_v = state[3:6]
         mag_delta_p = jnp.linalg.norm(delta_p)
-        h = jnp.sqrt(2 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
+        h = lax.cond(mag_delta_p >= self.collision_radius, self.positive_distance_constraint, self.negative_distance_constraint, state)
         return h
 
     def _phi(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3]
         return jnp.linalg.norm(delta_p) - self.collision_radius
+
+    def positive_distance_constraint(self, state):
+        """Constraint value when sqrt component is real"""
+        delta_p = state[0:3]
+        delta_v = state[3:6]
+        mag_delta_p = jnp.linalg.norm(delta_p)
+        return jnp.sqrt(2 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
+
+    def negative_distance_constraint(self, state):
+        """Constraint value when sqrt component is imaginary"""
+        delta_p = state[0:3]
+        delta_v = state[3:6]
+        mag_delta_p = jnp.linalg.norm(delta_p)
+        return -jnp.sqrt(2 * self.a_max * (-mag_delta_p + self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
 
 
 class ConstraintCWHConicKeepOutZone(ConstraintModule):
@@ -509,7 +526,7 @@ class ConstraintCWHConicKeepOutZone(ConstraintModule):
         delta_v = vel - vel_proj
         mag_delta_p = jnp.linalg.norm(pos) * jnp.sin(jnp.arccos(jnp.dot(cone_unit_vec, pos / jnp.linalg.norm(pos))) - theta)
 
-        h = jnp.sqrt(2 * self.a_max * mag_delta_p) + delta_p.T @ delta_v / mag_delta_p
+        h = lax.cond(mag_delta_p >= 0, self.positive_distance_constraint, self.negative_distance_constraint, delta_p, delta_v, mag_delta_p)
         return h
 
     def _phi(self, state: jnp.ndarray) -> float:
@@ -519,6 +536,14 @@ class ConstraintCWHConicKeepOutZone(ConstraintModule):
         c_hat = cone_vec / jnp.linalg.norm(cone_vec)
         h = jnp.arccos(jnp.dot(p_hat, c_hat)) - self.fov / 2
         return h
+
+    def positive_distance_constraint(self, delta_p, delta_v, mag_delta_p):
+        """Constraint value when sqrt component is real"""
+        return jnp.sqrt(2 * self.a_max * mag_delta_p) + delta_p.T @ delta_v / mag_delta_p
+
+    def negative_distance_constraint(self, delta_p, delta_v, mag_delta_p):
+        """Constraint value when sqrt component is imaginary"""
+        return -jnp.sqrt(-2 * self.a_max * mag_delta_p) + delta_p.T @ delta_v / mag_delta_p
 
 
 class ConstraintPassivelySafeManeuver(ConstraintModule):
@@ -601,14 +626,27 @@ class ConstraintCWHMaxDistance(ConstraintModule):
 
     def _compute(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3]
-        delta_v = state[3:6]
         mag_delta_p = jnp.linalg.norm(delta_p)
-        h = jnp.sqrt(2 * self.a_max * (self.r_max - mag_delta_p)) - delta_p.T @ delta_v / mag_delta_p
+        h = lax.cond(self.r_max >= mag_delta_p, self.positive_distance_constraint, self.negative_distance_constraint, state)
         return h
 
     def _phi(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3]
         return self.r_max - jnp.linalg.norm(delta_p)
+
+    def positive_distance_constraint(self, state):
+        """Constraint value when sqrt component is real"""
+        delta_p = state[0:3]
+        delta_v = state[3:6]
+        mag_delta_p = jnp.linalg.norm(delta_p)
+        return jnp.sqrt(2 * self.a_max * (self.r_max - mag_delta_p)) - delta_p.T @ delta_v / mag_delta_p
+
+    def negative_distance_constraint(self, state):
+        """Constraint value when sqrt component is imaginary"""
+        delta_p = state[0:3]
+        delta_v = state[3:6]
+        mag_delta_p = jnp.linalg.norm(delta_p)
+        return -jnp.sqrt(2 * self.a_max * (-self.r_max + mag_delta_p)) - delta_p.T @ delta_v / mag_delta_p
 
 
 class HOCBFExampleChiefCollision(ConstraintModule):
