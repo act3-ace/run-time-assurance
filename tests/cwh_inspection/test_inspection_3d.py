@@ -9,6 +9,7 @@ import jax.numpy as jnp
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 from run_time_assurance.zoo.cwh.inspection_3d import NUM_DEPUTIES_DEFAULT, U_MAX_DEFAULT, SUN_VEL_DEFAULT, CombinedInspectionRTA, InspectionRTA
 from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
+from run_time_assurance.utils import to_jnp_array_jit
 import os
 
 # from jax.config import config
@@ -55,13 +56,17 @@ class Env(DataTrackingSampleTestingModule):
         return x
 
     @partial(jit, static_argnums=0)
-    def _pred_state(self, state, step_size, control):
+    def _pred_state_fn(self, state, step_size, control):
         x1 = jnp.zeros(self.deputies*6+1)
         for i in range(self.deputies):
             sol = odeint(self.compute_state_dot, state[6*i:6*i+6], jnp.linspace(0., step_size, 11), control[3*i:3*i+3])
             x1 = x1.at[6*i:6*i+6].set(sol[-1, :])
         x1 = x1.at[-1].set(state[-1]+SUN_VEL_DEFAULT*step_size)
         return x1
+    
+    def _pred_state(self, state, step_size, control):
+        x1 = self._pred_state_fn(to_jnp_array_jit(state), step_size, to_jnp_array_jit(control))
+        return np.array(x1)
     
     def compute_state_dot(self, x, t, u):
         xd = self.A @ x + self.B @ u
