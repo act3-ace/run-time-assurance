@@ -1,3 +1,11 @@
+## 1.10.7 (2023-04-26)
+
+
+### Bug Fixes
+
+* Inspection Constraint Sqrt Gradient Issues 98eda71
+* Logging updates aabf244
+
 ## 1.10.6 (2023-04-13)
 
 
