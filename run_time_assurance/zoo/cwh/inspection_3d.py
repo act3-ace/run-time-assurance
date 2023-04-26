@@ -113,7 +113,8 @@ class InspectionRTA(ExplicitASIFModule):
         self.sun_vel = sun_vel
 
         self.u_max = U_MAX_DEFAULT
-        self.a_max = self.u_max / self.m - (3 * self.n**2 + 2 * self.n * self.v1) * self.r_max - 2 * self.n * self.v0
+        vmax = min(self.vel_limit, self.v0 + self.v1 * self.r_max)
+        self.a_max = self.u_max / self.m - 3 * self.n**2 * self.r_max - 2 * self.n * vmax
         A, B = generate_cwh_matrices(self.m, self.n, mode="3d")
         self.A = jnp.array(A)
         self.B = jnp.array(B)
@@ -283,14 +284,27 @@ class ConstraintCWHDeputyCollision(ConstraintModule):
 
     def _compute(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3] - state[int(self.deputy * 6):int(self.deputy * 6 + 3)]
-        delta_v = state[3:6] - state[int(self.deputy * 6 + 3):int(self.deputy * 6 + 6)]
         mag_delta_p = jnp.linalg.norm(delta_p)
-        h = jnp.sqrt(4 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
+        h = lax.cond(mag_delta_p >= self.collision_radius, self.positive_distance_constraint, self.negative_distance_constraint, state)
         return h
 
     def _phi(self, state: jnp.ndarray) -> float:
         delta_p = state[0:3] - state[int(self.deputy * 6):int(self.deputy * 6 + 3)]
         return jnp.linalg.norm(delta_p) - self.collision_radius
+
+    def positive_distance_constraint(self, state):
+        """Constraint value when sqrt component is real"""
+        delta_p = state[0:3] - state[int(self.deputy * 6):int(self.deputy * 6 + 3)]
+        delta_v = state[3:6] - state[int(self.deputy * 6 + 3):int(self.deputy * 6 + 6)]
+        mag_delta_p = jnp.linalg.norm(delta_p)
+        return jnp.sqrt(4 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
+
+    def negative_distance_constraint(self, state):
+        """Constraint value when sqrt component is imaginary"""
+        delta_p = state[0:3] - state[int(self.deputy * 6):int(self.deputy * 6 + 3)]
+        delta_v = state[3:6] - state[int(self.deputy * 6 + 3):int(self.deputy * 6 + 6)]
+        mag_delta_p = jnp.linalg.norm(delta_p)
+        return -jnp.sqrt(4 * self.a_max * (-mag_delta_p + self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
 
 
 class ConstraintPSMDeputy(ConstraintModule):
