@@ -50,11 +50,7 @@ class ASIFModule(ConstraintBasedRTA):
         self.obj_weight = np.eye(self.control_dim)
         self.ineq_weight_actuation, self.ineq_constant_actuation = self._generate_actuation_constraint_mats()
 
-        self.direct_inequality_constraints = OrderedDict()
-        for k, c in self.constraints.items():
-            if isinstance(c, DirectInequalityConstraint):
-                self.direct_inequality_constraints[k] = c
-                self.constraints.pop(k)
+        self.direct_inequality_constraints = self._setup_direct_constraints()
 
     def compose(self):
         """
@@ -247,6 +243,17 @@ class ASIFModule(ConstraintBasedRTA):
             input matrix in state space representation time derivative
         """
         raise NotImplementedError
+
+    def _setup_direct_constraints(self) -> OrderedDict[str, DirectInequalityConstraint]:
+        """Initializes and returns direct RTA constraints, to be used in the QP for ASIF.
+        By default returns empty dict.
+
+        Returns
+        -------
+        OrderedDict
+            OrderedDict of direct rta contraints with name string keys and DirectInequalityConstraint object values
+        """
+        return OrderedDict()
 
 
 class ExplicitASIFModule(ASIFModule):
