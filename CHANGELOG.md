@@ -1,3 +1,10 @@
+## 1.11.1 (2023-06-09)
+
+
+### Bug Fixes
+
+* copy constraint dict before modifying ede6e34
+
 # 1.11.0 (2023-06-09)
 
 
