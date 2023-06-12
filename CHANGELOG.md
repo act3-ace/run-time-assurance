@@ -1,3 +1,10 @@
+# 1.12.0 (2023-06-12)
+
+
+### Features
+
+* Discrete CBF module c6b5f8e
+
 ## 1.11.1 (2023-06-09)
 
 
