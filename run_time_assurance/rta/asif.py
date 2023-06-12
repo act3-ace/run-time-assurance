@@ -15,20 +15,18 @@ import jax.numpy as jnp
 import numpy as np
 import quadprog
 from jax import jacfwd, jit, vmap
-from safe_autonomy_dynamics.base_models import BaseControlAffineODESolverDynamics
+from safe_autonomy_dynamics.base_models import BaseControlAffineODESolverDynamics, BaseODESolverDynamics
+from scipy.optimize import minimize
 
-from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint
+from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint, DiscreteCBFConstraint
 from run_time_assurance.controller import RTABackupController
 from run_time_assurance.rta.base import BackupControlBasedRTA, ConstraintBasedRTA
 from run_time_assurance.utils import SolverError, SolverWarning, to_jnp_array_jit
 
 
-class ASIFModule(ConstraintBasedRTA):
+class BaseOptimizationModule(ConstraintBasedRTA):
     """
-    Base class for Active Set Invariance Filter Optimization RTA
-
-    Only supports dynamical systems with dynamics in the form of:
-        dx/dt = f(x) + g(x)u
+    Base class for optimization-based RTA
 
     Parameters
     ----------
@@ -48,6 +46,36 @@ class ASIFModule(ConstraintBasedRTA):
         self.control_dim = control_dim
         self.solver_exception = solver_exception
         self.obj_weight = np.eye(self.control_dim)
+
+    def monitor(self, desired_control: np.ndarray, actual_control: np.ndarray) -> bool:
+        """Determines whether the ASIF RTA module is currently intervening
+
+        Parameters
+        ----------
+        desired_control : np.ndarray
+            desired control vector
+        actual_control : np.ndarray
+            actual control vector produced by ASIF optimization
+
+        Returns
+        -------
+        bool
+            True if rta module is interveining
+        """
+        return bool(np.linalg.norm(desired_control - actual_control) > self.epsilon)
+
+
+class ASIFModule(BaseOptimizationModule):
+    """
+    Base class for Active Set Invariance Filter Optimization RTA
+
+    Only supports dynamical systems with dynamics in the form of:
+        dx/dt = f(x) + g(x)u
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
         self.ineq_weight_actuation, self.ineq_constant_actuation = self._generate_actuation_constraint_mats()
 
         self.direct_inequality_constraints = OrderedDict()
@@ -173,23 +201,6 @@ class ASIFModule(ConstraintBasedRTA):
             else:
                 raise e
         return opt
-
-    def monitor(self, desired_control: np.ndarray, actual_control: np.ndarray) -> bool:
-        """Determines whether the ASIF RTA module is currently intervening
-
-        Parameters
-        ----------
-        desired_control : np.ndarray
-            desired control vector
-        actual_control : np.ndarray
-            actual control vector produced by ASIF optimization
-
-        Returns
-        -------
-        bool
-            True if rta module is interveining
-        """
-        return bool(np.linalg.norm(desired_control - actual_control) > self.epsilon)
 
     @abc.abstractmethod
     def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -722,3 +733,142 @@ class ASIFODESolver(BaseControlAffineODESolverDynamics):
 
     def state_transition_input(self, state):
         return self.asif_state_transition_input(state)
+
+
+class DiscreteASIFModule(BaseOptimizationModule):
+    """
+    Base class for Active Set Invariance Filter Optimization RTA using Discrete Control Barrier Functions (CBFs)
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
+        self.opt_bounds = [(self.control_bounds_low, self.control_bounds_high)] * self.control_dim
+        self.scipy_constraints = []
+        self.discrete_constraints = OrderedDict()
+        for k, c in self.constraints.items():
+            temp_c = DiscreteCBFConstraint(c, self.next_state_differentiable)
+            self.discrete_constraints[k] = temp_c
+            self.scipy_constraints.append({'type': 'ineq', 'fun': temp_c.cbf, 'jac': temp_c.jac})
+
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        desired_control = np.array(control, dtype=np.float64)
+        for c in self.scipy_constraints:
+            c['args'] = (state, step_size)
+        res = minimize(
+            self.obj, desired_control, method='SLSQP', constraints=self.scipy_constraints, bounds=self.opt_bounds, args=(desired_control)
+        )
+        if not res.success:
+            error = f'Solver Failure: {res.message}'
+            if not self.solver_exception:
+                warnings.warn(error)
+            else:
+                raise SolverError(error)
+
+        actual_control = res.x
+
+        self.intervening = self.monitor(desired_control, actual_control)
+
+        return to_jnp_array_jit(actual_control)
+
+    def obj(self, control: np.ndarray, desired_control: np.ndarray) -> float:
+        """Objective function of the solver (quadratic loss function).
+
+        Parameters
+        ----------
+        control: np.ndarray
+            Control vector of the system, solved for by optimizer
+        desired_control: np.ndarray
+            Desired control vector of the system
+
+        Returns
+        -------
+        float:
+            Value of objective function
+        """
+        return 0.5 * control.T @ (self.obj_weight.T @ self.obj_weight) @ control + (-self.obj_weight.T @ desired_control).T @ control
+
+    @abc.abstractmethod
+    def next_state_differentiable(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """Function to compute the next state of the system. Must be differentiable using Jax.
+
+        Parameters
+        ----------
+        state: jnp.ndarray
+            Current rta state of the system
+        step_size: float
+            Time duration over which filtered control will be applied to actuators
+        control: jnp.ndarray
+            Control vector of the system
+
+        Returns
+        -------
+        jnp.ndarray:
+            Next state of the system
+        """
+        raise NotImplementedError
+
+
+class DiscreteASIFIntegratorModule(DiscreteASIFModule):
+    """
+    Active Set Invariance Filter Optimization RTA using Discrete Control Barrier Functions (CBFs).
+    Uses Differentiable Jax ODE solver, where user only needs to define the state derivative.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
+        self.ode_solver = DifferentiableODESolver(self.compute_state_dot)
+
+    def next_state_differentiable(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """Function to compute the next state of the system. Must be differentiable using Jax.
+        By default, uses the Jax ODE solver given the state derivative.
+        Can be overwritten by known system dynamics to decrease computation time.
+
+        Parameters
+        ----------
+        state: jnp.ndarray
+            Current rta state of the system
+        step_size: float
+            Time duration over which filtered control will be applied to actuators
+        control: jnp.ndarray
+            Control vector of the system
+
+        Returns
+        -------
+        jnp.ndarray:
+            Next state of the system
+        """
+        next_state, _ = self.ode_solver.step(step_size, state, control)
+        return next_state
+
+    @abc.abstractmethod
+    def compute_state_dot(self, t: float, state: jnp.ndarray, control: jnp.ndarray) -> jnp.ndarray:
+        """Function to compute the state derivative of the system. Must be differentiable using Jax.
+
+        Parameters
+        ----------
+        t: float
+            Current time of the system
+        state: jnp.ndarray
+            Current rta state of the system
+        control: jnp.ndarray
+            Control vector of the system
+
+        Returns
+        -------
+        jnp.ndarray:
+            State derivative
+        """
+        raise NotImplementedError
+
+
+class DifferentiableODESolver(BaseODESolverDynamics):
+    """Differentiable ODE solver for Discrete ASIF Module"""
+
+    def __init__(self, state_dot_fn, **kwargs):
+        self.state_dot_fn = state_dot_fn
+        super().__init__(integration_method='RK45_JAX', use_jax=True, **kwargs)
+
+    def _compute_state_dot(self, t, state, control):
+        return self.state_dot_fn(t, state, control)
