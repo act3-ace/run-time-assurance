@@ -8,7 +8,7 @@ import numbers
 from typing import Any
 
 import jax.numpy as jnp
-from jax import grad, jit
+from jax import grad, jacrev, jit
 
 
 class ConstraintModule(abc.ABC):
@@ -379,3 +379,41 @@ class DirectInequalityConstraint():
         float
         """
         raise NotImplementedError()
+
+
+class DiscreteCBFConstraint():
+    """Constraint helper class for converting constraints into discrete Control Barrier Functions (CBFs)
+
+    Parameters
+    ----------
+    constraint: ConstraintModule
+        Current constraint to transform into a discrete CBF
+    next_state_fn: Any
+        Function to compute the next state of the system. Must be differentiable using Jax.
+    """
+
+    def __init__(self, constraint: ConstraintModule, next_state_fn: Any):
+        self.constraint = constraint
+        self.next_state_fn = next_state_fn
+        self.cbf = jit(self.cbf_fn)
+        self.jac = jit(jacrev(self.cbf_fn))
+
+    def cbf_fn(self, control: jnp.ndarray, state: jnp.ndarray, step_size: float):
+        """Discrete CBF
+
+        Parameters
+        ----------
+        control: jnp.ndarray
+            Control vector of the system
+        state: jnp.ndarray
+            Current rta state of the system
+        step_size: float
+            Time duration over which filtered control will be applied to actuators
+
+        Returns
+        -------
+        float:
+            value of the discrete CBF
+        """
+        next_state = self.next_state_fn(state, step_size, control)
+        return (self.constraint(next_state) - self.constraint(state)) / step_size + self.constraint.alpha(self.constraint(state))
