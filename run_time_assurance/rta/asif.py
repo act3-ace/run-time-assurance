@@ -336,17 +336,6 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
     ----------
     backup_window : float
         Duration of time in seconds to evaluate backup controller trajectory.
-    num_check_all : int
-        Number of points at beginning of backup trajectory to check at every sequential simulation timestep.
-        Should be <= backup_window.
-        Defaults to 0 as skip_length defaults to 1 resulting in all backup trajectory points being checked.
-    skip_length : int
-        After num_check_all points in the backup trajectory are checked, the remainder of the backup window is filled by
-        skipping every skip_length points to reduce the number of backup trajectory constraints.
-        Defaults to 1, resulting in no skipping.
-    subsample_constraints_num_least : int
-        subsample the backup trajectory down to the points with the N least constraint function outputs
-            i.e. the n points closest to violating a safety constraint
     backup_controller : RTABackupController
         backup controller object utilized by rta module to generate backup control
     integration_method: str, optional
@@ -357,22 +346,12 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         self,
         *args: Any,
         backup_window: float,
-        num_check_all: int = 0,
-        skip_length: int = 1,
-        subsample_constraints_num_least: int = None,
         backup_controller: RTABackupController,
         integration_method: str = 'RK45_JAX',
         **kwargs: Any,
     ):
         self.backup_window = backup_window
-        self.num_check_all = num_check_all
-        self.skip_length = skip_length
         self.integration_method = integration_method
-
-        assert (subsample_constraints_num_least is None) or \
-               (isinstance(subsample_constraints_num_least, int) and subsample_constraints_num_least > 0), \
-               "subsample_constraints_num_least must be a positive integer or None"
-        self.subsample_constraints_num_least = subsample_constraints_num_least
 
         self.ode_dynamics = ASIFODESolver(integration_method, self.state_transition_system, self.state_transition_input)
 
@@ -513,18 +492,14 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         """
         constraint_list = list(self.constraints.values())
         num_constraints = len(self.constraints)
-
-        check_points = jnp.hstack(
-            (jnp.array(range(0, self.num_check_all)), jnp.array(range(self.num_check_all + 1, num_steps, self.skip_length)))
-        ).astype(int)
-        num_points = len(check_points)
+        num_points = len(traj_states)
 
         ineq_weight_barrier = jnp.empty((num_constraints * num_points, self.control_dim))
         ineq_constant_barrier = jnp.empty(num_constraints * num_points)
         constraint_vals = jnp.empty((num_constraints, num_points))
 
-        traj_states = jnp.array(traj_states)[check_points, :]
-        traj_sensitivities = jnp.array(traj_sensitivities)[check_points, :]
+        traj_states = jnp.array(traj_states)
+        traj_sensitivities = jnp.array(traj_sensitivities)
 
         for i in range(num_constraints):
             point_ineq_weight, point_ineq_constant, point_constraint_vals = self._get_ineq_mats_fn(
@@ -533,19 +508,78 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             ineq_constant_barrier = ineq_constant_barrier.at[i * num_points:(i + 1) * num_points].set(point_ineq_constant)
             constraint_vals = constraint_vals.at[i, :].set(point_constraint_vals)
 
-        if self.subsample_constraints_num_least is not None:
-            constraint_sorted_idxs = jnp.argsort(constraint_vals)
-            use_idxs = constraint_sorted_idxs[:, 0:self.subsample_constraints_num_least]
-
-            constraint_rows = jnp.arange(constraint_vals.shape[0])[:, None]
-            final_idxs = constraint_rows * constraint_vals.shape[1] + use_idxs
-
-            ineq_weight_barrier = ineq_weight_barrier[final_idxs.flatten(), :]
-            ineq_constant_barrier = ineq_constant_barrier[final_idxs.flatten()]
+        ineq_weight_barrier, ineq_constant_barrier = self.subsample_constraints(
+            ineq_weight_barrier, ineq_constant_barrier, constraint_vals, num_steps
+        )
 
         ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
         ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
         return ineq_weight.transpose(), ineq_constant
+
+    def subsample_constraints(self, ineq_weight_barrier, ineq_constant_barrier, constraint_vals, num_steps):
+        """Subsample constraints individually based on the constraint's subsample_config attribute
+
+        Parameters
+        ----------
+        ineq_weight_barrier : jnp.ndarray
+            matix C.T of quadprog inequality constraint C.T x >= b
+        ineq_constant_barrier : jnp.ndarray
+            vector b of quadprog inequality constraint C.T x >= b
+        constraint_vals : jnp.ndarray
+            constraint values along trajectory
+        num_steps: int
+            number of trajectory steps
+
+        Returns
+        -------
+        jnp.ndarray
+            matix C.T of quadprog inequality constraint C.T x >= b
+        jnp.ndarray
+            vector b of quadprog inequality constraint C.T x >= b
+        """
+        new_ineq_weight_barrier = jnp.empty((0, self.control_dim))
+        new_ineq_constant_barrier = jnp.empty(0)
+
+        for i, c in enumerate(self.constraints.values()):
+            # Get barrier constraints for each constraint
+            tmp_ineq_weight_barrier = ineq_weight_barrier[num_steps * i:num_steps * (i + 1), :]
+            tmp_ineq_constant_barrier = ineq_constant_barrier[num_steps * i:num_steps * (i + 1)]
+            tmp_constraint_vals = constraint_vals[i]
+
+            # Get points to check from num_check_all and skip_length
+            check_points = jnp.hstack(
+                (
+                    jnp.array(range(0, c.subsample_config.num_check_all)),
+                    jnp.array(range(c.subsample_config.num_check_all + 1, num_steps, c.subsample_config.skip_length))
+                )
+            ).astype(int)
+            tmp_ineq_weight_barrier = tmp_ineq_weight_barrier[check_points, :]
+            tmp_ineq_constant_barrier = tmp_ineq_constant_barrier[check_points]
+            tmp_constraint_vals = tmp_constraint_vals[check_points]
+
+            # Get points to check from subsample_constraints_num_least
+            if c.subsample_config.subsample_constraints_num_least is not None:
+                constraint_sorted_idxs = jnp.argsort(tmp_constraint_vals)
+                use_idxs = constraint_sorted_idxs[0:c.subsample_config.subsample_constraints_num_least]
+                tmp_ineq_weight_barrier = tmp_ineq_weight_barrier[use_idxs, :]
+                tmp_ineq_constant_barrier = tmp_ineq_constant_barrier[use_idxs]
+
+            # Keep first and/or last point
+            if c.subsample_config.keep_first:
+                tmp_ineq_weight_barrier = jnp.concatenate((tmp_ineq_weight_barrier, ineq_weight_barrier[num_steps * i, :][None]), axis=0)
+                tmp_ineq_constant_barrier = jnp.concatenate((tmp_ineq_constant_barrier, ineq_constant_barrier[num_steps * i][None]), axis=0)
+            if c.subsample_config.keep_last:
+                tmp_ineq_weight_barrier = jnp.concatenate(
+                    (tmp_ineq_weight_barrier, ineq_weight_barrier[num_steps * (i + 1) - 1, :][None]), axis=0
+                )
+                tmp_ineq_constant_barrier = jnp.concatenate(
+                    (tmp_ineq_constant_barrier, ineq_constant_barrier[num_steps * (i + 1) - 1][None]), axis=0
+                )
+
+            new_ineq_weight_barrier = jnp.concatenate((new_ineq_weight_barrier, tmp_ineq_weight_barrier), axis=0)
+            new_ineq_constant_barrier = jnp.concatenate((new_ineq_constant_barrier, tmp_ineq_constant_barrier), axis=0)
+
+        return new_ineq_weight_barrier, new_ineq_constant_barrier
 
     def _get_constraint_ineq_mats(
         self, constraint: ConstraintModule, state: jnp.ndarray, traj_states: jnp.ndarray, traj_sensitivities: jnp.ndarray

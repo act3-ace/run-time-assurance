@@ -424,15 +424,6 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
     ----------
     backup_window : float
         Duration of time in seconds to evaluate backup controller trajectory
-    num_check_all : int
-        Number of points at beginning of backup trajectory to check at every sequential simulation timestep.
-        Should be <= backup_window.
-        Defaults to 0 as skip_length defaults to 1 resulting in all backup trajectory points being checked.
-    skip_length : int
-        After num_check_all points in the backup trajectory are checked, the remainder of the backup window is filled by
-        skipping every skip_length points to reduce the number of backup trajectory constraints. Will always check the
-        last point in the backup trajectory as well.
-        Defaults to 1, resulting in no skipping.
     m : float, optional
         mass in kg of spacecraft, by default M_DEFAULT
     n : float, optional
@@ -468,8 +459,6 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
         self,
         *args,
         backup_window: float = 5,
-        num_check_all: int = 5,
-        skip_length: int = 1,
         m: float = M_DEFAULT,
         n: float = N_DEFAULT,
         v0: float = V0_DEFAULT,
@@ -505,8 +494,6 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
             *args,
             control_dim=3,
             backup_window=backup_window,
-            num_check_all=num_check_all,
-            skip_length=skip_length,
             backup_controller=backup_controller,
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
