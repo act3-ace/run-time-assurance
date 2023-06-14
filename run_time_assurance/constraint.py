@@ -5,10 +5,42 @@ from __future__ import annotations
 
 import abc
 import numbers
-from typing import Any
+from typing import Any, Union
 
 import jax.numpy as jnp
 from jax import grad, jacrev, jit
+from pydantic import BaseModel  # pylint: disable=no-name-in-module
+
+
+class SubsampleConfigValidator(BaseModel):
+    """
+    Validator for ConstraintModule's subsample_config.
+    Specifies subsampling parameters for implicit ASIF methods.
+    See ImplicitASIFModule.subsample_constraints for more information.
+
+    Parameters
+    ----------
+    num_check_all : int
+        Number of points at beginning of backup trajectory to check at every sequential simulation timestep.
+        Should be <= backup_window.
+        Defaults to -1 as skip_length defaults to 1 resulting in all backup trajectory points being checked.
+    skip_length : int
+        After num_check_all points in the backup trajectory are checked, the remainder of the backup window is filled by
+        skipping every skip_length points to reduce the number of backup trajectory constraints.
+        Defaults to 1, resulting in no skipping.
+    subsample_constraints_num_least : int
+        subsample the backup trajectory down to the points with the N least constraint function outputs
+        i.e. the n points closest to violating a safety constraint. Default None
+    keep_first : bool
+        keep the first point along the trajectory, regardless of prior subsampling. Default False.
+    keep_last : bool
+        keep the last point along the trajectory, regardless of prior subsampling. Default False.
+    """
+    num_check_all: int = -1
+    skip_length: int = 1
+    subsample_constraints_num_least: Union[int, None] = None
+    keep_first: bool = False
+    keep_last: bool = False
 
 
 class ConstraintModule(abc.ABC):
@@ -26,11 +58,12 @@ class ConstraintModule(abc.ABC):
         Flag to enable or disable JIT compiliation. Useful for debugging
     """
 
-    def __init__(self, alpha: ConstraintStrengthener = None, bias: float = 0, jit_enable: bool = True):
+    def __init__(self, alpha: ConstraintStrengthener = None, bias: float = 0, jit_enable: bool = True, **kwargs):
         assert isinstance(alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         self._alpha = alpha
         self.bias = bias
         self.jit_enable = jit_enable
+        self.subsample_config = SubsampleConfigValidator(**kwargs)
         self._compose()
 
     def _compose(self):
