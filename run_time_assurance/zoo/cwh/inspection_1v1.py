@@ -17,7 +17,7 @@ from run_time_assurance.constraint import (
     HOCBFConstraint,
     PolynomialConstraintStrengthener,
 )
-from run_time_assurance.rta import CascadedRTA, ExplicitASIFModule, RTAModule
+from run_time_assurance.rta import CascadedRTA, DiscreteASIFModule, ExplicitASIFModule, RTAModule
 from run_time_assurance.state import RTAStateWrapper
 from run_time_assurance.utils import to_jnp_array_jit
 from run_time_assurance.zoo.cwh.docking_3d import ConstraintCWH3dRelativeVelocity
@@ -309,6 +309,205 @@ class Inspection1v1RTA(ExplicitASIFModule):
             self.sun_vel = 0
 
         return to_jnp_array_jit(input_state)
+
+    def get_sun_vector(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get vector pointing from sun to chief"""
+        return -jnp.array([jnp.cos(state[6]), jnp.sin(state[6]), 0.])
+
+    def get_pos_vector(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get position vector"""
+        return state[0:3]
+
+    def get_vel_vector(self, state: jnp.ndarray) -> jnp.ndarray:
+        """Function to get velocity vector"""
+        return state[3:6]
+
+
+class DiscreteInspection1v1RTA(DiscreteASIFModule):
+    """
+    Implements Explicit Optimization RTA for the 3d Inspection problem
+
+    Utilizes Explicit Active Set Invariance Filter algorithm
+
+    Parameters
+    ----------
+    m : float, optional
+        mass in kg of spacecraft, by default M_DEFAULT
+    n : float, optional
+        orbital mean motion in rad/s of current Hill's reference frame, by default N_DEFAULT
+    chief_radius : float, optional
+        radius of collision for chief spacecraft, by default CHIEF_RADIUS_DEFAULT
+    deputy_radius : float, optional
+        radius of collision for each deputy spacecraft, by default DEPUTY_RADIUS_DEFAULT
+    v0 : float, optional
+        Maximum safe docking velocity in m/s, by default V0_DEFAULT
+        v0 of v_limit = v0 + v1*n*||r-v0_distance||
+    v1_coef : float, optional
+        coefficient of linear component of the distance depending speed limit in 1/seconds, by default V1_COEF_DEFAULT
+        v1_coef of v_limit = v0 + v1_coef*n*||r-v0_distance||
+    v0_distance: float
+        NMT safety constraint minimum distance where v0 is applied. By default 0.
+    r_max : float, optional
+        maximum relative distance from chief, by default R_MAX_DEFAULT
+    fov : float, optional
+        sensor field of view, by default FOV_DEFAULT
+    vel_limit : float, optional
+        max velocity magnitude, by default VEL_LIMIT_DEFAULT
+    delta_v_limit : float, optional
+        maximum delta_v used limit, by default DELTA_V_LIMIT_DEFAULT
+    sun_vel : float, optional
+        velocity of sun in x-y plane (rad/sec), by default SUN_VEL_DEFAULT
+    control_bounds_high : float, optional
+        upper bound of allowable control. Pass a list for element specific limit. By default U_MAX_DEFAULT
+    control_bounds_low : float, optional
+        lower bound of allowable control. Pass a list for element specific limit. By default -U_MAX_DEFAULT
+    """
+
+    def __init__(
+        self,
+        *args,
+        m: float = M_DEFAULT,
+        n: float = N_DEFAULT,
+        chief_radius: float = CHIEF_RADIUS_DEFAULT,
+        deputy_radius: float = DEPUTY_RADIUS_DEFAULT,
+        v0: float = V0_DEFAULT,
+        v1_coef: float = V1_COEF_DEFAULT,
+        v0_distance: float = V0_DISTANCE_DEFAULT,
+        r_max: float = R_MAX_DEFAULT,
+        fov: float = FOV_DEFAULT,
+        vel_limit: float = VEL_LIMIT_DEFAULT,
+        delta_v_limit: float = DELTA_V_LIMIT_DEFAULT,
+        sun_vel: float = SUN_VEL_DEFAULT,
+        control_bounds_high: Union[float, list, np.ndarray, jnp.ndarray] = U_MAX_DEFAULT,
+        control_bounds_low: Union[float, list, np.ndarray, jnp.ndarray] = -U_MAX_DEFAULT,
+        **kwargs
+    ):
+        self.m = m
+        self.n = n
+        self.chief_radius = chief_radius
+        self.deputy_radius = deputy_radius
+        self.v0 = v0
+        self.v1_coef = v1_coef
+        self.v1 = self.v1_coef * self.n
+        self.v0_distance = v0_distance
+        self.r_max = r_max
+        self.fov = fov
+        self.vel_limit = vel_limit
+        self.delta_v_limit = delta_v_limit
+        self.sun_vel = sun_vel
+
+        self.u_max = U_MAX_DEFAULT
+        vmax = min(self.vel_limit, self.v0 + self.v1 * self.r_max)
+        self.a_max = self.u_max / self.m - 3 * self.n**2 * self.r_max - 2 * self.n * vmax
+        A, B = generate_cwh_matrices(self.m, self.n, mode="3d")
+        self.A = jnp.array(A)
+        self.B = jnp.array(B)
+
+        self.control_dim = self.B.shape[1]
+
+        super().__init__(
+            *args, control_dim=self.control_dim, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs
+        )
+
+    def _setup_constraints(self) -> OrderedDict:
+        constraint_dict = OrderedDict(
+            [
+                ('chief_collision', ConstraintCWHChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max)),
+                (
+                    'rel_vel',
+                    ConstraintCWH3dRelativeVelocity(
+                        v0=self.v0,
+                        v1=self.v1,
+                        v0_distance=self.v0_distance,
+                        bias=-1e-3,
+                        alpha=PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
+                    )
+                ),
+                (
+                    'sun',
+                    ConstraintCWHConicKeepOutZone(
+                        a_max=self.a_max,
+                        fov=self.fov,
+                        get_pos=self.get_pos_vector,
+                        get_vel=self.get_vel_vector,
+                        get_cone_vec=self.get_sun_vector,
+                        cone_ang_vel=jnp.array([0, 0, self.sun_vel]),
+                        bias=-1e-3,
+                        alpha=PolynomialConstraintStrengthener([0, 0.001, 0, 0.001]),
+                    )
+                ),
+                (
+                    'r_max',
+                    ConstraintCWHMaxDistance(
+                        r_max=self.r_max, a_max=self.a_max, bias=-1e-3, alpha=PolynomialConstraintStrengthener([0, 0.001, 0, 0.001])
+                    )
+                ),
+                (
+                    'PSM',
+                    ConstraintPassivelySafeManeuver(
+                        collision_radius=self.chief_radius + self.deputy_radius,
+                        m=self.m,
+                        n=self.n,
+                        dt=1,
+                        steps=100,
+                        alpha=PolynomialConstraintStrengthener([0, 0.001, 0, 0.001])
+                    )
+                ),
+                (
+                    'x_vel',
+                    ConstraintMagnitudeStateLimit(
+                        limit_val=self.vel_limit, state_index=3, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
+                    )
+                ),
+                (
+                    'y_vel',
+                    ConstraintMagnitudeStateLimit(
+                        limit_val=self.vel_limit, state_index=4, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
+                    )
+                ),
+                (
+                    'z_vel',
+                    ConstraintMagnitudeStateLimit(
+                        limit_val=self.vel_limit, state_index=5, alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.01]), bias=-0.001
+                    )
+                ),
+            ]
+        )
+        return constraint_dict
+
+    def next_state_differentiable(self, state, step_size, control):
+        next_state = self.discrete_a_mat(step_size) @ state[0:6] + self.discrete_b_mat(step_size) @ control
+        return jnp.concatenate((next_state, jnp.array([state[6] - self.sun_vel * step_size, 0.])))  # TODO: fix fuel derivative
+
+    def discrete_a_mat(self, dt):
+        """Discrete CWH dynamics"""
+        c = jnp.cos(self.n * dt)
+        s = jnp.sin(self.n * dt)
+        return jnp.array(
+            [
+                [4 - 3 * c, 0, 0, 1 / self.n * s, 2 / self.n * (1 - c), 0],
+                [6 * (s - self.n * dt), 1, 0, -2 / self.n * (1 - c), 1 / self.n * (4 * s - 3 * self.n * dt), 0],
+                [0, 0, c, 0, 0, 1 / self.n * s],
+                [3 * self.n * s, 0, 0, c, 2 * s, 0],
+                [-6 * self.n * (1 - c), 0, 0, -2 * s, 4 * c - 3, 0],
+                [0, 0, -self.n * s, 0, 0, c],
+            ]
+        )
+
+    def discrete_b_mat(self, dt):
+        """Discrete CWH dynamics"""
+        c = jnp.cos(self.n * dt)
+        s = jnp.sin(self.n * dt)
+        return jnp.array(
+            [
+                [1 / self.n**2 * (1 - c), 2 / self.n**2 * (self.n * dt - s), 0],
+                [-2 / self.n**2 * (self.n * dt - s), 4 / self.n**2 * (1 - c) - 3 / 2 * dt**2, 0],
+                [0, 0, 1 / self.n**2 * (1 - c)],
+                [1 / self.n * s, 2 / self.n * (1 - c), 0],
+                [-2 / self.n * (1 - c), 4 / self.n * s - 3 * dt, 0],
+                [0, 0, 1 / self.n * s],
+            ]
+        ) / self.m
 
     def get_sun_vector(self, state: jnp.ndarray) -> jnp.ndarray:
         """Function to get vector pointing from sun to chief"""
