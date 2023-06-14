@@ -1,3 +1,10 @@
+# 1.14.0 (2023-06-14)
+
+
+### Features
+
+* Discrete cbfs for inspection 26fbb84
+
 # 1.13.0 (2023-06-14)
 
 
