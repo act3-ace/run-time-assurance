@@ -1,3 +1,10 @@
+# 1.13.0 (2023-06-14)
+
+
+### Features
+
+* Adjust subsampling logic 7bf7a27
+
 # 1.12.0 (2023-06-12)
 
 
