@@ -7,7 +7,7 @@ import os
 
 from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
-from run_time_assurance.zoo.cwh.inspection_1v1 import U_MAX_DEFAULT, Inspection1v1RTA, InspectionCascadedRTA
+from run_time_assurance.zoo.cwh.inspection_1v1 import U_MAX_DEFAULT, Inspection1v1RTA, InspectionCascadedRTA, DiscreteInspection1v1RTA
 from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
 from run_time_assurance.utils import to_jnp_array_jit
 
@@ -16,7 +16,7 @@ from run_time_assurance.utils import to_jnp_array_jit
 
 
 class Env(DataTrackingSampleTestingModule):
-    def __init__(self, rta, constraint_keys=[], **kwargs):
+    def __init__(self, rta, constraint_keys=[], step_size=1, **kwargs):
         self.u_max = U_MAX_DEFAULT  # Actuation constraint
         self.inspection_rta = Inspection1v1RTA()
         self.state_des = np.array([0, 0, 0, 0, 0, 0])
@@ -39,7 +39,7 @@ class Env(DataTrackingSampleTestingModule):
         Xare = np.matrix(scipy.linalg.solve_continuous_are(A, B, Q, R))
         self.Klqr = np.array(-scipy.linalg.inv(R)*(B.T*Xare))
 
-        super().__init__(rta=rta, simulation_time=3000, step_size=1, control_dim=3, state_dim=8, **kwargs)
+        super().__init__(rta=rta, simulation_time=3000, step_size=step_size, control_dim=3, state_dim=8, **kwargs)
 
     def _desired_control(self, state):
         # LQR to origin
@@ -120,9 +120,9 @@ class Env(DataTrackingSampleTestingModule):
             v = np.empty([len(array), 2])
             for j in range(len(array)):
                 v[j, :] = [np.linalg.norm(array[j, 0:3]), np.linalg.norm(array[j, 3:6])]
-            ax2.plot(range(len(array)), v[:, 0], linewidth=lw, label=r'$\mathbf{p}_{act}$')
+            ax2.plot(range(0, len(array)*self.step_size, self.step_size), v[:, 0], linewidth=lw, label=r'$\mathbf{p}_{act}$')
             ax2.plot(-1, -1, 'c', linewidth=0.5, label=r'$\mathbf{p}_{NM}$')
-            xmax = len(array)*1.1
+            xmax = len(array)*1.1*self.step_size
             ymax = self.inspection_rta.r_max * 1.4
             ax2.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [self.inspection_rta.r_max, self.inspection_rta.r_max], color=(244/255, 249/255, 241/255))
             ax2.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
@@ -141,8 +141,8 @@ class Env(DataTrackingSampleTestingModule):
             v = np.empty([len(array), 2])
             for j in range(len(array)):
                 v[j, :] = [np.linalg.norm(array[j, 0:3]), np.linalg.norm(array[j, 3:6])]
-            ax2.plot(range(len(array)), v[:, 0], linewidth=lw)
-            xmax = len(array)*1.1
+            ax2.plot(range(0, len(array)*self.step_size, self.step_size), v[:, 0], linewidth=lw)
+            xmax = len(array)*1.1*self.step_size
             ymax = np.max(v[:, 0])*1.1
             ax2.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
             ax2.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
@@ -174,9 +174,9 @@ class Env(DataTrackingSampleTestingModule):
         if paper_plot:
             fig = plt.figure()
             ax4 = fig.add_subplot(111)
-        xmax = len(array)*1.1
+        xmax = len(array)*1.1*self.step_size
         ymax = np.maximum(self.inspection_rta.delta_v_limit, np.max(array[:, 7]))*1.1
-        ax4.plot(range(len(array)), array[:, 7], linewidth=lw)
+        ax4.plot(range(0, len(array)*self.step_size, self.step_size), array[:, 7], linewidth=lw)
         ax4.fill_between([0, xmax], [self.inspection_rta.delta_v_limit, self.inspection_rta.delta_v_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
         ax4.fill_between([0, xmax], [0, 0], [self.inspection_rta.delta_v_limit, self.inspection_rta.delta_v_limit], color=(244/255, 249/255, 241/255))
         ax4.plot([0, xmax], [self.inspection_rta.delta_v_limit, self.inspection_rta.delta_v_limit], 'k--', linewidth=lw)
@@ -192,14 +192,14 @@ class Env(DataTrackingSampleTestingModule):
             fig = plt.figure()
             ax5 = fig.add_subplot(111)
         th = self.inspection_rta.fov/2*180/np.pi
-        xmax = len(array)*1.1
+        xmax = len(array)*1.1*self.step_size
         h = np.zeros(len(array))
         for j in range(len(array)):
             r_s_hat = np.array([np.cos(array[j, 6]), np.sin(array[j, 6]), 0.])
             r_b_hat = -array[j, 0:3]/np.linalg.norm(array[j, 0:3])
             h[j] = np.arccos(np.dot(r_s_hat, r_b_hat))*180/np.pi
         ymax = np.max(h)*1.1
-        ax5.plot(range(len(array)), h, linewidth=lw)
+        ax5.plot(range(0, len(array)*self.step_size, self.step_size), h, linewidth=lw)
         ax5.fill_between([0, xmax], [th, th], [ymax, ymax], color=(244/255, 249/255, 241/255))
         ax5.fill_between([0, xmax], [0, 0], [th, th], color=(255/255, 239/255, 239/255))
         ax5.plot([0, xmax], [th, th], 'k--', linewidth=lw)
@@ -212,8 +212,8 @@ class Env(DataTrackingSampleTestingModule):
             plt.tight_layout(pad=hp)
 
         if not paper_plot:
-            ax6.plot(range(len(array)), v[:, 0], linewidth=lw)
-            xmax = len(array)*1.1
+            ax6.plot(range(0, len(array)*self.step_size, self.step_size), v[:, 0], linewidth=lw)
+            xmax = len(array)*1.1*self.step_size
             ymax = np.maximum(np.max(v[:, 0])*1.1, self.inspection_rta.r_max*1.1)
             ax6.fill_between([0, xmax], [self.inspection_rta.r_max, self.inspection_rta.r_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
             ax6.fill_between([0, xmax], [0, 0], [self.inspection_rta.r_max, self.inspection_rta.r_max], color=(244/255, 249/255, 241/255))
@@ -229,8 +229,8 @@ class Env(DataTrackingSampleTestingModule):
                 for i in range(0, len(array), 3):
                     r = self.inspection_rta.constraints["PSM"].get_array(array[i])+self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius
                     ax7.plot(range(i, len(r)+i), r, 'c', linewidth=0.5)
-                ax7.plot(range(len(array)), v[:, 0], linewidth=lw)
-                xmax = len(array)*1.1
+                ax7.plot(range(0, len(array)*self.step_size, self.step_size), v[:, 0], linewidth=lw)
+                xmax = len(array)*1.1*self.step_size
                 ymax = np.max(v[:, 0])*1.1
                 ax7.fill_between([0, xmax], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], [ymax, ymax], color=(244/255, 249/255, 241/255))
                 ax7.fill_between([0, xmax], [0, 0], [self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius, self.inspection_rta.chief_radius+self.inspection_rta.deputy_radius], color=(255/255, 239/255, 239/255))
@@ -245,11 +245,11 @@ class Env(DataTrackingSampleTestingModule):
         if paper_plot:
             fig = plt.figure()
             ax8 = fig.add_subplot(111)
-        xmax = len(array)*1.1
+        xmax = len(array)*1.1*self.step_size
         ymax = self.inspection_rta.vel_limit*1.2
-        ax8.plot(range(len(array)), array[:, 3], linewidth=lw, label=r'$\dot{x}$')
-        ax8.plot(range(len(array)), array[:, 4], linewidth=lw, label=r'$\dot{y}$')
-        ax8.plot(range(len(array)), array[:, 5], linewidth=lw, label=r'$\dot{z}$')
+        ax8.plot(range(0, len(array)*self.step_size, self.step_size), array[:, 3], linewidth=lw, label=r'$\dot{x}$')
+        ax8.plot(range(0, len(array)*self.step_size, self.step_size), array[:, 4], linewidth=lw, label=r'$\dot{y}$')
+        ax8.plot(range(0, len(array)*self.step_size, self.step_size), array[:, 5], linewidth=lw, label=r'$\dot{z}$')
         ax8.fill_between([0, xmax], [self.inspection_rta.vel_limit, self.inspection_rta.vel_limit], [ymax, ymax], color=(255/255, 239/255, 239/255))
         ax8.fill_between([0, xmax], [-ymax, -ymax], [self.inspection_rta.vel_limit, self.inspection_rta.vel_limit], color=(255/255, 239/255, 239/255))
         ax8.fill_between([0, xmax], [-self.inspection_rta.vel_limit, -self.inspection_rta.vel_limit], [self.inspection_rta.vel_limit, self.inspection_rta.vel_limit], color=(244/255, 249/255, 241/255))
@@ -267,11 +267,11 @@ class Env(DataTrackingSampleTestingModule):
         if paper_plot:
             fig = plt.figure()
             ax9 = fig.add_subplot(111)
-        xmax = len(array)*1.1
+        xmax = len(array)*1.1*self.step_size
         ymax = self.inspection_rta.u_max*1.2
-        ax9.plot(range(len(control)), control[:, 0], linewidth=lw, label=r'$F_x$')
-        ax9.plot(range(len(control)), control[:, 1], linewidth=lw, label=r'$F_y$')
-        ax9.plot(range(len(control)), control[:, 2], linewidth=lw, label=r'$F_z$')
+        ax9.plot(range(0, len(control)*self.step_size, self.step_size), control[:, 0], linewidth=lw, label=r'$F_x$')
+        ax9.plot(range(0, len(control)*self.step_size, self.step_size), control[:, 1], linewidth=lw, label=r'$F_y$')
+        ax9.plot(range(0, len(control)*self.step_size, self.step_size), control[:, 2], linewidth=lw, label=r'$F_z$')
         ax9.fill_between([0, xmax], [self.inspection_rta.u_max, self.inspection_rta.u_max], [ymax, ymax], color=(255/255, 239/255, 239/255))
         ax9.fill_between([0, xmax], [-ymax, -ymax], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(255/255, 239/255, 239/255))
         ax9.fill_between([0, xmax], [-self.inspection_rta.u_max, -self.inspection_rta.u_max], [self.inspection_rta.u_max, self.inspection_rta.u_max], color=(244/255, 249/255, 241/255))
@@ -397,8 +397,8 @@ if __name__ == '__main__':
     save_fig = True
     output_dir = 'figs/inspection_1v1'
 
-    envs = [Env(Inspection1v1RTA()), FuelEnv(InspectionCascadedRTA())]
-    output_names = ['rta_test_inspection_1v1', 'rta_test_cascaded_rta']
+    envs = [Env(Inspection1v1RTA()), Env(DiscreteInspection1v1RTA()), FuelEnv(InspectionCascadedRTA())]
+    output_names = ['rta_test_inspection_1v1', 'rta_test_discrete_inspection_1v1', 'rta_test_cascaded_rta']
 
     os.makedirs(output_dir, exist_ok=True)
 
