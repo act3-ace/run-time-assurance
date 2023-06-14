@@ -69,7 +69,7 @@ class Integrator1dDockingRTAMixin:
 
     def _setup_docking_constraints_implicit(self) -> OrderedDict:
         """generates implicit constraints used in the docking problem"""
-        return OrderedDict([('rel_vel', ConstraintIntegrator1dDockingCollisionImplicit())])
+        return OrderedDict([('rel_vel', ConstraintIntegrator1dDockingCollisionImplicit(subsample_constraints_num_least=1))])
 
     def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         """Predicts the next state given the current state and control action"""
@@ -262,19 +262,6 @@ class Integrator1dDockingImplicitOptimizationRTA(ImplicitASIFModule, Integrator1
     ----------
     backup_window : float
         Duration of time in seconds to evaluate backup controller trajectory
-    num_check_all : int
-        Number of points at beginning of backup trajectory to check at every sequential simulation timestep.
-        Should be <= backup_window.
-        Defaults to 0 as skip_length defaults to 1 resulting in all backup trajectory points being checked.
-    subsample_constraints_num_least: int
-        subsample the backup trajectory down to the points with the N least constraint function outputs
-        i.e. the n points closest to violating a safety constraint
-        ....
-    skip_length : int
-        After num_check_all points in the backup trajectory are checked, the remainder of the backup window is filled by
-        skipping every skip_length points to reduce the number of backup trajectory constraints. Will always check the
-        last point in the backup trajectory as well.
-        Defaults to 1, resulting in no skipping.
     platform_name : str, optional
         name of the platform this rta module is attaching to, by default "deputy"
     control_bounds_high : Union[float, np.ndarray], optional
@@ -292,9 +279,6 @@ class Integrator1dDockingImplicitOptimizationRTA(ImplicitASIFModule, Integrator1
         self,
         *args,
         backup_window: float = 2,
-        num_check_all: int = 0,
-        subsample_constraints_num_least: int = 1,
-        skip_length: int = 1,
         m: float = M_DEFAULT,
         control_bounds_high: Union[float, np.ndarray] = 1,
         control_bounds_low: Union[float, np.ndarray] = -1,
@@ -315,9 +299,6 @@ class Integrator1dDockingImplicitOptimizationRTA(ImplicitASIFModule, Integrator1
             *args,
             backup_window=backup_window,
             integration_method=integration_method,
-            num_check_all=num_check_all,
-            subsample_constraints_num_least=subsample_constraints_num_least,
-            skip_length=skip_length,
             backup_controller=backup_controller,
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
@@ -363,10 +344,10 @@ class ConstraintIntegrator1dDockingCollisionExplicit(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 1, 0, 30])
     """
 
-    def __init__(self, alpha: ConstraintStrengthener = None):
+    def __init__(self, alpha: ConstraintStrengthener = None, **kwargs):
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 1, 0, 30])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         return -2 * state[0] - state[1]**2
@@ -382,10 +363,10 @@ class ConstraintIntegrator1dDockingCollisionImplicit(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 10, 0, 30])
     """
 
-    def __init__(self, alpha: ConstraintStrengthener = None):
+    def __init__(self, alpha: ConstraintStrengthener = None, **kwargs):
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 10, 0, 30])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         return -state[0]
