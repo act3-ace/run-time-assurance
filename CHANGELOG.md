@@ -1,3 +1,10 @@
+# 1.15.0 (2023-06-20)
+
+
+### Features
+
+* Slack variables for ASIF optimization objective b052e3d
+
 ## 1.14.1 (2023-06-20)
 
 
