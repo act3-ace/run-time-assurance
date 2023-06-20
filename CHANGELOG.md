@@ -1,3 +1,10 @@
+## 1.14.1 (2023-06-20)
+
+
+### Bug Fixes
+
+* Update to safe-autonomy-dynamics 0.12.0 b02ac40
+
 # 1.14.0 (2023-06-14)
 
 
