@@ -45,7 +45,17 @@ class BaseOptimizationModule(ConstraintBasedRTA):
 
         self.control_dim = control_dim
         self.solver_exception = solver_exception
-        self.obj_weight = np.eye(self.control_dim)
+
+        self.constraints_with_slack = OrderedDict()
+        for k, c in self.constraints.items():
+            if c.slack_priority_scale is not None:
+                self.constraints_with_slack[k] = c
+        self.num_slack = len(self.constraints_with_slack)
+
+        self.obj_weight = np.ones(self.control_dim + self.num_slack)
+        for i, c in enumerate(self.constraints_with_slack.values()):
+            self.obj_weight[i + self.control_dim] = np.sqrt(c.slack_priority_scale)
+        self.obj_weight = np.diag(self.obj_weight)
 
     def monitor(self, desired_control: np.ndarray, actual_control: np.ndarray) -> bool:
         """Determines whether the ASIF RTA module is currently intervening
@@ -120,11 +130,12 @@ class ASIFModule(BaseOptimizationModule):
         jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
         """
-        ineq_weight = jnp.empty((0, self.control_dim))
+        ineq_weight = jnp.empty((0, self.control_dim + self.num_slack))
         ineq_constant = jnp.empty(0)
 
         if self.control_bounds_low is not None:
             c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_low, self.control_dim)
+            c = jnp.hstack((c, jnp.zeros((self.control_dim, self.num_slack))))
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
 
@@ -132,6 +143,7 @@ class ASIFModule(BaseOptimizationModule):
             c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_high, self.control_dim)
             c *= -1
             b *= -1
+            c = jnp.hstack((c, jnp.zeros((self.control_dim, self.num_slack))))
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
 
@@ -157,6 +169,7 @@ class ASIFModule(BaseOptimizationModule):
         """
         for c in self.direct_inequality_constraints.values():
             temp1 = c.ineq_weight(state)
+            temp1 = jnp.concatenate((temp1, jnp.zeros(self.num_slack)))
             temp2 = c.ineq_constant(state)
             ineq_weight = jnp.append(ineq_weight, temp1[:, None], axis=1)
             ineq_constant = jnp.append(ineq_constant, temp2)
@@ -183,6 +196,7 @@ class ASIFModule(BaseOptimizationModule):
         np.ndarray
             Actual control solved by QP
         """
+        obj_constant = np.concatenate((obj_constant, np.zeros(self.num_slack)))
         try:
             opt = quadprog.solve_qp(
                 obj_weight, obj_constant, np.array(ineq_weight, dtype=np.float64), np.array(ineq_constant, dtype=np.float64), 0
@@ -196,7 +210,7 @@ class ASIFModule(BaseOptimizationModule):
                     raise SolverError() from e
             else:
                 raise e
-        return opt
+        return opt[0:self.control_dim]
 
     @abc.abstractmethod
     def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -306,12 +320,18 @@ class ExplicitASIFModule(ASIFModule):
         jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
         """
-        ineq_weight_barrier = jnp.empty((0, self.control_dim))
+        ineq_weight_barrier = jnp.empty((0, self.control_dim + self.num_slack))
         ineq_constant_barrier = jnp.empty(0)
 
+        slack_counter = 0
         for c in self.constraints.values():
             grad_x = c.grad(state)
             temp1 = grad_x @ self.state_transition_input(state)
+            slack = jnp.zeros(self.num_slack)
+            if c.slack_priority_scale is not None:
+                slack = slack.at[slack_counter].set(-1.)
+                slack_counter += 1
+            temp1 = jnp.concatenate((temp1, slack))
             temp2 = -grad_x @ self.state_transition_system(state) - c.alpha(c(state))
 
             ineq_weight_barrier = jnp.append(ineq_weight_barrier, temp1[None, :], axis=0)
@@ -494,16 +514,22 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         num_constraints = len(self.constraints)
         num_points = len(traj_states)
 
-        ineq_weight_barrier = jnp.empty((num_constraints * num_points, self.control_dim))
+        ineq_weight_barrier = jnp.empty((num_constraints * num_points, self.control_dim + self.num_slack))
         ineq_constant_barrier = jnp.empty(num_constraints * num_points)
         constraint_vals = jnp.empty((num_constraints, num_points))
 
         traj_states = jnp.array(traj_states)
         traj_sensitivities = jnp.array(traj_sensitivities)
 
+        slack_counter = 0
         for i in range(num_constraints):
             point_ineq_weight, point_ineq_constant, point_constraint_vals = self._get_ineq_mats_fn(
                 constraint_list[i], state, traj_states, traj_sensitivities)
+            slack = jnp.zeros((num_points, self.num_slack))
+            if constraint_list[i].slack_priority_scale is not None:
+                slack = slack.at[:, slack_counter].set(-1.)
+                slack_counter += 1
+            point_ineq_weight = jnp.hstack((point_ineq_weight, slack))
             ineq_weight_barrier = ineq_weight_barrier.at[i * num_points:(i + 1) * num_points, :].set(point_ineq_weight)
             ineq_constant_barrier = ineq_constant_barrier.at[i * num_points:(i + 1) * num_points].set(point_ineq_constant)
             constraint_vals = constraint_vals.at[i, :].set(point_constraint_vals)
@@ -784,16 +810,22 @@ class DiscreteASIFModule(BaseOptimizationModule):
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
 
-        self.opt_bounds = [(self.control_bounds_low, self.control_bounds_high)] * self.control_dim
+        self.opt_bounds = [(self.control_bounds_low, self.control_bounds_high)] * self.control_dim + [(-np.inf, np.inf)] * self.num_slack
         self.scipy_constraints = []
         self.discrete_constraints = OrderedDict()
+        slack_counter = 0
         for k, c in self.constraints.items():
-            temp_c = DiscreteCBFConstraint(c, self.next_state_differentiable)
+            if c.slack_priority_scale is not None:
+                slack_idx = slack_counter
+                slack_counter += 1
+            else:
+                slack_idx = None
+            temp_c = DiscreteCBFConstraint(c, self.next_state_differentiable, self.control_dim, slack_idx)
             self.discrete_constraints[k] = temp_c
             self.scipy_constraints.append({'type': 'ineq', 'fun': temp_c.cbf, 'jac': temp_c.jac})
 
     def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        desired_control = np.array(control, dtype=np.float64)
+        desired_control = np.concatenate((np.array(control, dtype=np.float64), np.zeros((self.num_slack))))
         for c in self.scipy_constraints:
             c['args'] = (state, step_size)
         res = minimize(
@@ -806,9 +838,9 @@ class DiscreteASIFModule(BaseOptimizationModule):
             else:
                 raise SolverError(error)
 
-        actual_control = res.x
+        actual_control = res.x[0:self.control_dim]
 
-        self.intervening = self.monitor(desired_control, actual_control)
+        self.intervening = self.monitor(desired_control[0:self.control_dim], actual_control)
 
         return to_jnp_array_jit(actual_control)
 
