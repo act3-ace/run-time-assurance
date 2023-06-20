@@ -56,13 +56,20 @@ class ConstraintModule(abc.ABC):
         Use a small negative value to make the constraint slightly more conservative.
     jit_enable: bool, optional
         Flag to enable or disable JIT compiliation. Useful for debugging
+    slack_priority_scale: float, optional
+        A scaling constant for the constraint's slack variable, for use during optimization.
+        Value should be large (ex. 1e12). Higher values correspond to higher priority.
+        By default None -> no slack variable will be used.
     """
 
-    def __init__(self, alpha: ConstraintStrengthener = None, bias: float = 0, jit_enable: bool = True, **kwargs):
+    def __init__(
+        self, alpha: ConstraintStrengthener = None, bias: float = 0, jit_enable: bool = True, slack_priority_scale: float = None, **kwargs
+    ):
         assert isinstance(alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         self._alpha = alpha
         self.bias = bias
         self.jit_enable = jit_enable
+        self.slack_priority_scale = slack_priority_scale
         self.subsample_config = SubsampleConfigValidator(**kwargs)
         self._compose()
 
@@ -423,11 +430,17 @@ class DiscreteCBFConstraint():
         Current constraint to transform into a discrete CBF
     next_state_fn: Any
         Function to compute the next state of the system. Must be differentiable using Jax.
+    control_dim : int
+        length of control vector
+    slack_idx : int
+        Index of slack variable to be used. None if no slack variable.
     """
 
-    def __init__(self, constraint: ConstraintModule, next_state_fn: Any):
+    def __init__(self, constraint: ConstraintModule, next_state_fn: Any, control_dim: int, slack_idx: int = None):
         self.constraint = constraint
         self.next_state_fn = next_state_fn
+        self.control_dim = control_dim
+        self.slack_idx = slack_idx
         self.cbf = jit(self.cbf_fn)
         self.jac = jit(jacrev(self.cbf_fn))
 
@@ -448,5 +461,8 @@ class DiscreteCBFConstraint():
         float:
             value of the discrete CBF
         """
-        next_state = self.next_state_fn(state, step_size, control)
-        return (self.constraint(next_state) - self.constraint(state)) / step_size + self.constraint.alpha(self.constraint(state))
+        next_state = self.next_state_fn(state, step_size, control[0:self.control_dim])
+        h = (self.constraint(next_state) - self.constraint(state)) / step_size + self.constraint.alpha(self.constraint(state))
+        if self.slack_idx is not None:
+            h -= control[self.control_dim + self.slack_idx]
+        return h
