@@ -2,6 +2,6 @@ numpy
 quadprog
 python-constraint
 scipy
-safe-autonomy-dynamics>=0.11.5,<0.12
+safe-autonomy-dynamics==0.12.0
 jax[cpu]==0.4.3
 matplotlib
