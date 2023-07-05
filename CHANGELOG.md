@@ -1,3 +1,10 @@
+## 1.15.1 (2023-07-05)
+
+
+### Bug Fixes
+
+* slack priority for HOCBFs b813846
+
 # 1.15.0 (2023-06-20)
 
 
