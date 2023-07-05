@@ -354,7 +354,9 @@ class HOCBFConstraint(ConstraintModule):
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
     """
 
-    def __init__(self, constraint: ConstraintModule, relative_degree: int, state_transition_system, alpha: ConstraintStrengthener):
+    def __init__(
+        self, constraint: ConstraintModule, relative_degree: int, state_transition_system, alpha: ConstraintStrengthener, **kwargs: Any
+    ):
         self.initial_constraint = constraint
         hocbf_constraint_dict = {"constraint_0": constraint}
         for i in range(1, relative_degree):
@@ -363,7 +365,7 @@ class HOCBFConstraint(ConstraintModule):
             )
             hocbf_constraint_dict["constraint_" + str(i)] = psi
         self.final_constraint = psi
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         return self.final_constraint(state)
@@ -385,10 +387,10 @@ class HOCBFConstraintHelper(ConstraintModule):
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
     """
 
-    def __init__(self, constraint: ConstraintModule, state_transition_system, alpha: ConstraintStrengthener):
+    def __init__(self, constraint: ConstraintModule, state_transition_system, alpha: ConstraintStrengthener, **kwargs: Any):
         self.constraint = constraint
         self.state_transition_system = state_transition_system
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, **kwargs)
 
     def _compute(self, state: jnp.ndarray) -> float:
         return self.constraint.grad(state) @ self.state_transition_system(state) + self.alpha(self.constraint(state))
