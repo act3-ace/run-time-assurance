@@ -3,11 +3,11 @@
 #########################################################################################
 ARG ACT3_OCI_REGISTRY
 ARG IMAGE_REPO_BASE
-ARG SA_DYNAMICS_TAG=0.12.0
+ARG SA_DYNAMICS_TAG=0.13.1
 
 FROM ${ACT3_OCI_REGISTRY}/rta/safe-autonomy-stack/safe-autonomy-dynamics/releases/package:v${SA_DYNAMICS_TAG} as sa_dynamics_package
 
-FROM ${IMAGE_REPO_BASE}docker.io/python:3.8 as develop
+FROM ${IMAGE_REPO_BASE}docker.io/python:3.10.5 as develop
 
 ARG PIP_INDEX_URL
 ARG APT_MIRROR_URL
