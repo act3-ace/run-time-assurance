@@ -1,3 +1,10 @@
+## 1.15.2 (2023-09-20)
+
+
+### Bug Fixes
+
+* **requirements:** update required sa-dynamics (0.12.0 -> 0.13.1) and python version (3.8 -> 3.10.5) f23e4f1
+
 ## 1.15.1 (2023-07-05)
 
 
