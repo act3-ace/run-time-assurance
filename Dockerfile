@@ -3,7 +3,7 @@
 #########################################################################################
 ARG ACT3_OCI_REGISTRY
 ARG IMAGE_REPO_BASE
-ARG SA_DYNAMICS_TAG=0.13.1
+ARG SA_DYNAMICS_TAG=0.13.2
 
 FROM ${ACT3_OCI_REGISTRY}/rta/safe-autonomy-stack/safe-autonomy-dynamics/releases/package:v${SA_DYNAMICS_TAG} as sa_dynamics_package
 
