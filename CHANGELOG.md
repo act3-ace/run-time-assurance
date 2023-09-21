@@ -1,3 +1,10 @@
+## 1.15.3 (2023-09-21)
+
+
+### Bug Fixes
+
+* **requirements:** update required sa-dynamics version to 0.13.2 96254f6
+
 ## 1.15.2 (2023-09-20)
 
 
