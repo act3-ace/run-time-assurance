@@ -1,0 +1,39 @@
+# act3-pt Project Configuration
+# Information, configuration, and template generation rules for your project, used by ACT3 Project Tool
+# Run "act3-pt update" to apply changes
+# Comments modified by the user will not be preserved in this file
+
+kind: Project
+apiVersion: pt.act3-ace.io/v1alpha3
+
+# Information about your project
+project:
+    name: run-time-assurance
+    title: Run Time Assurance
+    description: The run-time-assurance library provides an interface and implementations for Run Time Assurance (RTA) safety filters.
+    gitRemoteURL: https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance.git
+
+# Information and configuration for your project's template
+template:
+    name: python-library
+    version: v1.0.24 # Not user-editable, run "act3-pt update" to change version
+    url: https://git.act3-ace.com/devsecops/project-templates/python-library.git # URL or local path to template repository
+    ignore: [] # List of paths to ignore in your template
+    #     - ignoredFile.txt
+
+    rename: [] # List of paths to rename in your template
+    #     - replace: oldFileName.txt
+    #       with: newFileName.txt
+
+# List of parameters used by your project's template
+parameters: # List of paths to ignore in your template
+    # Python package name (required)
+    packageName: run_time_assurance
+    # Who (if any) should be the default assignee for new issues?
+    defaultAssignee: ""
+
+# Contact information for project authors
+# The first author listed is used as the primary author
+authors:
+    - name: Charles Keating
+      email: Charles.Keating@udri.udayton.edu

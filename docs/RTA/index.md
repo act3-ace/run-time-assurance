@@ -1,6 +1,6 @@
 # Introduction
 
-Run Time Assurance (RTA) is an online safety assurance technique that filters potentially unsafe inputs from a primary controller in a way that preserves safety of the system when necessary [[1]](https://etd.ohiolink.edu/apexprod/rws_etd/send_file/send?accession=ucin1649768916078616&disposition=inline). RTA is designed to be completely independent of the primary control structure, such that it can be used with any control system. 
+Run Time Assurance (RTA) is an online safety assurance technique that filters potentially unsafe inputs from a primary controller in a way that preserves safety of the system when necessary [[1]](https://etd.ohiolink.edu/apexprod/rws_etd/send_file/send?accession=ucin1649768916078616&disposition=inline). RTA is designed to be completely independent of the primary control structure, such that it can be used with any control system.
 
 ## Modeling Dynamical Control Systems
 
