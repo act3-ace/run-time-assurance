@@ -5,7 +5,7 @@ $$
     \mathcal{C}_{\rm A} := \{\boldsymbol{x} \in \mathcal{X} \, | \, \varphi_i(\boldsymbol{x}) \geq 0, \forall i \in \{1,...,M\} \}.
 $$
 
-For a dynamical system with no control input, an intial state $\boldsymbol{x}(t_0)$ is *safe* if it remains within $\mathcal{C}_{\rm A}$ for all time. This is know as *forward invariance*. The *safe set*, a forward invariant subset of $\mathcal{C}_{\rm A}$, is defined as, 
+For a dynamical system with no control input, an intial state $\boldsymbol{x}(t_0)$ is *safe* if it remains within $\mathcal{C}_{\rm A}$ for all time. This is know as *forward invariance*. The *safe set*, a forward invariant subset of $\mathcal{C}_{\rm A}$, is defined as,
 
 $$
     \boldsymbol{x}(t_0) \in \mathcal{C}_{\rm S} \Longrightarrow \boldsymbol{x}(t) \in \mathcal{C}_{\rm A}, \forall t \geq t_0.
@@ -31,6 +31,6 @@ $$
     \mathcal{C}_{\rm S} := \{\boldsymbol{x}\in \mathcal{X} \, | \, \forall t\geq 0,\,\, \phi^{\boldsymbol{u}_{\rm b}}(t;\boldsymbol{x})\in\mathcal{C}_{\rm A} \},
 $$
 
-where $\phi^{\boldsymbol{u}_{\rm b}}$ represents a prediction of the state $\boldsymbol{x}$ for $t$ seconds under the backup control law $\boldsymbol{u}_{\rm b}$. The implicit safe set is determined entirely online, where backup trajectories must constantly be computed at each time interval. 
+where $\phi^{\boldsymbol{u}_{\rm b}}$ represents a prediction of the state $\boldsymbol{x}$ for $t$ seconds under the backup control law $\boldsymbol{u}_{\rm b}$. The implicit safe set is determined entirely online, where backup trajectories must constantly be computed at each time interval.
 
 In practice, these trajectories are often evaluated over a finite time horizon $\mathcal{T} = [0,T]$ in order to reduce computation time. As a result, a trade-off between computation time and safety guarantees is introduced: as the length of the time horizon decreases, the computation time decreases but safety is guaranteed over a shorter time horizon. As the length of the time horizon increases, the computation time increases while safety is guaranteed over a longer time horizon.

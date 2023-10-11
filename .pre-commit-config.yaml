@@ -49,7 +49,7 @@ repos:
         entry: check-yaml
         language: python
         types: [ yaml ]
-        exclude: "(^config.*|^tests.*|^docs.*|mkdocs.yml$)"
+        exclude: "(^config.*|^test.*|^docs.*|mkdocs.yml$)"
         args: [ "--allow-multiple-documents" ]
       - id: debug-statements
         name: Debug Statements (Python)
