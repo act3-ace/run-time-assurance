@@ -1,10 +1,12 @@
+# Explicit ASIF
+
 For explicit ASIF RTA, each barrier constraint can be constructed explicitly as,
 
 $$
     BC_i(\boldsymbol{x},\boldsymbol{u}) := \nabla h_i(\boldsymbol{x}) (f(\boldsymbol{x}) + g(\boldsymbol{x})\boldsymbol{u}) + \alpha(h_i(\boldsymbol{x})),
 $$
 
-where $\boldsymbol{u} \in U$ and $h_{i}(\boldsymbol{x})$ refers to the set of $M$ control invariant safety constraints. 
+where $\boldsymbol{u} \in U$ and $h_{i}(\boldsymbol{x})$ refers to the set of $M$ control invariant safety constraints.
 
 The ASIF filter then solves the quadratic program using the set of $i$ barrier constraints, and outputs $\boldsymbol{u}_{\rm safe}(\boldsymbol{x})$ according to the following logic,
 

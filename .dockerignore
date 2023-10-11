@@ -1,0 +1,18 @@
+# Ignore everything
+**
+
+# Allow these files and directories
+!/.scripts/**
+!/.devcontainer/**
+!/run_time_assurance/**
+!/docs/**
+!/config/**
+!/scripts/**
+!/Dockerfile
+!/LICENSE.md
+!/setup.cfg
+!/README.md
+!/pyproject.toml
+!/poetry.lock
+
+

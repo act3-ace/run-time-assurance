@@ -6,13 +6,13 @@ $$
 \begin{array}{rl}
 \boldsymbol{u}_{\rm safe}(\boldsymbol{x})=
 \begin{cases}
-\boldsymbol{u}_{\rm des}(\boldsymbol{x}) & {\rm if}\quad \phi_1^{\boldsymbol{u}_{\rm des}}(\boldsymbol{x}) \in \mathcal{C}_{\rm S}  \\ 
+\boldsymbol{u}_{\rm des}(\boldsymbol{x}) & {\rm if}\quad \phi_1^{\boldsymbol{u}_{\rm des}}(\boldsymbol{x}) \in \mathcal{C}_{\rm S}  \\
 \boldsymbol{u}_{\rm b}(\boldsymbol{x})  & {\rm if}\quad otherwise
 \end{cases}
 \end{array}
 $$
 
-Here, $\phi_1^{\boldsymbol{u}_{\rm des}}(\boldsymbol{x})$ represents a prediction of the state $\boldsymbol{x}$ if $\boldsymbol{u}_{\rm des}$ is applied for one discrete time interval $\tau \in \mathcal{T}$. 
+Here, $\phi_1^{\boldsymbol{u}_{\rm des}}(\boldsymbol{x})$ represents a prediction of the state $\boldsymbol{x}$ if $\boldsymbol{u}_{\rm des}$ is applied for one discrete time interval $\tau \in \mathcal{T}$.
 
 ## Control System with Simplex RTA
 

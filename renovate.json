@@ -1,0 +1,6 @@
+{
+    "extends": [
+        ":semanticCommits",
+        ":semanticCommitType(fix)"
+    ]
+}
