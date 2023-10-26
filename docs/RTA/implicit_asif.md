@@ -12,7 +12,7 @@ The ASIF filter then solves the quadratic program using the set of $i$ barrier c
 
 $$
 \begin{split}
-\boldsymbol{u}_{\text{safe}}(\boldsymbol{x})={\text{argmin}} & \Vert \boldsymbol{u}_{\text{des}}-\boldsymbol{u}\Vert ^{2} \\
+\boldsymbol{u}_{\text{safe}}(\boldsymbol{x})=\underset{\boldsymbol{u} \in \mathcal{U}}{\text{argmin}} & \Vert \boldsymbol{u}_{\text{des}}-\boldsymbol{u}\Vert ^{2} \\
 \text{s.t.} \quad & BC_i(\boldsymbol{x},\boldsymbol{u})\geq 0, \quad \forall i \in \{1,...,M\}
 \end{split}
 $$

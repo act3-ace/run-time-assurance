@@ -113,6 +113,7 @@ nav:
       - RTA/asif.md
       - "Explicit ASIF": RTA/explicit_asif.md
       - "Implicit ASIF": RTA/implicit_asif.md
+      - "Discrete ASIF": RTA/discrete_asif.md
   - "API":
     - api/index.md
     - constraint: reference/constraint.md
