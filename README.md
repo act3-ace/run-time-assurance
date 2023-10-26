@@ -83,6 +83,25 @@ cp -r docs/. site/
 poetry run mkdocs serve
 ```
 
+## Tutorial
+
+A Jupyter Notebook tutorial discussing how to build RTA modules is given at `run-time-assurance/tutorials/Double_Integrator_Tutorial.ipynb`.
+
+## Citation
+
+The [paper](https://arxiv.org/pdf/2209.01120.pdf) associated with this repository was presented at the 2023 American Control Conference, and can be cited with the following bibtex entry:
+
+```
+@inproceedings{ravaioli2023universal,
+  title={A Universal Framework for Generalized Run Time Assurance with JAX Automatic Differentiation},
+  author={Ravaioli, Umberto J and Dunlap, Kyle and Hobbs, Kerianne},
+  booktitle={2023 American Control Conference (ACC)},
+  pages={4264--4269},
+  year={2023},
+  organization={IEEE}
+}
+```
+
 ## Public Release
 
 Distribution A. Approved for public release; distribution is unlimited. Case Number: AFRL-2022-3202
