@@ -18,11 +18,11 @@ It is recommended to install the python modules within
 a [virtualenv](https://virtualenv.pypa.io/en/stable/#)
 or [conda](https://docs.conda.io/projects/conda/en/latest/index.html) environment.
 run-time-assurance utilizes [Poetry](https://python-poetry.org/) to handle installation.
-Poetry can install safe-autonomy-dynamics into an auto-generated virtualenv or within the currently active environment.
+Poetry can install run-time-assurance into an auto-generated virtualenv or within the currently active environment.
 
 ### Installing run-time-assurance
 
-Clone a copy of the safe-autonomy-sims source code
+Clone a copy of the run-time-assurance source code
 onto your local machine via SSH:
 
 ```shell
@@ -64,7 +64,7 @@ cd run-time-assurance
 poetry install
 ```
 
-Poetry will handle installing appropriate versions of the dependencies for safe-autonomy-dynamics into your environment, if they aren't already installed.  Poetry will install an editable version of safe-autonomy-dynamics to the environment.
+Poetry will handle installing appropriate versions of the dependencies for run-time-assurance into your environment, if they aren't already installed.  Poetry will install an editable version of run-time-assurance to the environment.
 
 ## Build Docs Locally
 
@@ -91,7 +91,7 @@ A Jupyter Notebook tutorial discussing how to build RTA modules is given at `run
 
 The [paper](https://arxiv.org/pdf/2209.01120.pdf) associated with this repository was presented at the 2023 American Control Conference, and can be cited with the following bibtex entry:
 
-```
+```tex
 @inproceedings{ravaioli2023universal,
   title={A Universal Framework for Generalized Run Time Assurance with JAX Automatic Differentiation},
   author={Ravaioli, Umberto J and Dunlap, Kyle and Hobbs, Kerianne},
