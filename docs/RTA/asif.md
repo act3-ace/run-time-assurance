@@ -25,7 +25,7 @@ $$
 
 A general control system with a ASIF RTA filter is shown in the figure below, where "Optimization" refers to solving the quadratic program.
 
-![RTA Filter](figures/Optimization.PNG)
+![RTA Filter](figures/Optimization.png)
 
 ## Slack Variables
 
