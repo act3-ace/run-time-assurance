@@ -18,4 +18,4 @@ Here, $\phi_1^{\boldsymbol{u}_{\rm des}}(\boldsymbol{x})$ represents a predictio
 
 A general control system with a simplex RTA filter is shown in the figure below.
 
-![RTA Filter](figures/Switching.PNG)
+![RTA Filter](figures/Switching.png)

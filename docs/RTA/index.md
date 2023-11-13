@@ -13,6 +13,6 @@ $$
 
 A general control system with RTA is shown in the figure below.
 
-![RTA Filter](figures/RTA_Filter.PNG)
+![RTA Filter](figures/RTA_Filter.png)
 
 In this figure, components outlined in red have low safety confidence while components outlined in blue have high safety confidence. At each time interval, the primary controller, which can be a variety of systems such as a neural network or human operator, is given the state $\boldsymbol{x}$ and outputs a desired action $\boldsymbol{u}_{\rm des}$. The RTA filter then receives $\boldsymbol{x}$ and $\boldsymbol{u}_{\rm des}$ as inputs, intervenes as necessary to preserve safety of the system, and outputs a safe action $\boldsymbol{u}_{\rm safe}$. The plant then receives $\boldsymbol{u}_{\rm safe}$, integrates the state based on the dynamics, and passes an updated state back to the primary controller and RTA filter.
