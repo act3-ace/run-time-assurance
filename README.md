@@ -104,6 +104,8 @@ The [paper](https://arxiv.org/pdf/2209.01120.pdf) associated with this repositor
 
 ## Public Release
 
+Approved for public release; distribution is unlimited. Case Number: AFRL-2023-6154
+
 A prior version of this repository was approved for public release. Case Number: AFRL-2022-3202
 
 ## Team
