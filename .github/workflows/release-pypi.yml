@@ -29,6 +29,7 @@ jobs:
       - name: Sign the dists
         uses: sigstore/gh-action-sigstore-python@v2.1.1
         with:
+          upload-signing-artifacts: true
           inputs: >-
             ./dist/*.tar.gz
             ./dist/*.whl
@@ -44,13 +45,7 @@ jobs:
           -t ${{ steps.ver.outputs.version }}
           --repo '${{ github.repository }}'
           --notes-file ./CHANGELOG.md
-      - name: Upload artifacts for Github Release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: >-
-          gh release upload
-          ${{ steps.ver.outputs.version }} dist/**
-          --repo '${{ github.repository }}'
+          dist/**
   publish-to-pypi:
     name: Publish Python distribution to PyPI
     runs-on: ubuntu-latest
