@@ -52,7 +52,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_commit.message, 'chore(release):') }}
     environment:
       name: release
-      url: https://pypi.org/p/safe-autonomy-dynamics
+      url: https://pypi.org/p/run-time-assurance
     permissions:
       id-token: write
     steps:

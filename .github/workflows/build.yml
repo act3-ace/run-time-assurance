@@ -7,7 +7,7 @@ on:
       - "main"
 
 env:
-  SRC_DIR: safe_autonomy_dynamics
+  SRC_DIR: run_time_assurance
   PY_VER: "3.10"
 
 jobs:
