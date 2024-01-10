@@ -1,0 +1,74 @@
+[tool.poetry]
+name = "run-time-assurance"
+version = "1.15.2"
+description = "The run-time-assurance library provides an interface and implementations for Run Time Assurance (RTA) safety filters."
+authors = [
+    "Charles Keating <Charles.Keating@udri.udayton.edu>",
+]
+license = ""
+readme = "README.md"
+homepage = "https://github.com/act3-ace/run-time-assurance.git"
+repository = "https://github.com/act3-ace/run-time-assurance.git"
+documentation = 'https://github.com/act3-ace/run-time-assurance/docs'
+keywords = []
+include = ["docs/*"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+packages = [
+        {include = "run_time_assurance"},
+    ]
+
+[tool.poetry.dependencies]
+python = ">=3.9, <3.13"
+scipy = ">=1.10.0"
+safe-autonomy-dynamics = "^1.2.0"
+jax = { version = "0.4.3", extras = ["cpu"] }
+numpy = "^1.23.5"
+matplotlib = "^3.8.0"
+quadprog = "^0.1.11"
+
+[tool.poetry.group.lint.dependencies]
+pylint = "2.15.4"
+flake8 = "3.9.2"
+yapf = "^0.40.0"
+mypy = "0.930"
+isort = "5.9.3"
+bashate = "^2.1.0"
+velin = "^0.0.11"
+blacken-docs = "^1.12.1"
+detect-secrets = "1.1.0"
+
+[tool.poetry.group.test]
+optional = true
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.1.2"
+pytest-cov = "2.11.1"
+pyinstrument = "^4.3.0"
+twine = "^4.0.2"
+coverage-badge = "^1.1.0"
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "^1.3.1"
+mkdocs-git-revision-date-localized-plugin = "^1.1.0"
+mkdocs-material = "^8.4.2"
+mkdocs-material-extensions = "^1.0.3"
+mkdocs-mermaid-plugin = "^0.1.1"
+mkdocs-pdf-export-plugin = "^0.5.10"
+mkdocstrings = "0.18.0"
+mkdocs-autorefs = "^0.5.0"
+mkdocs-coverage = "^0.2.5"
+mkdocs-gen-files = "^0.5.0"
+mkdocs-section-index = "^0.3.4"
+mkdocs-with-pdf = "^0.9.3"
+papermill = "^2.4.0"
+Pillow = "^9.2.0"
+pymdown-extensions = "^9.5"
+pytkdocs = { version = ">=0.5.0", extras = ["numpy-style"] }
+mkdocstrings-python-legacy = "^0.2.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

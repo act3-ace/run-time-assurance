@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [build]
+    branches: [main]
+    types:
+      - completed
+
+jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_commit.message, 'chore(release):') }}
+    environment:
+      name: release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Download all the dists
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          name: package-distributions
+          github-token: ${{ secrets.RELEASE_TOKEN }}
+          path: dist/
+      - name: Sign the dists
+        uses: sigstore/gh-action-sigstore-python@v2.1.1
+        with:
+          upload-signing-artifacts: true
+          inputs: >-
+            ./dist/*.tar.gz
+            ./dist/*.whl
+      - name: Get Version
+        id: ver
+        run: echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+      - name: Create Github Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create
+          v${{ steps.ver.outputs.version }}
+          -t ${{ steps.ver.outputs.version }}
+          --repo '${{ github.repository }}'
+          --notes-file ./CHANGELOG.md
+          dist/**
+  publish-to-pypi:
+    name: Publish Python distribution to PyPI
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_commit.message, 'chore(release):') }}
+    environment:
+      name: release
+      url: https://pypi.org/p/run-time-assurance
+    permissions:
+      id-token: write
+    steps:
+      - name: Download all the dists
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          name: package-distributions
+          github-token: ${{ secrets.RELEASE_TOKEN }}
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.8.11

@@ -14,7 +14,10 @@ docs_dir: "docs"
 site_url: https://github.com/act3-ace/
 edit_uri: blob/main/docs/
 site_dir: site
-site_description: "The Run Time Assurance "
+site_description: "The Run Time Assurance library provides implementations of various RTA methods"
+
+exclude_docs:
+  __init__.md
 
 plugins:
   - search
@@ -90,18 +93,9 @@ extra_javascript:
   - https://unpkg.com/mermaid@8.4.2/dist/mermaid.min.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
-handlers:
-  python:
-    setup_commands:
-    - import sys
-    - sys.path.append("docs")
-    selection:
-      new_path_syntax: yes
-    import:  # demonstration purpose in the docs
-      - https://docs.python-requests.org/en/master/objects.inv
-
 nav:
   - "Introduction": index.md
+  - "Installation": install.md
   - "Concepts":
     - RTA/index.md
     - "Defining Safety": RTA/safety.md
@@ -113,21 +107,32 @@ nav:
       - RTA/asif.md
       - "Explicit ASIF": RTA/explicit_asif.md
       - "Implicit ASIF": RTA/implicit_asif.md
+      - "Discrete ASIF": RTA/discrete_asif.md
+  - "Usage": usage.md
+  - "Developers Guide": developer-guide.md
   - "API":
     - api/index.md
-    - constraint: reference/constraint.md
-    - controller: reference/controller.md
+    - constraint: api/constraint.md
+    - controller: api/controller.md
     - rta:
-      - asif: reference/rta/asif.md
-      - base: reference/rta/base.md
-      - simplex: reference/rta/simplex.md
-    - state: reference/state.md
-    - utils: reference/utils.md
+      - api/rta/index.md
+      - asif: api/rta/asif.md
+      - base: api/rta/base.md
+      - simplex: api/rta/simplex.md
+    - state: api/state.md
+    - utils: 
+      - api/utils/index.md
+      - utils: api/utils/utils.md
+      - api/utils/sample_testing.md
     - zoo:
+      - api/zoo/index.md
       - cwh:
         - api/zoo/cwh/index.md
-        - reference/zoo/cwh/docking_2d.md
-        - reference/zoo/cwh/docking_3d.md
-        - reference/zoo/cwh/inspection_3d.md
+        - api/zoo/cwh/docking_2d.md
+        - api/zoo/cwh/docking_3d.md
+        - api/zoo/cwh/inspection_1v1.md
+        - api/zoo/cwh/inspection_3d.md
+        - api/zoo/cwh/random_sample_testing.md
       - integrators:
-        - reference/zoo/integrators/integrator_1d.md
+        - api/zoo/integrators/index.md
+        - api/zoo/integrators/integrator_1d.md

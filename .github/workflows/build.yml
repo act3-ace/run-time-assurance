@@ -1,0 +1,122 @@
+name: build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "main"
+
+env:
+  SRC_DIR: run_time_assurance
+  PY_VER: "3.10"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Markdown Lint
+        continue-on-error: true
+        uses: articulate/actions-markdownlint@v1
+      - name: Python Lint
+        uses: ricardochaves/python-lint@v1.3.0
+        continue-on-error: true
+        with:
+          python-root-list: ${{ env.SRC_DIR }}
+          use-pylint: true
+          use-flake8: true
+          use-mypy: true
+          use-isort: true
+      - name: Yapf Formatting
+        continue-on-error: true
+        uses: AlexanderMelde/yapf-action@v1.0
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PY_VER }}
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+          virtualenvs-create: false
+      - name: Install Dependencies
+        run: poetry install --no-interaction --no-root --with=test
+      - name: Install Project
+        run: poetry install --no-interaction --only-root
+      - name: Package
+        run: poetry build
+      - name: Store Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-distributions
+          path: dist/
+  release:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: ${{ github.ref_name != 'main' && needs.test.result == 'success' && !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PY_VER }}
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+          virtualenvs-create: false
+      - name: Semantic Release
+        uses: cycjimmy/semantic-release-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          extra_plugins: |
+            @semantic-release/commit-analyzer
+            @semantic-release/release-notes-generator
+            @semantic-release/changelog
+            @semantic-release/exec
+            @semantic-release/git
+  release-main:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: ${{ github.ref_name == 'main' && needs.test.result == 'success' && !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    environment:
+      name: release
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PY_VER }}
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+          virtualenvs-create: false
+      - name: Semantic Release
+        uses: cycjimmy/semantic-release-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          extra_plugins: |
+            @semantic-release/commit-analyzer
+            @semantic-release/release-notes-generator
+            @semantic-release/changelog
+            @semantic-release/exec
+            @semantic-release/git
+

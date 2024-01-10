@@ -1,6 +1,6 @@
 # Introduction
 
-Run Time Assurance (RTA) is an online safety assurance technique that filters potentially unsafe inputs from a primary controller in a way that preserves safety of the system when necessary [[1]](https://etd.ohiolink.edu/apexprod/rws_etd/send_file/send?accession=ucin1649768916078616&disposition=inline). RTA is designed to be completely independent of the primary control structure, such that it can be used with any control system. 
+Run Time Assurance (RTA) is an online safety assurance technique that filters potentially unsafe inputs from a primary controller in a way that preserves safety of the system when necessary [[1]](https://etd.ohiolink.edu/apexprod/rws_etd/send_file/send?accession=ucin1649768916078616&disposition=inline). RTA is designed to be completely independent of the primary control structure, such that it can be used with any control system.
 
 ## Modeling Dynamical Control Systems
 
@@ -13,6 +13,6 @@ $$
 
 A general control system with RTA is shown in the figure below.
 
-![RTA Filter](figures/RTA_Filter.PNG)
+![RTA Filter](figures/RTA_Filter.png)
 
 In this figure, components outlined in red have low safety confidence while components outlined in blue have high safety confidence. At each time interval, the primary controller, which can be a variety of systems such as a neural network or human operator, is given the state $\boldsymbol{x}$ and outputs a desired action $\boldsymbol{u}_{\rm des}$. The RTA filter then receives $\boldsymbol{x}$ and $\boldsymbol{u}_{\rm des}$ as inputs, intervenes as necessary to preserve safety of the system, and outputs a safe action $\boldsymbol{u}_{\rm safe}$. The plant then receives $\boldsymbol{u}_{\rm safe}$, integrates the state based on the dynamics, and passes an updated state back to the primary controller and RTA filter.

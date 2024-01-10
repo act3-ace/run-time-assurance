@@ -154,6 +154,9 @@ class ConstraintBasedRTA(RTAModule):
     jit_enable: bool, optional
         Flag to enable or disable JIT compiliation. Useful for debugging
         Sets all values in jit_compile_dict to False.
+    constraints_to_use: list[str], optional
+        List of strings corresponding to constraint keys defined in "_setup_constraints".
+        Constraints defined in this list will be used, and all others will be removed from the module.
     """
 
     def __init__(
@@ -163,6 +166,7 @@ class ConstraintBasedRTA(RTAModule):
         control_bounds_low: Union[float, int, list, np.ndarray] = None,
         jit_compile_dict: Dict[str, bool] = None,
         jit_enable: bool = True,
+        constraints_to_use: list[str] = None,
         **kwargs: Any
     ):
         super().__init__(*args, control_bounds_high=control_bounds_high, control_bounds_low=control_bounds_low, **kwargs)
@@ -176,6 +180,16 @@ class ConstraintBasedRTA(RTAModule):
 
         self._setup_properties()
         self.constraints = self._setup_constraints()
+        if constraints_to_use is not None:
+            new_constraints = OrderedDict()
+            for k in self.constraints.keys():
+                if k in constraints_to_use:
+                    new_constraints[k] = self.constraints[k]
+            if len(new_constraints) != 0:
+                self.constraints = new_constraints
+            else:
+                raise ValueError('No constraints are used, adjust "constraints_to_use"')
+
         self.constraint_values: Dict[str, float] = {}
         self.is_stale_constraints = False
 
@@ -305,7 +319,7 @@ class ConstraintBasedRTA(RTAModule):
         stale : bool
             True if called before state is updated
         """
-        self.constraint_values = {k: float(v(state)) for k, v in self.constraints.items()}
+        self.constraint_values = {k: float(v.phi(state)) for k, v in self.constraints.items()}
         if stale:
             self.is_stale_constraints = True
         else:

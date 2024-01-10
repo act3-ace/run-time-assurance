@@ -15,20 +15,18 @@ import jax.numpy as jnp
 import numpy as np
 import quadprog
 from jax import jacfwd, jit, vmap
-from safe_autonomy_dynamics.base_models import BaseControlAffineODESolverDynamics
+from safe_autonomy_dynamics.base_models import BaseControlAffineODESolverDynamics, BaseODESolverDynamics
+from scipy.optimize import minimize
 
-from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint
+from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint, DiscreteCBFConstraint
 from run_time_assurance.controller import RTABackupController
 from run_time_assurance.rta.base import BackupControlBasedRTA, ConstraintBasedRTA
 from run_time_assurance.utils import SolverError, SolverWarning, to_jnp_array_jit
 
 
-class ASIFModule(ConstraintBasedRTA):
+class BaseOptimizationModule(ConstraintBasedRTA):
     """
-    Base class for Active Set Invariance Filter Optimization RTA
-
-    Only supports dynamical systems with dynamics in the form of:
-        dx/dt = f(x) + g(x)u
+    Base class for optimization-based RTA
 
     Parameters
     ----------
@@ -47,14 +45,50 @@ class ASIFModule(ConstraintBasedRTA):
 
         self.control_dim = control_dim
         self.solver_exception = solver_exception
-        self.obj_weight = np.eye(self.control_dim)
+
+        self.constraints_with_slack = OrderedDict()
+        for k, c in self.constraints.items():
+            if c.slack_priority_scale is not None:
+                self.constraints_with_slack[k] = c
+        self.num_slack = len(self.constraints_with_slack)
+
+        self.obj_weight = np.ones(self.control_dim + self.num_slack)
+        for i, c in enumerate(self.constraints_with_slack.values()):
+            self.obj_weight[i + self.control_dim] = np.sqrt(c.slack_priority_scale)
+        self.obj_weight = np.diag(self.obj_weight)
+
+    def monitor(self, desired_control: np.ndarray, actual_control: np.ndarray) -> bool:
+        """Determines whether the ASIF RTA module is currently intervening
+
+        Parameters
+        ----------
+        desired_control : np.ndarray
+            desired control vector
+        actual_control : np.ndarray
+            actual control vector produced by ASIF optimization
+
+        Returns
+        -------
+        bool
+            True if rta module is interveining
+        """
+        return bool(np.linalg.norm(desired_control - actual_control) > self.epsilon)
+
+
+class ASIFModule(BaseOptimizationModule):
+    """
+    Base class for Active Set Invariance Filter Optimization RTA
+
+    Only supports dynamical systems with dynamics in the form of:
+        dx/dt = f(x) + g(x)u
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
         self.ineq_weight_actuation, self.ineq_constant_actuation = self._generate_actuation_constraint_mats()
 
-        self.direct_inequality_constraints = OrderedDict()
-        for k, c in self.constraints.items():
-            if isinstance(c, DirectInequalityConstraint):
-                self.direct_inequality_constraints[k] = c
-                self.constraints.pop(k)
+        self.direct_inequality_constraints = self._setup_direct_constraints()
 
     def compose(self):
         """
@@ -96,11 +130,12 @@ class ASIFModule(ConstraintBasedRTA):
         jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
         """
-        ineq_weight = jnp.empty((0, self.control_dim))
+        ineq_weight = jnp.empty((0, self.control_dim + self.num_slack))
         ineq_constant = jnp.empty(0)
 
         if self.control_bounds_low is not None:
             c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_low, self.control_dim)
+            c = jnp.hstack((c, jnp.zeros((self.control_dim, self.num_slack))))
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
 
@@ -108,6 +143,7 @@ class ASIFModule(ConstraintBasedRTA):
             c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_high, self.control_dim)
             c *= -1
             b *= -1
+            c = jnp.hstack((c, jnp.zeros((self.control_dim, self.num_slack))))
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
 
@@ -133,6 +169,7 @@ class ASIFModule(ConstraintBasedRTA):
         """
         for c in self.direct_inequality_constraints.values():
             temp1 = c.ineq_weight(state)
+            temp1 = jnp.concatenate((temp1, jnp.zeros(self.num_slack)))
             temp2 = c.ineq_constant(state)
             ineq_weight = jnp.append(ineq_weight, temp1[:, None], axis=1)
             ineq_constant = jnp.append(ineq_constant, temp2)
@@ -159,6 +196,7 @@ class ASIFModule(ConstraintBasedRTA):
         np.ndarray
             Actual control solved by QP
         """
+        obj_constant = np.concatenate((obj_constant, np.zeros(self.num_slack)))
         try:
             opt = quadprog.solve_qp(
                 obj_weight, obj_constant, np.array(ineq_weight, dtype=np.float64), np.array(ineq_constant, dtype=np.float64), 0
@@ -172,24 +210,7 @@ class ASIFModule(ConstraintBasedRTA):
                     raise SolverError() from e
             else:
                 raise e
-        return opt
-
-    def monitor(self, desired_control: np.ndarray, actual_control: np.ndarray) -> bool:
-        """Determines whether the ASIF RTA module is currently intervening
-
-        Parameters
-        ----------
-        desired_control : np.ndarray
-            desired control vector
-        actual_control : np.ndarray
-            actual control vector produced by ASIF optimization
-
-        Returns
-        -------
-        bool
-            True if rta module is interveining
-        """
-        return bool(np.linalg.norm(desired_control - actual_control) > self.epsilon)
+        return opt[0:self.control_dim]
 
     @abc.abstractmethod
     def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -248,6 +269,17 @@ class ASIFModule(ConstraintBasedRTA):
         """
         raise NotImplementedError
 
+    def _setup_direct_constraints(self) -> OrderedDict[str, DirectInequalityConstraint]:
+        """Initializes and returns direct RTA constraints, to be used in the QP for ASIF.
+        By default returns empty dict.
+
+        Returns
+        -------
+        OrderedDict
+            OrderedDict of direct rta contraints with name string keys and DirectInequalityConstraint object values
+        """
+        return OrderedDict()
+
 
 class ExplicitASIFModule(ASIFModule):
     """
@@ -288,12 +320,18 @@ class ExplicitASIFModule(ASIFModule):
         jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
         """
-        ineq_weight_barrier = jnp.empty((0, self.control_dim))
+        ineq_weight_barrier = jnp.empty((0, self.control_dim + self.num_slack))
         ineq_constant_barrier = jnp.empty(0)
 
+        slack_counter = 0
         for c in self.constraints.values():
             grad_x = c.grad(state)
             temp1 = grad_x @ self.state_transition_input(state)
+            slack = jnp.zeros(self.num_slack)
+            if c.slack_priority_scale is not None:
+                slack = slack.at[slack_counter].set(-1.)
+                slack_counter += 1
+            temp1 = jnp.concatenate((temp1, slack))
             temp2 = -grad_x @ self.state_transition_system(state) - c.alpha(c(state))
 
             ineq_weight_barrier = jnp.append(ineq_weight_barrier, temp1[None, :], axis=0)
@@ -318,17 +356,6 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
     ----------
     backup_window : float
         Duration of time in seconds to evaluate backup controller trajectory.
-    num_check_all : int
-        Number of points at beginning of backup trajectory to check at every sequential simulation timestep.
-        Should be <= backup_window.
-        Defaults to 0 as skip_length defaults to 1 resulting in all backup trajectory points being checked.
-    skip_length : int
-        After num_check_all points in the backup trajectory are checked, the remainder of the backup window is filled by
-        skipping every skip_length points to reduce the number of backup trajectory constraints.
-        Defaults to 1, resulting in no skipping.
-    subsample_constraints_num_least : int
-        subsample the backup trajectory down to the points with the N least constraint function outputs
-            i.e. the n points closest to violating a safety constraint
     backup_controller : RTABackupController
         backup controller object utilized by rta module to generate backup control
     integration_method: str, optional
@@ -339,22 +366,12 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         self,
         *args: Any,
         backup_window: float,
-        num_check_all: int = 0,
-        skip_length: int = 1,
-        subsample_constraints_num_least: int = None,
         backup_controller: RTABackupController,
         integration_method: str = 'RK45_JAX',
         **kwargs: Any,
     ):
         self.backup_window = backup_window
-        self.num_check_all = num_check_all
-        self.skip_length = skip_length
         self.integration_method = integration_method
-
-        assert (subsample_constraints_num_least is None) or \
-               (isinstance(subsample_constraints_num_least, int) and subsample_constraints_num_least > 0), \
-               "subsample_constraints_num_least must be a positive integer or None"
-        self.subsample_constraints_num_least = subsample_constraints_num_least
 
         self.ode_dynamics = ASIFODESolver(integration_method, self.state_transition_system, self.state_transition_input)
 
@@ -495,39 +512,100 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         """
         constraint_list = list(self.constraints.values())
         num_constraints = len(self.constraints)
+        num_points = len(traj_states)
 
-        check_points = jnp.hstack(
-            (jnp.array(range(0, self.num_check_all)), jnp.array(range(self.num_check_all + 1, num_steps, self.skip_length)))
-        ).astype(int)
-        num_points = len(check_points)
-
-        ineq_weight_barrier = jnp.empty((num_constraints * num_points, self.control_dim))
+        ineq_weight_barrier = jnp.empty((num_constraints * num_points, self.control_dim + self.num_slack))
         ineq_constant_barrier = jnp.empty(num_constraints * num_points)
         constraint_vals = jnp.empty((num_constraints, num_points))
 
-        traj_states = jnp.array(traj_states)[check_points, :]
-        traj_sensitivities = jnp.array(traj_sensitivities)[check_points, :]
+        traj_states = jnp.array(traj_states)
+        traj_sensitivities = jnp.array(traj_sensitivities)
 
+        slack_counter = 0
         for i in range(num_constraints):
             point_ineq_weight, point_ineq_constant, point_constraint_vals = self._get_ineq_mats_fn(
                 constraint_list[i], state, traj_states, traj_sensitivities)
+            slack = jnp.zeros((num_points, self.num_slack))
+            if constraint_list[i].slack_priority_scale is not None:
+                slack = slack.at[:, slack_counter].set(-1.)
+                slack_counter += 1
+            point_ineq_weight = jnp.hstack((point_ineq_weight, slack))
             ineq_weight_barrier = ineq_weight_barrier.at[i * num_points:(i + 1) * num_points, :].set(point_ineq_weight)
             ineq_constant_barrier = ineq_constant_barrier.at[i * num_points:(i + 1) * num_points].set(point_ineq_constant)
             constraint_vals = constraint_vals.at[i, :].set(point_constraint_vals)
 
-        if self.subsample_constraints_num_least is not None:
-            constraint_sorted_idxs = jnp.argsort(constraint_vals)
-            use_idxs = constraint_sorted_idxs[:, 0:self.subsample_constraints_num_least]
-
-            constraint_rows = jnp.arange(constraint_vals.shape[0])[:, None]
-            final_idxs = constraint_rows * constraint_vals.shape[1] + use_idxs
-
-            ineq_weight_barrier = ineq_weight_barrier[final_idxs.flatten(), :]
-            ineq_constant_barrier = ineq_constant_barrier[final_idxs.flatten()]
+        ineq_weight_barrier, ineq_constant_barrier = self.subsample_constraints(
+            ineq_weight_barrier, ineq_constant_barrier, constraint_vals, num_steps
+        )
 
         ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
         ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
         return ineq_weight.transpose(), ineq_constant
+
+    def subsample_constraints(self, ineq_weight_barrier, ineq_constant_barrier, constraint_vals, num_steps):
+        """Subsample constraints individually based on the constraint's subsample_config attribute
+
+        Parameters
+        ----------
+        ineq_weight_barrier : jnp.ndarray
+            matix C.T of quadprog inequality constraint C.T x >= b
+        ineq_constant_barrier : jnp.ndarray
+            vector b of quadprog inequality constraint C.T x >= b
+        constraint_vals : jnp.ndarray
+            constraint values along trajectory
+        num_steps: int
+            number of trajectory steps
+
+        Returns
+        -------
+        jnp.ndarray
+            matix C.T of quadprog inequality constraint C.T x >= b
+        jnp.ndarray
+            vector b of quadprog inequality constraint C.T x >= b
+        """
+        new_ineq_weight_barrier = jnp.empty((0, self.control_dim))
+        new_ineq_constant_barrier = jnp.empty(0)
+
+        for i, c in enumerate(self.constraints.values()):
+            # Get barrier constraints for each constraint
+            tmp_ineq_weight_barrier = ineq_weight_barrier[num_steps * i:num_steps * (i + 1), :]
+            tmp_ineq_constant_barrier = ineq_constant_barrier[num_steps * i:num_steps * (i + 1)]
+            tmp_constraint_vals = constraint_vals[i]
+
+            # Get points to check from num_check_all and skip_length
+            check_points = jnp.hstack(
+                (
+                    jnp.array(range(0, c.subsample_config.num_check_all)),
+                    jnp.array(range(c.subsample_config.num_check_all + 1, num_steps, c.subsample_config.skip_length))
+                )
+            ).astype(int)
+            tmp_ineq_weight_barrier = tmp_ineq_weight_barrier[check_points, :]
+            tmp_ineq_constant_barrier = tmp_ineq_constant_barrier[check_points]
+            tmp_constraint_vals = tmp_constraint_vals[check_points]
+
+            # Get points to check from subsample_constraints_num_least
+            if c.subsample_config.subsample_constraints_num_least is not None:
+                constraint_sorted_idxs = jnp.argsort(tmp_constraint_vals)
+                use_idxs = constraint_sorted_idxs[0:c.subsample_config.subsample_constraints_num_least]
+                tmp_ineq_weight_barrier = tmp_ineq_weight_barrier[use_idxs, :]
+                tmp_ineq_constant_barrier = tmp_ineq_constant_barrier[use_idxs]
+
+            # Keep first and/or last point
+            if c.subsample_config.keep_first:
+                tmp_ineq_weight_barrier = jnp.concatenate((tmp_ineq_weight_barrier, ineq_weight_barrier[num_steps * i, :][None]), axis=0)
+                tmp_ineq_constant_barrier = jnp.concatenate((tmp_ineq_constant_barrier, ineq_constant_barrier[num_steps * i][None]), axis=0)
+            if c.subsample_config.keep_last:
+                tmp_ineq_weight_barrier = jnp.concatenate(
+                    (tmp_ineq_weight_barrier, ineq_weight_barrier[num_steps * (i + 1) - 1, :][None]), axis=0
+                )
+                tmp_ineq_constant_barrier = jnp.concatenate(
+                    (tmp_ineq_constant_barrier, ineq_constant_barrier[num_steps * (i + 1) - 1][None]), axis=0
+                )
+
+            new_ineq_weight_barrier = jnp.concatenate((new_ineq_weight_barrier, tmp_ineq_weight_barrier), axis=0)
+            new_ineq_constant_barrier = jnp.concatenate((new_ineq_constant_barrier, tmp_ineq_constant_barrier), axis=0)
+
+        return new_ineq_weight_barrier, new_ineq_constant_barrier
 
     def _get_constraint_ineq_mats(
         self, constraint: ConstraintModule, state: jnp.ndarray, traj_states: jnp.ndarray, traj_sensitivities: jnp.ndarray
@@ -722,3 +800,148 @@ class ASIFODESolver(BaseControlAffineODESolverDynamics):
 
     def state_transition_input(self, state):
         return self.asif_state_transition_input(state)
+
+
+class DiscreteASIFModule(BaseOptimizationModule):
+    """
+    Base class for Active Set Invariance Filter Optimization RTA using Discrete Control Barrier Functions (CBFs)
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
+        self.opt_bounds = [(self.control_bounds_low, self.control_bounds_high)] * self.control_dim + [(-np.inf, np.inf)] * self.num_slack
+        self.scipy_constraints = []
+        self.discrete_constraints = OrderedDict()
+        slack_counter = 0
+        for k, c in self.constraints.items():
+            if c.slack_priority_scale is not None:
+                slack_idx = slack_counter
+                slack_counter += 1
+            else:
+                slack_idx = None
+            temp_c = DiscreteCBFConstraint(c, self.next_state_differentiable, self.control_dim, slack_idx)
+            self.discrete_constraints[k] = temp_c
+            self.scipy_constraints.append({'type': 'ineq', 'fun': temp_c.cbf, 'jac': temp_c.jac})
+
+    def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        desired_control = np.concatenate((np.array(control, dtype=np.float64), np.zeros((self.num_slack))))
+        for c in self.scipy_constraints:
+            c['args'] = (state, step_size)
+        res = minimize(
+            self.obj, desired_control, method='SLSQP', constraints=self.scipy_constraints, bounds=self.opt_bounds, args=(desired_control)
+        )
+        if not res.success:
+            error = f'Solver Failure: {res.message}'
+            if not self.solver_exception:
+                warnings.warn(error)
+            else:
+                raise SolverError(error)
+
+        actual_control = res.x[0:self.control_dim]
+
+        self.intervening = self.monitor(desired_control[0:self.control_dim], actual_control)
+
+        return to_jnp_array_jit(actual_control)
+
+    def obj(self, control: np.ndarray, desired_control: np.ndarray) -> float:
+        """Objective function of the solver (quadratic loss function).
+
+        Parameters
+        ----------
+        control: np.ndarray
+            Control vector of the system, solved for by optimizer
+        desired_control: np.ndarray
+            Desired control vector of the system
+
+        Returns
+        -------
+        float:
+            Value of objective function
+        """
+        return 0.5 * control.T @ (self.obj_weight.T @ self.obj_weight) @ control + (-self.obj_weight.T @ desired_control).T @ control
+
+    @abc.abstractmethod
+    def next_state_differentiable(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """Function to compute the next state of the system. Must be differentiable using Jax.
+
+        Parameters
+        ----------
+        state: jnp.ndarray
+            Current rta state of the system
+        step_size: float
+            Time duration over which filtered control will be applied to actuators
+        control: jnp.ndarray
+            Control vector of the system
+
+        Returns
+        -------
+        jnp.ndarray:
+            Next state of the system
+        """
+        raise NotImplementedError
+
+
+class DiscreteASIFIntegratorModule(DiscreteASIFModule):
+    """
+    Active Set Invariance Filter Optimization RTA using Discrete Control Barrier Functions (CBFs).
+    Uses Differentiable Jax ODE solver, where user only needs to define the state derivative.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
+        self.ode_solver = DifferentiableODESolver(self.compute_state_dot)
+
+    def next_state_differentiable(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+        """Function to compute the next state of the system. Must be differentiable using Jax.
+        By default, uses the Jax ODE solver given the state derivative.
+        Can be overwritten by known system dynamics to decrease computation time.
+
+        Parameters
+        ----------
+        state: jnp.ndarray
+            Current rta state of the system
+        step_size: float
+            Time duration over which filtered control will be applied to actuators
+        control: jnp.ndarray
+            Control vector of the system
+
+        Returns
+        -------
+        jnp.ndarray:
+            Next state of the system
+        """
+        next_state, _ = self.ode_solver.step(step_size, state, control)
+        return next_state
+
+    @abc.abstractmethod
+    def compute_state_dot(self, t: float, state: jnp.ndarray, control: jnp.ndarray) -> jnp.ndarray:
+        """Function to compute the state derivative of the system. Must be differentiable using Jax.
+
+        Parameters
+        ----------
+        t: float
+            Current time of the system
+        state: jnp.ndarray
+            Current rta state of the system
+        control: jnp.ndarray
+            Control vector of the system
+
+        Returns
+        -------
+        jnp.ndarray:
+            State derivative
+        """
+        raise NotImplementedError
+
+
+class DifferentiableODESolver(BaseODESolverDynamics):
+    """Differentiable ODE solver for Discrete ASIF Module"""
+
+    def __init__(self, state_dot_fn, **kwargs):
+        self.state_dot_fn = state_dot_fn
+        super().__init__(integration_method='RK45_JAX', use_jax=True, **kwargs)
+
+    def _compute_state_dot(self, t, state, control):
+        return self.state_dot_fn(t, state, control)

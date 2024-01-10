@@ -4,7 +4,7 @@
 
 $$
 \begin{split}
-\boldsymbol{u}_{\text{safe}}(\boldsymbol{x})={\text{argmin}} & \Vert \boldsymbol{u}_{\text{des}}-\boldsymbol{u}\Vert ^{2} \\
+\boldsymbol{u}_{\text{safe}}(\boldsymbol{x})=\underset{\boldsymbol{u} \in \mathcal{U}}{\text{argmin}} & \Vert \boldsymbol{u}_{\text{des}}-\boldsymbol{u}\Vert ^{2} \\
 \text{s.t.} \quad & BC_i(\boldsymbol{x},\boldsymbol{u})\geq 0, \quad \forall i \in \{1,...,M\}
 \end{split}
 $$
@@ -25,5 +25,17 @@ $$
 
 A general control system with a ASIF RTA filter is shown in the figure below, where "Optimization" refers to solving the quadratic program.
 
-![RTA Filter](figures/Optimization.PNG)
+![RTA Filter](figures/Optimization.png)
 
+## Slack Variables
+
+When working with systems with multiple constraints, conflicts between the constraints could cause the quadratic program to fail to find a solution. In this case, slack variables, $\delta_i$, can be introduced to relax specific constraints and allow minimal violations such that $\boldsymbol{u}_{\text{safe}}$ can be computed. The ASIF RTA is modified as follows,
+
+$$
+    \begin{split}
+    {\boldsymbol{u}}_{\rm safe}({\boldsymbol{x}}) = \underset{\boldsymbol{u} \in \mathcal{U}, \delta \in \mathbb{R}}{\text{argmin}} \Vert {\boldsymbol{u}}_{\rm des} - {\boldsymbol{u}} \Vert ^2 + \sum_i^M p_i\delta_i^2 \\
+    \text{s.t. } \quad BC_i({\boldsymbol{x}}, {\boldsymbol{u}}) \geq \delta_i, \forall i\in \{1,..., M \}
+    \end{split}
+$$
+
+where $p_i$ is a weight associated with each constraint / slack variable pair, and can be used to indicate priority of the constraint. As the objective of optimization is to minimize $\sum_i^M p_i\delta_i^2$, all slack variables should be zero until a constraint must be violated.
