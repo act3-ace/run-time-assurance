@@ -1,3 +1,10 @@
+## [1.15.3](https://github.com/act3-ace/run-time-assurance/compare/v1.15.2...v1.15.3) (2024-01-10)
+
+
+### Bug Fixes
+
+* **requirements:** update required sa-dynamics version to 0.13.2 ([2842994](https://github.com/act3-ace/run-time-assurance/commit/284299422aac33c222291b25242e281fa701b3be))
+
 ## 1.15.2 (2023-09-20)
 
 
