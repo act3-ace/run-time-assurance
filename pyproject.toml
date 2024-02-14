@@ -23,7 +23,7 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.9, <3.13"
 scipy = ">=1.10.0"
-safe-autonomy-dynamics = { source = "sa-dynamics", version = "^0.13.2" }
+safe-autonomy-dynamics = "^1.2.0"
 jax = { version = "0.4.3", extras = ["cpu"] }
 numpy = "^1.23.5"
 matplotlib = "^3.8.0"
@@ -68,11 +68,6 @@ Pillow = "^9.2.0"
 pymdown-extensions = "^9.5"
 pytkdocs = { version = ">=0.5.0", extras = ["numpy-style"] }
 mkdocstrings-python-legacy = "^0.2.1"
-
-[[tool.poetry.source]]
-name = "sa-dynamics"
-url = "https://git.act3-ace.com/api/v4/projects/826/packages/pypi/simple"
-priority = "explicit"
 
 [build-system]
 requires = ["poetry-core"]
