@@ -112,4 +112,5 @@ Umberto Ravaioli,
 Kyle Dunlap,
 Jamie Cunningham,
 John McCarroll,
-Kerianne Hobbs
+Kerianne Hobbs,
+Charles Keating
