@@ -1,3 +1,10 @@
+# [1.16.0](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.15.3...v1.16.0) (2024-3-4)
+
+
+### Features
+
+* Dynamically changing parameters ([5791dad](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/commit/5791dad03561853f90a36458c2719224a1e2c9b0))
+
 ## 1.15.3 (2023-09-21)
 
 
