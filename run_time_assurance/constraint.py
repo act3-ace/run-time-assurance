@@ -51,25 +51,54 @@ class ConstraintModule(abc.ABC):
     ----------
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
+    alpha_negative : ConstraintStrengthener
+        Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
+        Used when the constraint value is negative, to stabilize the system back to the safe set.
+        By default, if alpha_negative is None, 10x the value of alpha(x) will be used.
     bias : float
         Value that adds a bias to the boundary of the constraint.
         Use a small negative value to make the constraint slightly more conservative.
+    bias_negative : float
+        Value that adds a bias to the boundary of the constraint.
+        Used when the constraint value is negative, to stabilize the system back to the safe set.
+        By default -0.01, which helps stabilize the system back to the safe set rather than the boundary.
     jit_enable: bool, optional
         Flag to enable or disable JIT compiliation. Useful for debugging
     slack_priority_scale: float, optional
         A scaling constant for the constraint's slack variable, for use during optimization.
         Value should be large (ex. 1e12). Higher values correspond to higher priority.
         By default None -> no slack variable will be used.
+    params : dict, optional
+        Dict of parameters that can be changed during a simulation.
+        These parameters do not have dynamics and are only adjusted by the user.
+        These parameters cannot be class attributes due to jit.
+    enabled : bool, optional
+        Flag to enable/disable the constraint from being enforced by RTA.
+        Default enabled.
     """
 
     def __init__(
-        self, alpha: ConstraintStrengthener = None, bias: float = 0, jit_enable: bool = True, slack_priority_scale: float = None, **kwargs
+        self,
+        alpha: Union[ConstraintStrengthener, None] = None,
+        alpha_negative: Union[ConstraintStrengthener, None] = None,
+        bias: float = 0,
+        bias_negative: float = -0.01,
+        jit_enable: bool = True,
+        slack_priority_scale: float = None,
+        params: Union[dict, None] = None,
+        enabled: bool = True,
+        **kwargs
     ):
-        assert isinstance(alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         self._alpha = alpha
+        self._alpha_negative = alpha_negative
         self.bias = bias
+        self.bias_negative = bias_negative
         self.jit_enable = jit_enable
         self.slack_priority_scale = slack_priority_scale
+        self.params = params
+        if self.params is None:
+            self.params = {}
+        self.enabled = enabled
         self.subsample_config = SubsampleConfigValidator(**kwargs)
         self._compose()
 
@@ -83,7 +112,7 @@ class ConstraintModule(abc.ABC):
             self.phi = self._phi
             self._grad_fn = grad(self._compute)
 
-    def __call__(self, state: jnp.ndarray) -> float:
+    def __call__(self, state: jnp.ndarray, params: dict) -> float:
         """Evaluates constraint function h(x)
         Considered satisfied when h(x) >= 0
 
@@ -91,15 +120,17 @@ class ConstraintModule(abc.ABC):
         ----------
         state : jnp.ndarray
             current rta state of the system
+        params : dict
+            dict of user defined dynamically changing parameters
 
         Returns
         -------
         float:
             result of inequality constraint function
         """
-        return self.compute(state)
+        return self.compute(state, params)
 
-    def compute(self, state: jnp.ndarray) -> float:
+    def compute(self, state: jnp.ndarray, params: dict) -> float:
         """Evaluates constraint function h(x)
         Considered satisfied when h(x) >= 0
 
@@ -107,16 +138,18 @@ class ConstraintModule(abc.ABC):
         ----------
         state : jnp.ndarray
             current rta state of the system
+        params : dict
+            dict of user defined dynamically changing parameters
 
         Returns
         -------
         float:
             result of inequality constraint function
         """
-        return self._compute_fn(state) + self.bias
+        return self._compute_fn(state, params) + self.bias
 
     @abc.abstractmethod
-    def _compute(self, state: jnp.ndarray) -> float:
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
         """Custom implementation of constraint function
 
         !!! Note: To be compatible with jax jit compilation, must not rely on external states that are overwritten here
@@ -126,6 +159,8 @@ class ConstraintModule(abc.ABC):
         ----------
         state : jnp.ndarray
             current rta state of the system
+        params : dict
+            dict of user defined dynamically changing parameters
 
         Returns
         -------
@@ -134,7 +169,7 @@ class ConstraintModule(abc.ABC):
         """
         raise NotImplementedError()
 
-    def grad(self, state: jnp.ndarray) -> jnp.ndarray:
+    def grad(self, state: jnp.ndarray, params: dict) -> jnp.ndarray:
         """
         Computes Gradient of Safety Constraint Function wrt x
         Required for ASIF methods
@@ -143,13 +178,15 @@ class ConstraintModule(abc.ABC):
         ----------
         state : jnp.ndarray
             current rta state of the system
+        params : dict
+            dict of user defined dynamically changing parameters
 
         Returns
         -------
         jnp.ndarray:
             gradient of constraint function wrt x. Shape of (n, n) where n = state.vector.size.
         """
-        return self._grad_fn(state)
+        return self._grad_fn(state, params)
 
     def alpha(self, x: float) -> float:
         """Evaluates Strengthing function to soften Nagumo's condition outside of constraint set boundary
@@ -165,12 +202,30 @@ class ConstraintModule(abc.ABC):
         float
             Strengthening Function output
         """
-        if self._alpha is None:
-            return None
-
+        assert isinstance(self._alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
         return self._alpha(x)
 
-    def _phi(self, state: jnp.ndarray) -> float:
+    def alpha_negative(self, x: float) -> float:
+        """Strengthing function when the constraint value is negative.
+        Used to stabilize the system back to the safe set.
+
+        Parameters
+        ----------
+        x : float
+            output of constraint function
+
+        Returns
+        -------
+        float
+            Strengthening Function output
+        """
+        if self._alpha_negative is None:
+            assert isinstance(self._alpha, ConstraintStrengthener), "alpha must be an instance/sub-class of ConstraintStrenthener"
+            return self._alpha(x) * 10
+
+        return self._alpha_negative(x)
+
+    def _phi(self, state: jnp.ndarray, params: dict) -> float:
         """Evaluates constraint function phi(x).
         Considered satisfied when phi(x) >= 0, where phi is not guaranteed to be control invariant.
         Not used by RTA to enforce the constraint, but rather is useful for logging and plotting.
@@ -180,13 +235,15 @@ class ConstraintModule(abc.ABC):
         ----------
         state : jnp.ndarray
             current rta state of the system
+        params : dict
+            dict of user defined dynamically changing parameters
 
         Returns
         -------
         float:
             result of inequality constraint function
         """
-        return self._compute_fn(state)
+        return self._compute_fn(state, params)
 
 
 class ConstraintStrengthener(abc.ABC):
@@ -230,15 +287,14 @@ class ConstraintMagnitudeStateLimit(ConstraintModule):
     """
 
     def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None, **kwargs: Any):
-        self.limit_val = limit_val
         self.state_index = state_index
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params={'limit_val': limit_val}, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
-        return self.limit_val**2 - state[self.state_index]**2
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
+        return params['limit_val']**2 - state[self.state_index]**2
 
 
 class ConstraintMaxStateLimit(ConstraintModule):
@@ -259,15 +315,14 @@ class ConstraintMaxStateLimit(ConstraintModule):
     """
 
     def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None, **kwargs: Any):
-        self.limit_val = limit_val
         self.state_index = state_index
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params={'limit_val': limit_val}, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
-        return self.limit_val - state[self.state_index]
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
+        return params['limit_val'] - state[self.state_index]
 
 
 class ConstraintMinStateLimit(ConstraintModule):
@@ -288,15 +343,14 @@ class ConstraintMinStateLimit(ConstraintModule):
     """
 
     def __init__(self, limit_val: float, state_index: int, alpha: ConstraintStrengthener = None, **kwargs: Any):
-        self.limit_val = limit_val
         self.state_index = state_index
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.0005, 0, 0.001])
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params={'limit_val': limit_val}, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
-        return state[self.state_index] - self.limit_val
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
+        return state[self.state_index] - params['limit_val']
 
 
 class PolynomialConstraintStrengthener(ConstraintStrengthener):
@@ -365,13 +419,13 @@ class HOCBFConstraint(ConstraintModule):
             )
             hocbf_constraint_dict["constraint_" + str(i)] = psi
         self.final_constraint = psi
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params=self.final_constraint.params, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
-        return self.final_constraint(state)
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
+        return self.final_constraint(state, params)
 
-    def _phi(self, state: jnp.ndarray) -> float:
-        return self.initial_constraint.phi(state)
+    def _phi(self, state: jnp.ndarray, params: dict) -> float:
+        return self.initial_constraint.phi(state, params)
 
 
 class HOCBFConstraintHelper(ConstraintModule):
@@ -390,35 +444,67 @@ class HOCBFConstraintHelper(ConstraintModule):
     def __init__(self, constraint: ConstraintModule, state_transition_system, alpha: ConstraintStrengthener, **kwargs: Any):
         self.constraint = constraint
         self.state_transition_system = state_transition_system
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params=self.constraint.params, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
-        return self.constraint.grad(state) @ self.state_transition_system(state) + self.alpha(self.constraint(state))
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
+        return self.constraint.grad(state, params) @ self.state_transition_system(state) + self.alpha(self.constraint(state, params))
 
 
 class DirectInequalityConstraint():
     """Base class for inequality constraints, to be used in the QP for ASIF
     Constraints in the form: ineq_weight * u >= ineq_constant
+
+    Parameters
+    ----------
+    params : dict, optional
+        dict of parameters that can be changed during a simulation.
+        These parameters do not have dynamics and are only adjusted by the user.
+        These parameters cannot be class attributes due to jit.
+    enabled : bool, optional
+        Flag to enable/disable the constraint from being enforced by RTA.
+        Default enabled.
     """
 
+    def __init__(self, params: Union[dict, None] = None, enabled: bool = True):
+        self.params = params
+        if self.params is None:
+            self.params = []
+        self.enabled = enabled
+
     @abc.abstractmethod
-    def ineq_weight(self, state: jnp.ndarray) -> jnp.ndarray:
+    def ineq_weight(self, state: jnp.ndarray, params: dict) -> jnp.ndarray:
         """Inequality constraint weight array
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            system state
+        params : dict
+            dict of user defined dynamically changing parameters
 
         Returns
         -------
         jnp.ndarray
             1 x m array, where m is the length of the control vector
+            ineq_weight * u >= ineq_constant
         """
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def ineq_constant(self, state: jnp.ndarray) -> float:
+    def ineq_constant(self, state: jnp.ndarray, params: dict) -> float:
         """Inequality constraint constant
+
+        Parameters
+        ----------
+        state : jnp.ndarray
+            system state
+        params : dict
+            dict of user defined dynamically changing parameters
 
         Returns
         -------
         float
+            ineq_weight * u >= ineq_constant
         """
         raise NotImplementedError()
 
@@ -446,7 +532,7 @@ class DiscreteCBFConstraint():
         self.cbf = jit(self.cbf_fn)
         self.jac = jit(jacrev(self.cbf_fn))
 
-    def cbf_fn(self, control: jnp.ndarray, state: jnp.ndarray, step_size: float):
+    def cbf_fn(self, control: jnp.ndarray, state: jnp.ndarray, step_size: float, params: dict):
         """Discrete CBF
 
         Parameters
@@ -457,6 +543,8 @@ class DiscreteCBFConstraint():
             Current rta state of the system
         step_size: float
             Time duration over which filtered control will be applied to actuators
+        params : dict
+            dict of user defined dynamically changing parameters
 
         Returns
         -------
@@ -464,7 +552,9 @@ class DiscreteCBFConstraint():
             value of the discrete CBF
         """
         next_state = self.next_state_fn(state, step_size, control[0:self.control_dim])
-        h = (self.constraint(next_state) - self.constraint(state)) / step_size + self.constraint.alpha(self.constraint(state))
+        h = (self.constraint(next_state, params) - self.constraint(state, params)) / step_size + self.constraint.alpha(
+            self.constraint(state, params)
+        )
         if self.slack_idx is not None:
             h -= control[self.control_dim + self.slack_idx]
         return h

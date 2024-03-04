@@ -161,7 +161,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
         lower bound of allowable control. Pass a list for element specific limit. By default -U_MAX_DEFAULT
     """
 
-    def __init__(
+    def __init__(  # pylint:disable=too-many-arguments
         self,
         *args,
         m: float = M_DEFAULT,
@@ -258,7 +258,7 @@ class Inspection1v1RTA(ExplicitASIFModule):
 
         if self.use_hocbf:
             constraint_dict['chief_collision_hocbf'] = HOCBFConstraint(
-                HOCBFExampleChiefCollision(collision_radius=self.chief_radius + self.deputy_radius, a_max=self.a_max),
+                HOCBFExampleChiefCollision(collision_radius=self.chief_radius + self.deputy_radius),
                 relative_degree=2,
                 state_transition_system=self.state_transition_system,
                 alpha=PolynomialConstraintStrengthener([0, 0.1, 0, 0.1])
@@ -634,36 +634,35 @@ class ConstraintCWHChiefCollision(ConstraintModule):
     """
 
     def __init__(self, collision_radius: float, a_max: float, alpha: ConstraintStrengthener = None, **kwargs):
-        self.collision_radius = collision_radius
-        self.a_max = a_max
-
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params={'collision_radius': collision_radius, 'a_max': a_max}, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
         delta_p = state[0:3]
         mag_delta_p = jnp.linalg.norm(delta_p)
-        h = lax.cond(mag_delta_p >= self.collision_radius, self.positive_distance_constraint, self.negative_distance_constraint, state)
+        h = lax.cond(
+            mag_delta_p >= params['collision_radius'], self.positive_distance_constraint, self.negative_distance_constraint, state, params
+        )
         return h
 
-    def _phi(self, state: jnp.ndarray) -> float:
+    def _phi(self, state: jnp.ndarray, params: dict) -> float:
         delta_p = state[0:3]
-        return jnp.linalg.norm(delta_p) - self.collision_radius
+        return jnp.linalg.norm(delta_p) - params['collision_radius']
 
-    def positive_distance_constraint(self, state):
+    def positive_distance_constraint(self, state, params):
         """Constraint value when sqrt component is real"""
         delta_p = state[0:3]
         delta_v = state[3:6]
         mag_delta_p = jnp.linalg.norm(delta_p)
-        return jnp.sqrt(2 * self.a_max * (mag_delta_p - self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
+        return jnp.sqrt(2 * params['a_max'] * (mag_delta_p - params['collision_radius'])) + delta_p.T @ delta_v / mag_delta_p
 
-    def negative_distance_constraint(self, state):
+    def negative_distance_constraint(self, state, params):
         """Constraint value when sqrt component is imaginary"""
         delta_p = state[0:3]
         delta_v = state[3:6]
         mag_delta_p = jnp.linalg.norm(delta_p)
-        return -jnp.sqrt(2 * self.a_max * (-mag_delta_p + self.collision_radius)) + delta_p.T @ delta_v / mag_delta_p
+        return -jnp.sqrt(2 * params['a_max'] * (-mag_delta_p + params['collision_radius'])) + delta_p.T @ delta_v / mag_delta_p
 
 
 class ConstraintCWHConicKeepOutZone(ConstraintModule):
@@ -696,8 +695,6 @@ class ConstraintCWHConicKeepOutZone(ConstraintModule):
         alpha: ConstraintStrengthener = None,
         **kwargs
     ):
-        self.a_max = a_max
-        self.fov = fov
         self.get_pos = get_pos
         self.get_vel = get_vel
         self.get_cone_vec = get_cone_vec
@@ -705,15 +702,15 @@ class ConstraintCWHConicKeepOutZone(ConstraintModule):
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.001, 0, 0.0001])
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params={'fov': fov, 'a_max': a_max}, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
         pos = self.get_pos(state)
         vel = self.get_vel(state)
         cone_vec = self.get_cone_vec(state)
         cone_unit_vec = cone_vec / jnp.linalg.norm(cone_vec)
         cone_ang_vel = self.cone_ang_vel
-        theta = self.fov / 2
+        theta = params['fov'] / 2
 
         pos_cone = pos - jnp.dot(pos, cone_unit_vec) * cone_unit_vec
         mult = jnp.cos(theta) * (jnp.linalg.norm(pos_cone) - jnp.tan(theta) * jnp.dot(pos, cone_unit_vec))
@@ -725,24 +722,32 @@ class ConstraintCWHConicKeepOutZone(ConstraintModule):
         delta_v = vel - vel_proj
         mag_delta_p = jnp.linalg.norm(pos) * jnp.sin(jnp.arccos(jnp.dot(cone_unit_vec, pos / jnp.linalg.norm(pos))) - theta)
 
-        h = lax.cond(mag_delta_p >= 0, self.positive_distance_constraint, self.negative_distance_constraint, delta_p, delta_v, mag_delta_p)
+        h = lax.cond(
+            mag_delta_p >= 0,
+            self.positive_distance_constraint,
+            self.negative_distance_constraint,
+            delta_p,
+            delta_v,
+            mag_delta_p,
+            params['a_max']
+        )
         return h
 
-    def _phi(self, state: jnp.ndarray) -> float:
+    def _phi(self, state: jnp.ndarray, params: dict) -> float:
         pos = self.get_pos(state)
         cone_vec = self.get_cone_vec(state)
         p_hat = pos / jnp.linalg.norm(pos)
         c_hat = cone_vec / jnp.linalg.norm(cone_vec)
-        h = jnp.arccos(jnp.dot(p_hat, c_hat)) - self.fov / 2
+        h = jnp.arccos(jnp.dot(p_hat, c_hat)) - params['fov'] / 2
         return h
 
-    def positive_distance_constraint(self, delta_p, delta_v, mag_delta_p):
+    def positive_distance_constraint(self, delta_p, delta_v, mag_delta_p, a_max):
         """Constraint value when sqrt component is real"""
-        return jnp.sqrt(2 * self.a_max * mag_delta_p) + delta_p.T @ delta_v / mag_delta_p
+        return jnp.sqrt(2 * a_max * mag_delta_p) + delta_p.T @ delta_v / mag_delta_p
 
-    def negative_distance_constraint(self, delta_p, delta_v, mag_delta_p):
+    def negative_distance_constraint(self, delta_p, delta_v, mag_delta_p, a_max):
         """Constraint value when sqrt component is imaginary"""
-        return -jnp.sqrt(-2 * self.a_max * mag_delta_p) + delta_p.T @ delta_v / mag_delta_p
+        return -jnp.sqrt(-2 * a_max * mag_delta_p) + delta_p.T @ delta_v / mag_delta_p
 
 
 class ConstraintPassivelySafeManeuver(ConstraintModule):
@@ -766,24 +771,24 @@ class ConstraintPassivelySafeManeuver(ConstraintModule):
         Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
     """
 
-    def __init__(self, collision_radius: float, m: float, n: float, dt: float, steps: int, alpha: ConstraintStrengthener = None):
+    def __init__(self, collision_radius: float, m: float, n: float, dt: float, steps: int, alpha: ConstraintStrengthener = None, **kwargs):
         self.n = n
-        self.collision_radius = collision_radius
-        self.dt = dt
         self.steps = steps
         A, _ = generate_cwh_matrices(m, n, mode="3d")
         self.A = jnp.array(A)
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
-        super().__init__(alpha=alpha)
+        super().__init__(alpha=alpha, params={'collision_radius': collision_radius, 'dt': dt}, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
-        vmapped_get_future_state = vmap(self.get_future_state, (None, 0), 0)
-        phi_array = vmapped_get_future_state(state, jnp.linspace(self.dt, self.steps * self.dt, self.steps))
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
+        vmapped_get_future_state = vmap(self.get_future_state, (None, 0, None), 0)
+        phi_array = vmapped_get_future_state(
+            state, jnp.linspace(params['dt'], self.steps * params['dt'], self.steps), params['collision_radius']
+        )
         return jnp.min(phi_array)
 
-    def get_future_state(self, state, t):
+    def get_future_state(self, state, t, collision_radius):
         """Gets future state using closed form CWH dynamics (http://www.ae.utexas.edu/courses/ase366k/cw_equations.pdf)
         """
         x = (4 - 3 * jnp.cos(self.n * t)) * state[0] + jnp.sin(self.n * t
@@ -791,13 +796,13 @@ class ConstraintPassivelySafeManeuver(ConstraintModule):
         y = 6 * (jnp.sin(self.n * t) - self.n * t) * state[0] + state[
             1] - 2 / self.n * (1 - jnp.cos(self.n * t)) * state[3] + (4 * jnp.sin(self.n * t) - 3 * self.n * t) * state[4] / self.n
         z = state[2] * jnp.cos(self.n * t) + state[5] / self.n * jnp.sin(self.n * t)
-        return jnp.linalg.norm(jnp.array([x, y, z])) - self.collision_radius
+        return jnp.linalg.norm(jnp.array([x, y, z])) - collision_radius
 
-    def get_array(self, state: jnp.ndarray) -> float:
+    def get_array(self, state: jnp.ndarray, params: dict) -> float:
         """Gets entire trajectory array
         """
-        vmapped_get_future_state = vmap(self.get_future_state, (None, 0), 0)
-        phi_array = vmapped_get_future_state(state, jnp.linspace(0, self.steps * self.dt, self.steps + 1))
+        vmapped_get_future_state = vmap(self.get_future_state, (None, 0, None), 0)
+        phi_array = vmapped_get_future_state(state, jnp.linspace(0, self.steps * params['dt'], self.steps + 1), params['collision_radius'])
         return phi_array
 
 
@@ -816,36 +821,33 @@ class ConstraintCWHMaxDistance(ConstraintModule):
     """
 
     def __init__(self, r_max: float, a_max: float, alpha: ConstraintStrengthener = None, **kwargs):
-        self.r_max = r_max
-        self.a_max = a_max
-
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.001])
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params={'r_max': r_max, 'a_max': a_max}, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
         delta_p = state[0:3]
         mag_delta_p = jnp.linalg.norm(delta_p)
-        h = lax.cond(self.r_max >= mag_delta_p, self.positive_distance_constraint, self.negative_distance_constraint, state)
+        h = lax.cond(params['r_max'] >= mag_delta_p, self.positive_distance_constraint, self.negative_distance_constraint, state, params)
         return h
 
-    def _phi(self, state: jnp.ndarray) -> float:
+    def _phi(self, state: jnp.ndarray, params: dict) -> float:
         delta_p = state[0:3]
-        return self.r_max - jnp.linalg.norm(delta_p)
+        return params['r_max'] - jnp.linalg.norm(delta_p)
 
-    def positive_distance_constraint(self, state):
+    def positive_distance_constraint(self, state, params):
         """Constraint value when sqrt component is real"""
         delta_p = state[0:3]
         delta_v = state[3:6]
         mag_delta_p = jnp.linalg.norm(delta_p)
-        return jnp.sqrt(2 * self.a_max * (self.r_max - mag_delta_p)) - delta_p.T @ delta_v / mag_delta_p
+        return jnp.sqrt(2 * params['a_max'] * (params['r_max'] - mag_delta_p)) - delta_p.T @ delta_v / mag_delta_p
 
-    def negative_distance_constraint(self, state):
+    def negative_distance_constraint(self, state, params):
         """Constraint value when sqrt component is imaginary"""
         delta_p = state[0:3]
         delta_v = state[3:6]
         mag_delta_p = jnp.linalg.norm(delta_p)
-        return -jnp.sqrt(2 * self.a_max * (-self.r_max + mag_delta_p)) - delta_p.T @ delta_v / mag_delta_p
+        return -jnp.sqrt(2 * params['a_max'] * (-params['r_max'] + mag_delta_p)) - delta_p.T @ delta_v / mag_delta_p
 
 
 class HOCBFExampleChiefCollision(ConstraintModule):
@@ -855,21 +857,16 @@ class HOCBFExampleChiefCollision(ConstraintModule):
     ----------
     collision_radius: float
         radius of collision for chief spacecraft. m
-    a_max: float
-        Maximum braking acceleration for deputy spacecraft. m/s^2
     alpha : ConstraintStrengthener
         Constraint Strengthener object used for ASIF methods. Required for ASIF methods.
         Defaults to PolynomialConstraintStrengthener([0, 0.01, 0, 0.01])
     """
 
-    def __init__(self, collision_radius: float, a_max: float, alpha: ConstraintStrengthener = None, **kwargs):
-        self.collision_radius = collision_radius
-        self.a_max = a_max
-
+    def __init__(self, collision_radius: float, alpha: ConstraintStrengthener = None, **kwargs):
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.01, 0, 0.01])
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params={'collision_radius': collision_radius}, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
         delta_p = state[0:3]
-        return jnp.linalg.norm(delta_p) - self.collision_radius
+        return jnp.linalg.norm(delta_p) - params['collision_radius']

@@ -14,7 +14,7 @@ from typing import Any, Dict, Union
 import jax.numpy as jnp
 import numpy as np
 import quadprog
-from jax import jacfwd, jit, vmap
+from jax import jacfwd, jit, lax, vmap
 from safe_autonomy_dynamics.base_models import BaseControlAffineODESolverDynamics, BaseODESolverDynamics
 from scipy.optimize import minimize
 
@@ -90,6 +90,16 @@ class ASIFModule(BaseOptimizationModule):
 
         self.direct_inequality_constraints = self._setup_direct_constraints()
 
+        self.direct_inequality_params = dict.fromkeys(self.direct_inequality_constraints.keys())
+        self.direct_inequality_enabled_dict = dict.fromkeys(self.direct_inequality_constraints.keys())
+        self._update_direct_inequality_params()
+
+    def _update_direct_inequality_params(self):
+        """Update the parameters for each constraint"""
+        for k, c in self.direct_inequality_constraints.items():
+            self.direct_inequality_params[k] = c.params
+            self.direct_inequality_enabled_dict[k] = c.enabled
+
     def compose(self):
         """
         applies jax composition transformations (grad, jit, jacobian etc.)
@@ -111,8 +121,11 @@ class ASIFModule(BaseOptimizationModule):
             self._update_ineq_mats_fn = self._update_ineq_mats
 
     def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
-        ineq_weight, ineq_constant = self._generate_barrier_constraint_mats_fn(state, step_size)
-        ineq_weight, ineq_constant = self._update_ineq_mats_fn(ineq_weight, ineq_constant, state)
+        self._update_direct_inequality_params()
+        ineq_weight, ineq_constant = self._generate_barrier_constraint_mats_fn(state, step_size, self.params, self.constraint_enabled_dict)
+        ineq_weight, ineq_constant = self._update_ineq_mats_fn(
+            ineq_weight, ineq_constant, state, self.direct_inequality_params, self.direct_inequality_enabled_dict
+        )
         desired_control = np.array(control, dtype=np.float64)
         actual_control = self._optimize(self.obj_weight, desired_control, ineq_weight, ineq_constant)
         self.intervening = self.monitor(desired_control, actual_control)
@@ -149,8 +162,9 @@ class ASIFModule(BaseOptimizationModule):
 
         return ineq_weight, ineq_constant
 
-    def _update_ineq_mats(self, ineq_weight: jnp.ndarray, ineq_constant: jnp.ndarray,
-                          state: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+    def _update_ineq_mats(
+        self, ineq_weight: jnp.ndarray, ineq_constant: jnp.ndarray, state: jnp.ndarray, params: dict, constraint_enabled_dict: dict
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Update inequality matrices before sending to solver: adds any direct inequality constraints
 
         Parameters
@@ -159,6 +173,10 @@ class ASIFModule(BaseOptimizationModule):
             matix C.T of quadprog inequality constraint C.T x >= b
         ineq_constant : jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
+        params : dict
+            Parameters for each constraint
+        constraint_enabled_dict : dict
+            Enable flag for each constraint
 
         Returns
         -------
@@ -167,13 +185,34 @@ class ASIFModule(BaseOptimizationModule):
         jnp.ndarray
             updated ineq_constant
         """
-        for c in self.direct_inequality_constraints.values():
-            temp1 = c.ineq_weight(state)
+        for k, c in self.direct_inequality_constraints.items():
+            # Compute constraints
+            c_params = params[k]
+            temp1 = c.ineq_weight(state, c_params)
             temp1 = jnp.concatenate((temp1, jnp.zeros(self.num_slack)))
-            temp2 = c.ineq_constant(state)
+            temp2 = c.ineq_constant(state, c_params)
+
+            # Return zero if constraint is disabled
+            temp1, temp2 = lax.cond(
+                constraint_enabled_dict[k],
+                self.direct_constraint_enabled,
+                self.direct_constraint_disabled,
+                temp1,
+                temp2,
+            )
+
+            # Append to full constraint mats
             ineq_weight = jnp.append(ineq_weight, temp1[:, None], axis=1)
             ineq_constant = jnp.append(ineq_constant, temp2)
         return ineq_weight, ineq_constant
+
+    def direct_constraint_enabled(self, temp1: jnp.ndarray, temp2: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return same when constraint is enabled"""
+        return temp1, temp2
+
+    def direct_constraint_disabled(self, temp1: jnp.ndarray, temp2: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return zeros when constraint is disabled"""
+        return jnp.zeros(temp1.shape), jnp.zeros(temp2.shape)
 
     def _optimize(
         self, obj_weight: np.ndarray, obj_constant: np.ndarray, ineq_weight: jnp.ndarray, ineq_constant: jnp.ndarray
@@ -213,7 +252,8 @@ class ASIFModule(BaseOptimizationModule):
         return opt[0:self.control_dim]
 
     @abc.abstractmethod
-    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
+    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, params: dict,
+                                          constraint_enabled_dict: dict) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -223,6 +263,10 @@ class ASIFModule(BaseOptimizationModule):
             current rta state of the system
         step_size : float
             duration of control step
+        params : dict
+            Parameters for each constraint
+        constraint_enabled_dict : dict
+            Enable flag for each constraint
 
         Returns
         -------
@@ -300,7 +344,8 @@ class ExplicitASIFModule(ASIFModule):
         length of control vector
     """
 
-    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
+    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, params: dict,
+                                          constraint_enabled_dict: dict) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -312,6 +357,10 @@ class ExplicitASIFModule(ASIFModule):
             current rta state of the system
         step_size : float
             duration of control step
+        params : dict
+            Parameters for each constraint
+        constraint_enabled_dict : dict
+            Enable flag for each constraint
 
         Returns
         -------
@@ -324,23 +373,66 @@ class ExplicitASIFModule(ASIFModule):
         ineq_constant_barrier = jnp.empty(0)
 
         slack_counter = 0
-        for c in self.constraints.values():
-            grad_x = c.grad(state)
+        for k, c in self.constraints.items():
+            # Compute BC
+            c_params = params[k]
+            grad_x = c.grad(state, c_params)
             temp1 = grad_x @ self.state_transition_input(state)
+
+            # Append slack variables
             slack = jnp.zeros(self.num_slack)
             if c.slack_priority_scale is not None:
                 slack = slack.at[slack_counter].set(-1.)
                 slack_counter += 1
             temp1 = jnp.concatenate((temp1, slack))
-            temp2 = -grad_x @ self.state_transition_system(state) - c.alpha(c(state))
 
+            # Get positive or negative alpha function depending on constraint value
+            constraint_val = c(state, c_params)
+            alpha = lax.cond(
+                constraint_val < 0,
+                self.negative_constraint,
+                self.positive_constraint,
+                c.alpha(constraint_val),
+                c.alpha_negative(constraint_val) + c.bias_negative
+            )
+
+            # Compute BC
+            temp2 = -grad_x @ self.state_transition_system(state) - alpha
+
+            # Return zero if constraint is disabled
+            temp1, temp2 = lax.cond(
+                constraint_enabled_dict[k],
+                self.constraint_enabled,
+                self.constraint_disabled,
+                temp1,
+                temp2,
+            )
+
+            # Append to full BC mats
             ineq_weight_barrier = jnp.append(ineq_weight_barrier, temp1[None, :], axis=0)
             ineq_constant_barrier = jnp.append(ineq_constant_barrier, temp2)
 
+        # Append actuation mats
         ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
         ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
 
         return ineq_weight.transpose(), ineq_constant
+
+    def positive_constraint(self, val: float, _) -> float:
+        """Return c.alpha(constraint_val) when constraint is positive"""
+        return val
+
+    def negative_constraint(self, _, val: float) -> float:
+        """Return c.alpha_negative(constraint_val) + c.bias_negative when constraint is negative"""
+        return val
+
+    def constraint_enabled(self, temp1: jnp.ndarray, temp2: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return BC when constraint is enabled"""
+        return temp1, temp2
+
+    def constraint_disabled(self, temp1: jnp.ndarray, temp2: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return zeros when constraint is disabled"""
+        return jnp.zeros(temp1.shape), jnp.zeros(temp2.shape)
 
 
 class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
@@ -460,7 +552,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             self.backup_controller.generate_control_with_controller_state(state, step_size, controller_state)[0]
         )
 
-    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float) -> tuple[jnp.ndarray, jnp.ndarray]:
+    def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, params: dict,
+                                          constraint_enabled_dict: dict) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates matrices for quadratic program optimization inequality constraint matrices corresponding to safety
         barrier constraints
 
@@ -473,6 +566,10 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             current rta state of the system
         step_size : float
             duration of control step
+        params : dict
+            Parameters for each constraint
+        constraint_enabled_dict : dict
+            Enable flag for each constraint
 
         Returns
         -------
@@ -483,12 +580,21 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         """
         num_steps = int(self.backup_window / step_size) + 1
         traj_states, traj_sensitivities = self._integrate_fn(state, step_size, num_steps)
-        ineq_weight, ineq_constant = self._generate_ineq_constraint_mats_fn(state, num_steps, traj_states, traj_sensitivities)
+        ineq_weight, ineq_constant = self._generate_ineq_constraint_mats_fn(
+            state, num_steps, traj_states, traj_sensitivities, params, constraint_enabled_dict
+        )
 
         return ineq_weight, ineq_constant
 
-    def _generate_ineq_constraint_mats(self, state: jnp.ndarray, num_steps: int, traj_states: jnp.ndarray,
-                                       traj_sensitivities: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+    def _generate_ineq_constraint_mats(
+        self,
+        state: jnp.ndarray,
+        num_steps: int,
+        traj_states: jnp.ndarray,
+        traj_sensitivities: jnp.ndarray,
+        params: dict,
+        constraint_enabled_dict: dict
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """generates quadratic program optimization inequality constraint matrices corresponding to safety
 
         Parameters
@@ -502,6 +608,10 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         traj_sensitivities: jnp.ndarray
             list of trajectory state sensitivities (i.e. jacobian wrt initial trajectory state).
             Elements are jnp.ndarrays with size (n, n) where n = state.size
+        params : dict
+            Parameters for each constraint
+        constraint_enabled_dict : dict
+            Enable flag for each constraint
 
         Returns
         -------
@@ -510,7 +620,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         jnp.ndarray
             vector b of quadprog inequality constraint C.T x >= b
         """
-        constraint_list = list(self.constraints.values())
+
+        # Initialize
         num_constraints = len(self.constraints)
         num_points = len(traj_states)
 
@@ -522,25 +633,49 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         traj_sensitivities = jnp.array(traj_sensitivities)
 
         slack_counter = 0
-        for i in range(num_constraints):
+        # for i in range(num_constraints):
+        for i, k in enumerate(self.constraints.keys()):
+            # Get BCs for entire trajectory
             point_ineq_weight, point_ineq_constant, point_constraint_vals = self._get_ineq_mats_fn(
-                constraint_list[i], state, traj_states, traj_sensitivities)
+                self.constraints[k], state, traj_states, traj_sensitivities, params[k])
+
+            # Return zeros if constraint is disabled
+            point_ineq_weight, point_ineq_constant = lax.cond(
+                constraint_enabled_dict[k],
+                self.constraint_enabled,
+                self.constraint_disabled,
+                point_ineq_weight, point_ineq_constant
+            )
+
+            # Append slack variables
             slack = jnp.zeros((num_points, self.num_slack))
-            if constraint_list[i].slack_priority_scale is not None:
+            if self.constraints[k].slack_priority_scale is not None:
                 slack = slack.at[:, slack_counter].set(-1.)
                 slack_counter += 1
             point_ineq_weight = jnp.hstack((point_ineq_weight, slack))
+
+            # Add to full BC mats
             ineq_weight_barrier = ineq_weight_barrier.at[i * num_points:(i + 1) * num_points, :].set(point_ineq_weight)
             ineq_constant_barrier = ineq_constant_barrier.at[i * num_points:(i + 1) * num_points].set(point_ineq_constant)
             constraint_vals = constraint_vals.at[i, :].set(point_constraint_vals)
 
+        # Subsample
         ineq_weight_barrier, ineq_constant_barrier = self.subsample_constraints(
             ineq_weight_barrier, ineq_constant_barrier, constraint_vals, num_steps
         )
 
+        # Append actuation constraint mats
         ineq_weight = jnp.concatenate((self.ineq_weight_actuation, ineq_weight_barrier))
         ineq_constant = jnp.concatenate((self.ineq_constant_actuation, ineq_constant_barrier))
         return ineq_weight.transpose(), ineq_constant
+
+    def constraint_enabled(self, point_ineq_weight: jnp.ndarray, point_ineq_constant: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return BC when constraint is enabled"""
+        return point_ineq_weight, point_ineq_constant
+
+    def constraint_disabled(self, point_ineq_weight: jnp.ndarray, point_ineq_constant: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return zeros when constraint is disabled"""
+        return jnp.zeros(point_ineq_weight.shape), jnp.zeros(point_ineq_constant.shape)
 
     def subsample_constraints(self, ineq_weight_barrier, ineq_constant_barrier, constraint_vals, num_steps):
         """Subsample constraints individually based on the constraint's subsample_config attribute
@@ -608,7 +743,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         return new_ineq_weight_barrier, new_ineq_constant_barrier
 
     def _get_constraint_ineq_mats(
-        self, constraint: ConstraintModule, state: jnp.ndarray, traj_states: jnp.ndarray, traj_sensitivities: jnp.ndarray
+        self, constraint: ConstraintModule, state: jnp.ndarray, traj_states: jnp.ndarray, traj_sensitivities: jnp.ndarray, params: dict
     ) -> tuple[jnp.ndarray, jnp.ndarray, Union[jnp.ndarray, float]]:
         """Computes inequality constraint matrices for a given constraint using vmap
 
@@ -622,6 +757,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             array of trajectory states
         traj_sensitivity : list
             array of trajectory sensitivities
+        params : dict
+            dict of parameters for the constraint
 
         Returns
         -------
@@ -632,14 +769,14 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         jnp.ndarray
             constraint values along trajectory
         """
-        constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0), (0, 0, 0))
+        constraint_vmapped = vmap(self.invariance_constraints, (None, None, 0, 0, None), (0, 0, 0))
         point_ineq_weight, point_ineq_constant, point_constraint_vals = constraint_vmapped(
-            constraint, state, traj_states, traj_sensitivities
+            constraint, state, traj_states, traj_sensitivities, params
         )
         return point_ineq_weight, point_ineq_constant, point_constraint_vals
 
     def _get_constraint_ineq_mats_no_vmap(
-        self, constraint: ConstraintModule, state: jnp.ndarray, traj_states: jnp.ndarray, traj_sensitivities: jnp.ndarray
+        self, constraint: ConstraintModule, state: jnp.ndarray, traj_states: jnp.ndarray, traj_sensitivities: jnp.ndarray, params: dict
     ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """Computes inequality constraint matrices for a given constraint without vmap, allowing easier debugging
 
@@ -653,6 +790,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             array of trajectory states
         traj_sensitivity : list
             array of trajectory sensitivities
+        params : dict
+            dict of parameters for the constraint
 
         Returns
         -------
@@ -667,14 +806,19 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         point_ineq_constant = []
         point_constraint_vals = []
         for (traj_state, traj_sensitivity) in zip(traj_states, traj_sensitivities):
-            w, c, v = self.invariance_constraints(constraint, state, traj_state, traj_sensitivity)
+            w, c, v = self.invariance_constraints(constraint, state, traj_state, traj_sensitivity, params)
             point_ineq_weight.append(w)
             point_ineq_constant.append(c)
             point_constraint_vals.append(v)
         return jnp.array(point_ineq_weight), jnp.array(point_ineq_constant), jnp.array(point_constraint_vals)
 
     def invariance_constraints(
-        self, constraint: ConstraintModule, initial_state: jnp.ndarray, traj_state: jnp.ndarray, traj_sensitivity: jnp.ndarray
+        self,
+        constraint: ConstraintModule,
+        initial_state: jnp.ndarray,
+        traj_state: jnp.ndarray,
+        traj_sensitivity: jnp.ndarray,
+        params: dict
     ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
         """Computes safety constraint invariance constraints via Nagumo's condition for a point in the backup trajectory
 
@@ -688,6 +832,8 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
             arbitrary state in the backup trajectory
         traj_sensitivity : list
             backup trajectory state sensitivity (i.e. jacobian relative to the initial state)
+        params : dict
+            dict of parameters for the constraint
 
         Returns
         -------
@@ -704,13 +850,13 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         f_x0 = self.state_transition_system(initial_state)
         g_x0 = self.state_transition_input(initial_state)
 
-        grad_x = constraint.grad(traj_state_array)
+        grad_x = constraint.grad(traj_state_array, params)
         ineq_weight = grad_x @ (traj_sensitivity_array @ g_x0)
 
         ineq_constant = grad_x @ (traj_sensitivity_array @ f_x0) \
-            + constraint.alpha(constraint(traj_state_array))
+            + constraint.alpha(constraint(traj_state_array, params))
 
-        return ineq_weight, -ineq_constant, constraint(traj_state_array)
+        return ineq_weight, -ineq_constant, constraint(traj_state_array, params)
 
     def integrate(self, state: jnp.ndarray, step_size: float, Nsteps: int) -> tuple[list, list]:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics
@@ -826,10 +972,13 @@ class DiscreteASIFModule(BaseOptimizationModule):
 
     def _filter_control(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
         desired_control = np.concatenate((np.array(control, dtype=np.float64), np.zeros((self.num_slack))))
-        for c in self.scipy_constraints:
-            c['args'] = (state, step_size)
+        enabled_constraints = []
+        for c, params, enabled in zip(self.scipy_constraints, list(self.params.values()), list(self.constraint_enabled_dict.values())):
+            if enabled:
+                c['args'] = (state, step_size, params)
+                enabled_constraints.append(c)
         res = minimize(
-            self.obj, desired_control, method='SLSQP', constraints=self.scipy_constraints, bounds=self.opt_bounds, args=(desired_control)
+            self.obj, desired_control, method='SLSQP', constraints=enabled_constraints, bounds=self.opt_bounds, args=(desired_control)
         )
         if not res.success:
             error = f'Solver Failure: {res.message}'
