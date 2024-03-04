@@ -575,14 +575,12 @@ class ConstraintCWH3dRelativeVelocity(ConstraintModule):
     """
 
     def __init__(self, v0: float, v1: float, v0_distance: float = 0, delta: float = 1e-5, alpha: ConstraintStrengthener = None, **kwargs):
-        self.v0 = v0
-        self.v1 = v1
-        self.v0_distance = v0_distance
         self.delta = delta
 
         if alpha is None:
             alpha = PolynomialConstraintStrengthener([0, 0.05, 0, 0.005])
-        super().__init__(alpha=alpha, **kwargs)
+        super().__init__(alpha=alpha, params={'v0': v0, 'v1': v1, 'v0_distance': v0_distance}, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
-        return (self.v0 + self.v1 * (norm_with_delta(state[0:3], self.delta) - self.v0_distance)) - norm_with_delta(state[3:6], self.delta)
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
+        return (params['v0'] + params['v1'] *
+                (norm_with_delta(state[0:3], self.delta) - params['v0_distance'])) - norm_with_delta(state[3:6], self.delta)

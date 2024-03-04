@@ -200,6 +200,16 @@ class ConstraintBasedRTA(RTAModule):
                 c._compose()
         self.compose()
 
+        self.params = dict.fromkeys(self.constraints.keys())
+        self.constraint_enabled_dict = dict.fromkeys(self.constraints.keys())
+        self._update_params()
+
+    def _update_params(self):
+        """Update the parameters for each constraint"""
+        for k, c in self.constraints.items():
+            self.params[k] = c.params
+            self.constraint_enabled_dict[k] = c.enabled
+
     def compute_filtered_control(self, input_state: Any, step_size: float, control_desired: np.ndarray) -> np.ndarray:
         """filters desired control into safe action
 
@@ -219,6 +229,7 @@ class ConstraintBasedRTA(RTAModule):
         np.ndarray
             safe filtered control vector
         """
+        self._update_params()
         state = self._get_state(input_state)
         self._update_constraint_values(state, stale=True)
         control_actual = self._filter_control(state, step_size, to_jnp_array_jit(control_desired))
@@ -319,7 +330,7 @@ class ConstraintBasedRTA(RTAModule):
         stale : bool
             True if called before state is updated
         """
-        self.constraint_values = {k: float(v.phi(state)) for k, v in self.constraints.items()}
+        self.constraint_values = {k: float(v.phi(state, v.params)) for k, v in self.constraints.items()}
         if stale:
             self.is_stale_constraints = True
         else:
