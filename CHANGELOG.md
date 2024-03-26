@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/act3-ace/run-time-assurance/compare/v1.15.3...v1.16.0) (2024-03-26)
+
+
+### Features
+
+* Dynamically changing parameters ([2d4aa95](https://github.com/act3-ace/run-time-assurance/commit/2d4aa95e818b0d901632882aec40bff017526c6d))
+
 ## [1.15.3](https://github.com/act3-ace/run-time-assurance/compare/v1.15.2...v1.15.3) (2024-01-10)
 
 
