@@ -27,7 +27,7 @@ jobs:
           version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: false
       - name: Install Dependencies
-        run: poetry install --no-interaction -E jax
+        run: poetry install --no-interaction
       - name: Markdown Lint
         continue-on-error: true
         uses: articulate/actions-markdownlint@v1
