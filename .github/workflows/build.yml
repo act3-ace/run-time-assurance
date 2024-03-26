@@ -9,6 +9,7 @@ on:
 env:
   SRC_DIR: run_time_assurance
   PY_VER: "3.10"
+  POETRY_VERSION: "1.7.1"
 
 jobs:
   lint:
@@ -16,21 +17,30 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PY_VER }}
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-create: false
+      - name: Install Dependencies
+        run: poetry install --no-interaction -E jax
       - name: Markdown Lint
         continue-on-error: true
         uses: articulate/actions-markdownlint@v1
-      - name: Python Lint
-        uses: ricardochaves/python-lint@v1.3.0
-        continue-on-error: true
-        with:
-          python-root-list: ${{ env.SRC_DIR }}
-          use-pylint: true
-          use-flake8: true
-          use-mypy: true
-          use-isort: true
-      - name: Yapf Formatting
-        continue-on-error: true
-        uses: AlexanderMelde/yapf-action@v1.0
+      - name: ISort
+        run: isort --check --diff ${{ env.SRC_DIR }}
+      - name: Yapf
+        run: yapf --diff --recursive --parallel ${{ env.SRC_DIR }}
+      - name: Mypy
+        run: mypy ${{ env.SRC_DIR }}
+      - name: Flake8
+        run: flake8 ${{ env.SRC_DIR }}
+      - name: Pylint
+        run: pylint ${{ env.SRC_DIR }}
 
   test:
     runs-on: ubuntu-latest
@@ -44,7 +54,7 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.7.1
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: false
       - name: Install Dependencies
         run: poetry install --no-interaction --no-root --with=test
@@ -73,7 +83,7 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.7.1
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: false
       - name: Semantic Release
         uses: cycjimmy/semantic-release-action@v4
@@ -106,7 +116,7 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.7.1
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: false
       - name: Semantic Release
         uses: cycjimmy/semantic-release-action@v4
