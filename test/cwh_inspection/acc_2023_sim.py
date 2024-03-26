@@ -76,7 +76,7 @@ class Env(DataTrackingSampleTestingModule):
         for i in range(self.deputies):
             x = self.rta.get_agent_state(state, i)
             for c in self.rta.deputy_rta.constraints.values():
-                if c.phi(x) < 0 or c(x) < 0:
+                if c.phi(x, c.params) < 0 or c(x, c.params) < 0:
                     init_state_safe = False
                     break
         return init_state_safe

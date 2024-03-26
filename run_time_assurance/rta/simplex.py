@@ -8,7 +8,7 @@ import abc
 from typing import Any, Union
 
 import jax.numpy as jnp
-from jax import jit, vmap
+from jax import jit, lax, vmap
 
 from run_time_assurance.constraint import ConstraintModule
 from run_time_assurance.controller import RTABackupController
@@ -131,22 +131,55 @@ class SimplexModule(BackupControlBasedRTA):
         """
         raise NotImplementedError()
 
-    def _constraint_violation(self, states: jnp.ndarray) -> bool:
+    def _constraint_violation(self, states: jnp.ndarray, params: dict, constraint_enabled_dict: dict) -> bool:
+        """Determine if any constraints are violated
 
-        constraint_list = list(self.constraints.values())
-        num_constraints = len(self.constraints)
-        constraint_violations = jnp.zeros(num_constraints)
+        Parameters
+        ----------
+        states : jnp.ndarray
+            Array of states to check
+        params : dict
+            Parameters for each constraint
+        constraint_enabled_dict : dict
+            Enable flag for each constraint
 
-        for i in range(num_constraints):
-            c = constraint_list[i]
+        Returns
+        -------
+        bool
+            return True if constraints are violated, False if not
+        """
+        # Initialize
+        constraint_violations = jnp.zeros(len(self.constraints))
 
-            traj_constraint_vals = self._get_constraint_vals_fn(c, states)
+        for i, k in enumerate(self.constraints.keys()):
+            # Get constraint
+            c = self.constraints[k]
 
+            # Get constraint vals along trajectory
+            traj_constraint_vals = self._get_constraint_vals_fn(c, states, params[k])
+
+            # Return zero if constraint is disabled
+            traj_constraint_vals = lax.cond(
+                constraint_enabled_dict[k],
+                self.constraint_enabled,
+                self.constraint_disabled,
+                traj_constraint_vals,
+            )
+
+            # Set constraint violation
             constraint_violations = constraint_violations.at[i].set(jnp.any(traj_constraint_vals < 0))
 
         return jnp.any(constraint_violations)
 
-    def _get_constraint_vals(self, constraint: ConstraintModule, states: jnp.ndarray) -> Union[float, jnp.ndarray]:
+    def constraint_enabled(self, traj_constraint_vals: jnp.ndarray) -> jnp.ndarray:
+        """Return constraint vals when constraint is enabled"""
+        return traj_constraint_vals
+
+    def constraint_disabled(self, traj_constraint_vals: jnp.ndarray) -> jnp.ndarray:
+        """Return zeros when constraint is disabled"""
+        return jnp.zeros(traj_constraint_vals.shape)
+
+    def _get_constraint_vals(self, constraint: ConstraintModule, states: jnp.ndarray, params: dict) -> Union[float, jnp.ndarray]:
         """Uses vmap to compute constraint values along a trajectory
 
         Parameters
@@ -155,17 +188,19 @@ class SimplexModule(BackupControlBasedRTA):
             Constraint to evaluate
         states : jnp.ndarray
             array of state values
+        params : dict
+            dict of parameters for the constraint
 
         Returns
         -------
         [float, jnp.ndarray]
             constraint values along trajectory
         """
-        constraint_vmapped = vmap(constraint.compute, 0, 0)
-        traj_constraint_vals = constraint_vmapped(states)
+        constraint_vmapped = vmap(constraint.compute, (0, None), 0)
+        traj_constraint_vals = constraint_vmapped(states, params)
         return traj_constraint_vals
 
-    def _get_constraint_vals_no_vmap(self, constraint: ConstraintModule, states: jnp.ndarray) -> jnp.ndarray:
+    def _get_constraint_vals_no_vmap(self, constraint: ConstraintModule, states: jnp.ndarray, params: dict) -> jnp.ndarray:
         """Does not use vmap to compute constraint values along a trajectory, allows for easier debugging
 
         Parameters
@@ -174,6 +209,8 @@ class SimplexModule(BackupControlBasedRTA):
             Constraint to evaluate
         states : jnp.ndarray
             array of state values
+        params : dict
+            dict of parameters for the constraint
 
         Returns
         -------
@@ -182,7 +219,7 @@ class SimplexModule(BackupControlBasedRTA):
         """
         traj_constraint_vals = []
         for state in states:
-            traj_constraint_vals.append(constraint.compute(state))
+            traj_constraint_vals.append(constraint.compute(state, params))
         return jnp.array(traj_constraint_vals)
 
 
@@ -194,7 +231,7 @@ class ExplicitSimplexModule(SimplexModule):
 
     def _monitor(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray, intervening: bool) -> bool:
         pred_state = self._pred_state_fn(state, step_size, control)
-        return bool(self._constraint_violation_fn(add_dim_jit(pred_state)))
+        return bool(self._constraint_violation_fn(add_dim_jit(pred_state), self.params, self.constraint_enabled_dict))
 
 
 class ImplicitSimplexModule(SimplexModule):
@@ -238,7 +275,7 @@ class ImplicitSimplexModule(SimplexModule):
 
         traj_states = self._integrate_fn(state, step_size, control)
 
-        return bool(self._constraint_violation_fn(traj_states))
+        return bool(self._constraint_violation_fn(traj_states, self.params, self.constraint_enabled_dict))
 
     def integrate(self, state: jnp.ndarray, step_size: float, desired_control: jnp.ndarray) -> jnp.ndarray:
         """Estimate backup trajectory by polling backup controller backup control and integrating system dynamics

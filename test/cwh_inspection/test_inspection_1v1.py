@@ -397,7 +397,7 @@ if __name__ == '__main__':
     save_fig = True
     output_dir = 'figs/inspection_1v1'
 
-    envs = [Env(Inspection1v1RTA()), Env(DiscreteInspection1v1RTA()), FuelEnv(InspectionCascadedRTA())]
+    envs = [Env(Inspection1v1RTA()), Env(DiscreteInspection1v1RTA(), step_size=10), FuelEnv(InspectionCascadedRTA())]
     output_names = ['rta_test_inspection_1v1', 'rta_test_discrete_inspection_1v1', 'rta_test_cascaded_rta']
 
     os.makedirs(output_dir, exist_ok=True)

@@ -202,7 +202,7 @@ class DataTrackingSampleTestingModule(BaseSampleTestingModule):
                           ), ("Must use constraint based rta with default check_state method. To disable, set check_init_state = False.")
         init_state_safe = True
         for c in self.rta.constraints.values():
-            if c.phi(to_jnp_array_jit(state)) < 0 or c(to_jnp_array_jit(state)) < 0:
+            if c.phi(to_jnp_array_jit(state), c.params) < 0 or c(to_jnp_array_jit(state), c.params) < 0:
                 init_state_safe = False
                 break
         return init_state_safe
