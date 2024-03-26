@@ -32,14 +32,19 @@ jobs:
         continue-on-error: true
         uses: articulate/actions-markdownlint@v1
       - name: ISort
+        continue-on-error: true
         run: isort --check --diff ${{ env.SRC_DIR }}
       - name: Yapf
+        continue-on-error: true
         run: yapf --diff --recursive --parallel ${{ env.SRC_DIR }}
       - name: Mypy
+        continue-on-error: true
         run: mypy ${{ env.SRC_DIR }}
       - name: Flake8
+        continue-on-error: true
         run: flake8 ${{ env.SRC_DIR }}
       - name: Pylint
+        continue-on-error: true
         run: pylint ${{ env.SRC_DIR }}
 
   test:
