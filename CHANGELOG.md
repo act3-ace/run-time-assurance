@@ -1,3 +1,11 @@
+## [1.16.1](https://github.com/act3-ace/run-time-assurance/compare/v1.16.0...v1.16.1) (2024-04-05)
+
+
+### Bug Fixes
+
+* bump jax verstion to 0.4.26 ([7e9688a](https://github.com/act3-ace/run-time-assurance/commit/7e9688a671cfdd5d445dffbbd41610f2fabced26))
+* **dependencies:** updated safe-autonomy-dynamics to 1.2.3 with jax extra ([b4c077d](https://github.com/act3-ace/run-time-assurance/commit/b4c077d04417a65d29af6cb7efdc0df0956410c3))
+
 # [1.16.0](https://github.com/act3-ace/run-time-assurance/compare/v1.15.3...v1.16.0) (2024-03-26)
 
 
