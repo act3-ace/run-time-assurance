@@ -3545,6 +3545,7 @@ files = [
 ]
 
 [package.dependencies]
+jax = {version = "0.4.26", extras = ["cpu"], optional = true, markers = "extra == \"jax\""}
 numpy = ">=1.23.5,<2.0.0"
 pint = ">=0.22,<0.23"
 pydantic = ">=2.6.2,<3.0.0"
@@ -4350,4 +4351,4 @@ test = ["pytest"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9, <3.13"
-content-hash = "f75bd0b3b788c0718e9bd95f0dd5fc862779d3160ebc2a082308c5a1610fa71a"
+content-hash = "2edf4cc3132cc9f6c1319bb650a341c6230faff58c33fbe6b923c28d275e900f"
