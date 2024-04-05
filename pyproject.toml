@@ -23,8 +23,8 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.9, <3.13"
 scipy = ">=1.10.0"
-safe-autonomy-dynamics = "^1.2.0"
-jax = { version = "0.4.3", extras = ["cpu"] }
+safe-autonomy-dynamics = { version="^1.2.0", extras = ["jax"] }
+jax = { version = "0.4.26", extras = ["cpu"] }
 numpy = "^1.23.5"
 matplotlib = "^3.8.0"
 quadprog = "^0.1.11"
