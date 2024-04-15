@@ -6,7 +6,7 @@ from functools import partial
 from jax import jit
 from jax.experimental.ode import odeint
 import jax.numpy as jnp
-from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_simulation.spacecraft.utils import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 from run_time_assurance.zoo.cwh.inspection_3d import NUM_DEPUTIES_DEFAULT, U_MAX_DEFAULT, SUN_VEL_DEFAULT, CombinedInspectionRTA, InspectionRTA
 from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
 from run_time_assurance.utils import to_jnp_array_jit

@@ -1,7 +1,7 @@
 """Module for example random sample tests for 2d docking"""
 import numpy as np
-from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
-from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_simulation.base_models import BaseLinearODESolverDynamics
+from safe_autonomy_simulation.spacecraft.utils import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
 from run_time_assurance.rta.base import ConstraintBasedRTA
 from run_time_assurance.utils.sample_testing import LatinHypercubeRandomSampleTestingModule, ParametricRandomSampleTestingModule

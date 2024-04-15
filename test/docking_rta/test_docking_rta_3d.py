@@ -4,8 +4,8 @@ import scipy
 import matplotlib.pyplot as plt
 import time
 
-from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
-from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
+from safe_autonomy_simulation.spacecraft.utils import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_simulation.base_models import BaseLinearODESolverDynamics
 from run_time_assurance.zoo.cwh.docking_3d import Docking3dExplicitSwitchingRTA, Docking3dImplicitSwitchingRTA, \
                                                  Docking3dExplicitOptimizationRTA, Docking3dImplicitOptimizationRTA
 from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
