@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import quadprog
 from jax import jacfwd, jit, lax, vmap
-from safe_autonomy_dynamics.base_models import BaseControlAffineODESolverDynamics, BaseODESolverDynamics
+from safe_autonomy_simulation.base_models import BaseControlAffineODESolverDynamics, BaseODESolverDynamics
 from scipy.optimize import minimize
 
 from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint, DiscreteCBFConstraint

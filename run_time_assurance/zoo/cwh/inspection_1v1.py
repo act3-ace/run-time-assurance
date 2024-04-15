@@ -8,7 +8,7 @@ import numpy as np
 import scipy
 from jax import jit, lax, vmap
 from jax.experimental.ode import odeint
-from safe_autonomy_dynamics.cwh.point_model import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_simulation.spacecraft.utils import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
 
 from run_time_assurance.constraint import (
     ConstraintMagnitudeStateLimit,

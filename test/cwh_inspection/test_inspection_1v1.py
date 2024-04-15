@@ -5,8 +5,8 @@ import time
 from collections import OrderedDict
 import os
 
-from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
-from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
+from safe_autonomy_simulation.spacecraft.utils import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
+from safe_autonomy_simulation.base_models import BaseLinearODESolverDynamics
 from run_time_assurance.zoo.cwh.inspection_1v1 import U_MAX_DEFAULT, Inspection1v1RTA, InspectionCascadedRTA, DiscreteInspection1v1RTA
 from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
 from run_time_assurance.utils import to_jnp_array_jit
