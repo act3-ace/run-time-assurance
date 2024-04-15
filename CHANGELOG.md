@@ -1,3 +1,10 @@
+# [1.17.0](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.16.1...v1.17.0) (2024-4-15)
+
+
+### Features
+
+* **sim:** change sim backend to safe-autonomy-simulation ([562829c](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/commit/562829c3a81b1b9ba1458ce751033df17a21db0c)), closes [#48](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/issues/48)
+
 ## [1.16.1](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.16.0...v1.16.1) (2024-4-5)
 
 
