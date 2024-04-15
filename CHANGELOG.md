@@ -1,3 +1,10 @@
+# 1.17.0 (2024-04-15)
+
+
+### Features
+
+* **sim:** change sim backend to safe-autonomy-simulation
+
 ## [1.16.1](https://github.com/act3-ace/run-time-assurance/compare/v1.16.0...v1.16.1) (2024-04-05)
 
 
