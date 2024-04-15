@@ -5,8 +5,8 @@ from typing import Dict, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
-from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
-from safe_autonomy_dynamics.integrators import M_DEFAULT, generate_dynamics_matrices
+from safe_autonomy_simulation.base_models import BaseLinearODESolverDynamics
+from safe_autonomy_simulation.integrators import M_DEFAULT, generate_dynamics_matrices
 
 from run_time_assurance.constraint import ConstraintModule, ConstraintStrengthener, PolynomialConstraintStrengthener
 from run_time_assurance.controller import RTABackupController
