@@ -1,3 +1,10 @@
+# [1.18.0](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.17.0...v1.18.0) (2024-6-24)
+
+
+### Features
+
+* Track constraints that cause intervention ([5926b23](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/commit/5926b2319dcfc2ac08b0785b780748833702ba46))
+
 # [1.17.0](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.16.1...v1.17.0) (2024-4-15)
 
 
