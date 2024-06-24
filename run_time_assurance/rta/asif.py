@@ -86,6 +86,7 @@ class ASIFModule(BaseOptimizationModule):
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
 
+        self.constraint_names = []
         self.ineq_weight_actuation, self.ineq_constant_actuation = self._generate_actuation_constraint_mats()
 
         self.direct_inequality_constraints = self._setup_direct_constraints()
@@ -93,6 +94,8 @@ class ASIFModule(BaseOptimizationModule):
         self.direct_inequality_params = dict.fromkeys(self.direct_inequality_constraints.keys())
         self.direct_inequality_enabled_dict = dict.fromkeys(self.direct_inequality_constraints.keys())
         self._update_direct_inequality_params()
+        self.constraints_causing_intervention = None
+        self.constraint_names += list(self.constraints.keys()) + list(self.direct_inequality_constraints.keys())
 
     def _update_direct_inequality_params(self):
         """Update the parameters for each constraint"""
@@ -151,6 +154,8 @@ class ASIFModule(BaseOptimizationModule):
             c = jnp.hstack((c, jnp.zeros((self.control_dim, self.num_slack))))
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
+            for i in range(self.control_dim):
+                self.constraint_names.append('u' + str(i + 1) + '_min')
 
         if self.control_bounds_high is not None:
             c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_high, self.control_dim)
@@ -159,6 +164,8 @@ class ASIFModule(BaseOptimizationModule):
             c = jnp.hstack((c, jnp.zeros((self.control_dim, self.num_slack))))
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
+            for i in range(self.control_dim):
+                self.constraint_names.append('u' + str(i + 1) + '_max')
 
         return ineq_weight, ineq_constant
 
@@ -239,17 +246,26 @@ class ASIFModule(BaseOptimizationModule):
         try:
             opt = quadprog.solve_qp(
                 obj_weight, obj_constant, np.array(ineq_weight, dtype=np.float64), np.array(ineq_constant, dtype=np.float64), 0
-            )[0]
+            )
+            u = opt[0]
+
+            # Get constraints causing intervention
+            self.constraints_causing_intervention = []
+            for i in opt[5]:
+                key = self.constraint_names[i - 1]
+                if key not in self.constraints_causing_intervention:
+                    self.constraints_causing_intervention.append(key)
+
         except ValueError as e:
             if e.args[0] == "constraints are inconsistent, no solution":
                 if not self.solver_exception:
                     warnings.warn(SolverWarning())
-                    opt = obj_constant
+                    u = obj_constant
                 else:
                     raise SolverError() from e
             else:
                 raise e
-        return opt[0:self.control_dim]
+        return u[0:self.control_dim]
 
     @abc.abstractmethod
     def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, params: dict,
@@ -583,6 +599,17 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         ineq_weight, ineq_constant = self._generate_ineq_constraint_mats_fn(
             state, num_steps, traj_states, traj_sensitivities, params, constraint_enabled_dict
         )
+
+        # Fix constraint names:
+        idx = 0
+        if self.control_bounds_low is not None:
+            idx += self.control_dim
+        if self.control_bounds_high is not None:
+            idx += self.control_dim
+        self.constraint_names = self.constraint_names[0:idx]
+        for k in self.constraints.keys():
+            self.constraint_names += [k] * num_steps
+        self.constraint_names += list(self.direct_inequality_constraints.keys())
 
         return ineq_weight, ineq_constant
 
