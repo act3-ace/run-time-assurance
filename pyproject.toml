@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "run-time-assurance"
-version = "1.17.0"
+version = "1.18.0"
 description = "The run-time-assurance library provides an interface and implementations for Run Time Assurance (RTA) safety filters."
 authors = [
     "Charles Keating <Charles.Keating@udri.udayton.edu>",

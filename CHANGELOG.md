@@ -1,3 +1,10 @@
+# 1.18.0 (2024-06-24)
+
+
+### Features
+
+* Track constraints that cause intervention
+
 # 1.17.0 (2024-04-15)
 
 
