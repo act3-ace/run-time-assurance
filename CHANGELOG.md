@@ -1,3 +1,10 @@
+## 1.18.1 (2024-06-26)
+
+
+### Bug Fixes
+
+* add params to integrator constraints
+
 # 1.18.0 (2024-06-24)
 
 
