@@ -349,7 +349,7 @@ class ConstraintIntegrator1dDockingCollisionExplicit(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 1, 0, 30])
         super().__init__(alpha=alpha, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
         return -2 * state[0] - state[1]**2
 
 
@@ -368,5 +368,5 @@ class ConstraintIntegrator1dDockingCollisionImplicit(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 10, 0, 30])
         super().__init__(alpha=alpha, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
         return -state[0]
