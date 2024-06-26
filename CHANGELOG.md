@@ -1,3 +1,10 @@
+## [1.18.1](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.18.0...v1.18.1) (2024-6-26)
+
+
+### Bug Fixes
+
+* add params to integrator constraints ([38b484c](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/commit/38b484c22293d7dcb7bd1b18fa60344507416491))
+
 # [1.18.0](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.17.0...v1.18.0) (2024-6-24)
 
 
