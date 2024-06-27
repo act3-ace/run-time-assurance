@@ -1,3 +1,10 @@
+## [1.18.2](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.18.1...v1.18.2) (2024-6-27)
+
+
+### Bug Fixes
+
+* integrator tutorial updates ([4885287](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/commit/4885287602b6237fe4197d53361f8d5951590603))
+
 ## [1.18.1](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.18.0...v1.18.1) (2024-6-26)
 
 
