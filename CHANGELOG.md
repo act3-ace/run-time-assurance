@@ -1,3 +1,10 @@
+## 1.18.2 (2024-06-27)
+
+
+### Bug Fixes
+
+* integrator tutorial updates
+
 ## 1.18.1 (2024-06-26)
 
 
