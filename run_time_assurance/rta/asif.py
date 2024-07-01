@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import quadprog
 from jax import jacfwd, jit, lax, vmap
-from safe_autonomy_simulation.dynamics import ControlAffineODEDynamics, LinearODEDynamics
+from safe_autonomy_simulation.dynamics import ControlAffineODEDynamics, ODEDynamics
 from scipy.optimize import minimize
 
 from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint, DiscreteCBFConstraint
@@ -1112,7 +1112,7 @@ class DiscreteASIFIntegratorModule(DiscreteASIFModule):
         raise NotImplementedError
 
 
-class DifferentiableODESolver(LinearODEDynamics):
+class DifferentiableODESolver(ODEDynamics):
     """Differentiable ODE solver for Discrete ASIF Module"""
 
     def __init__(self, state_dot_fn, **kwargs):
