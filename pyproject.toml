@@ -27,7 +27,7 @@ jax = { version = "0.4.26", extras = ["cpu"] }
 numpy = "^1.23.5"
 matplotlib = "^3.8.0"
 quadprog = "^0.1.11"
-safe-autonomy-simulation = "^2.0.2"
+safe-autonomy-simulation = "^2.0.5"
 pydantic = "^2.8.0"
 
 [tool.poetry.group.lint.dependencies]
