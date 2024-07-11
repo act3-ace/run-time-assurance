@@ -4,8 +4,9 @@ import matplotlib.pyplot as plt
 import time
 import os
 
-from safe_autonomy_simulation.spacecraft.utils import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
-from safe_autonomy_simulation.base_models import BaseLinearODESolverDynamics
+from safe_autonomy_simulation.sims.spacecraft.defaults import M_DEFAULT, N_DEFAULT
+from safe_autonomy_simulation.dynamics import LinearODEDynamics
+from run_time_assurance.zoo.cwh.utils import generate_cwh_matrices
 from run_time_assurance.zoo.cwh.docking_2d import Docking2dExplicitSwitchingRTA, Docking2dImplicitSwitchingRTA, \
                                                  Docking2dExplicitOptimizationRTA, Docking2dImplicitOptimizationRTA
 from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
@@ -19,7 +20,7 @@ class Env(DataTrackingSampleTestingModule):
         self.docking_region = 1  # m
 
         A, B = generate_cwh_matrices(M_DEFAULT, N_DEFAULT, mode="2d")
-        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method='RK45')
+        self.dynamics = LinearODEDynamics(A=A, B=B, integration_method='RK45')
 
         # Specify LQR gains
         Q = np.eye(4) * 0.05  # State cost

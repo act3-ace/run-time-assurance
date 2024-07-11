@@ -91,3 +91,6 @@ docs/corl/
 ray_logs/
 docker-compose-di2e.yml
 docker-compose-kr.yml
+
+# VS Code
+.vscode/

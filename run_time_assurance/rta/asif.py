@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import quadprog
 from jax import jacfwd, jit, lax, vmap
-from safe_autonomy_simulation.base_models import BaseControlAffineODESolverDynamics, BaseODESolverDynamics
+from safe_autonomy_simulation.dynamics import ControlAffineODEDynamics, ODEDynamics
 from scipy.optimize import minimize
 
 from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint, DiscreteCBFConstraint
@@ -960,7 +960,7 @@ def get_lower_bound_ineq_constraint_mats(bound: Union[int, float, np.ndarray, jn
     return c, b
 
 
-class ASIFODESolver(BaseControlAffineODESolverDynamics):
+class ASIFODESolver(ControlAffineODEDynamics):
     """Control Affine ODE solver for ASIF"""
 
     def __init__(self, integration_method, state_transition_system, state_transition_input, **kwargs):
@@ -1112,7 +1112,7 @@ class DiscreteASIFIntegratorModule(DiscreteASIFModule):
         raise NotImplementedError
 
 
-class DifferentiableODESolver(BaseODESolverDynamics):
+class DifferentiableODESolver(ODEDynamics):
     """Differentiable ODE solver for Discrete ASIF Module"""
 
     def __init__(self, state_dot_fn, **kwargs):
