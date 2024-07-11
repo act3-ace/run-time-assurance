@@ -1,4 +1,11 @@
-## 1.18.2 (2024-06-27)
+## 1.18.3 (2024-07-11)
+
+
+### Bug Fixes
+
+* **safe-autonomy-simulation:** upgrade to safe-autonomy-simulation v2 dynamics
+
+## ## 1.18.2 (2024-06-27)
 
 
 ### Bug Fixes
