@@ -1,3 +1,10 @@
+## [1.18.3](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.18.2...v1.18.3) (2024-7-19)
+
+
+### Bug Fixes
+
+* **safe-autonomy-simulation:** upgrade to safe-autonomy-simulation v2 dynamics ([02c0237](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/commit/02c0237af51570a1c49b0148a603c83c6bcc1135)), closes [#49](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/issues/49)
+
 ## [1.18.3](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.18.2...v1.18.3) (2024-7-11)
 
 
