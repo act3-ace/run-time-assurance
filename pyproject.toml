@@ -48,7 +48,7 @@ optional = true
 pytest = "^7.1.2"
 pytest-cov = "2.11.1"
 pyinstrument = "^4.3.0"
-twine = "^4.0.2"
+twine = "^5.1.1"
 coverage-badge = "^1.1.0"
 
 [tool.poetry.group.docs.dependencies]
