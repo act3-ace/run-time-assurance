@@ -59,29 +59,19 @@ class Integrator1dDockingRTAMixin:
     ):
         """Initializes docking specific properties from other class members"""
         self.dynamics = PointMassIntegratorDynamics(
-            m=m, mode="1d", integration_method=integration_method, use_jax=True
+            m=m,
+            mode="1d",
+            integration_method=integration_method,
         )
         self.A = jnp.array(self.dynamics.A)
         self.B = jnp.array(self.dynamics.B)
 
-        if integration_method == "RK45":
-            jit_compile_dict.setdefault("pred_state", False)
-            jit_compile_dict.setdefault("integrate", False)
-            if jit_compile_dict.get("pred_state"):
-                raise ValueError(
-                    "pred_state uses RK45 integration and can not be compiled using jit"
-                )
-            if jit_compile_dict.get("integrate"):
-                raise ValueError(
-                    "integrate uses RK45 integration and can not be compiled using jit"
-                )
-        elif integration_method in ("Euler", "RK45_JAX"):
-            jit_compile_dict.setdefault("pred_state", True)
-            jit_compile_dict.setdefault("integrate", True)
-        else:
-            raise ValueError(
-                "integration_method must be either RK45_JAX, RK45, or Euler"
-            )
+        assert (
+            integration_method in ("RK45", "Euler")
+        ), f"Invalid integration method {integration_method}, must be either 'RK45' or 'Euler'"
+
+        jit_compile_dict.setdefault("pred_state", True)
+        jit_compile_dict.setdefault("integrate", True)
 
     def _setup_docking_constraints_explicit(self) -> OrderedDict:
         """generates explicit constraints used in the docking problem"""
@@ -133,7 +123,7 @@ class Integrator1dDockingExplicitSwitchingRTA(
         backup controller object utilized by rta module to generate backup control.
         By default Integrator1dDockingBackupController
     integration_method: str, optional
-        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
+        Integration method to use, either 'RK45' or 'Euler'
     """
 
     def __init__(
@@ -198,7 +188,7 @@ class Integrator1dDockingImplicitSwitchingRTA(
         backup controller object utilized by rta module to generate backup control.
         By default Integrator1dDockingBackupController
     integration_method: str, optional
-        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
+        Integration method to use, either 'RK45' or 'Euler'
     """
 
     def __init__(
@@ -287,7 +277,7 @@ class Integrator1dDockingExplicitOptimizationRTA(
         )
 
     def _setup_properties(self):
-        self._setup_docking_properties(self.m, self.jit_compile_dict, "RK45_JAX")
+        self._setup_docking_properties(self.m, self.jit_compile_dict, "RK45")
 
     def _setup_constraints(self) -> OrderedDict:
         return self._setup_docking_constraints_explicit()
@@ -321,7 +311,7 @@ class Integrator1dDockingImplicitOptimizationRTA(
         backup controller object utilized by rta module to generate backup control.
         By default Integrator1dDockingBackupController
     integration_method: str, optional
-        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
+        Integration method to use, either 'RK45' or 'Euler'
     """
 
     def __init__(
