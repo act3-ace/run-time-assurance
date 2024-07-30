@@ -121,18 +121,27 @@ class Docking3dRTAMixin:
         self.B = jnp.array(B)
 
         self.dynamics = dynamics.LinearODEDynamics(
-            A=A,
-            B=B,
-            integration_method=integration_method,
+            A=A, B=B, integration_method=integration_method, use_jax=True
         )
 
-        assert integration_method in (
-            "Euler",
-            "RK45",
-        ), f"Invalid integration method {integration_method}, must be 'Euler' or 'RK45'"
-
-        jit_compile_dict.setdefault("pred_state", True)
-        jit_compile_dict.setdefault("integrate", True)
+        if integration_method == "RK45":
+            jit_compile_dict.setdefault("pred_state", False)
+            jit_compile_dict.setdefault("integrate", False)
+            if jit_compile_dict.get("pred_state"):
+                raise ValueError(
+                    "pred_state uses RK45 integration and can not be compiled using jit"
+                )
+            if jit_compile_dict.get("integrate"):
+                raise ValueError(
+                    "integrate uses RK45 integration and can not be compiled using jit"
+                )
+        elif integration_method in ("Euler", "RK45_JAX"):
+            jit_compile_dict.setdefault("pred_state", True)
+            jit_compile_dict.setdefault("integrate", True)
+        else:
+            raise ValueError(
+                "integration_method must be either RK45_JAX, RK45, or Euler"
+            )
 
     def _setup_docking_constraints(
         self,
@@ -216,7 +225,7 @@ class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
     jit_compile_dict: Dict[str, bool], optional
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     integration_method: str, optional
-        Integration method to use, either 'RK45' or 'Euler'
+        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -234,7 +243,7 @@ class Docking3dExplicitSwitchingRTA(ExplicitSimplexModule, Docking3dRTAMixin):
         control_bounds_low: float = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
-        integration_method: str = "RK45",
+        integration_method: str = "RK45_JAX",
         **kwargs,
     ):
         self.m = m
@@ -319,7 +328,7 @@ class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
     jit_compile_dict: Dict[str, bool], optional
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     integration_method: str, optional
-        Integration method to use, either 'RK45' or 'Euler'
+        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -338,7 +347,7 @@ class Docking3dImplicitSwitchingRTA(ImplicitSimplexModule, Docking3dRTAMixin):
         control_bounds_low: float = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
-        integration_method: str = "RK45",
+        integration_method: str = "RK45_JAX",
         **kwargs,
     ):
         self.m = m
@@ -463,7 +472,7 @@ class Docking3dExplicitOptimizationRTA(ExplicitASIFModule, Docking3dRTAMixin):
 
     def _setup_properties(self):
         self._setup_docking_properties(
-            self.m, self.n, self.v1_coef, self.jit_compile_dict, "RK45"
+            self.m, self.n, self.v1_coef, self.jit_compile_dict, "RK45_JAX"
         )
 
     def _setup_constraints(self) -> OrderedDict:
@@ -521,7 +530,7 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
     jit_compile_dict: Dict[str, bool], optional
         Dictionary specifying which subroutines will be jax jit compiled. Behavior defined in self.compose()
     integration_method: str, optional
-        Integration method to use, either 'RK45' or 'Euler'
+        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -540,7 +549,7 @@ class Docking3dImplicitOptimizationRTA(ImplicitASIFModule, Docking3dRTAMixin):
         control_bounds_low: float = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
-        integration_method: str = "RK45",
+        integration_method: str = "RK45_JAX",
         **kwargs,
     ):
         self.m = m

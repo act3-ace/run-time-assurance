@@ -467,7 +467,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
     backup_controller : RTABackupController
         backup controller object utilized by rta module to generate backup control
     integration_method: str, optional
-        Integration method to use, either 'RK45', or 'Euler'
+        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -475,7 +475,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         *args: Any,
         backup_window: float,
         backup_controller: RTABackupController,
-        integration_method: str = 'RK45',
+        integration_method: str = 'RK45_JAX',
         **kwargs: Any,
     ):
         self.backup_window = backup_window
@@ -517,7 +517,12 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         else:
             self._generate_ineq_constraint_mats_fn = self._generate_ineq_constraint_mats
 
-        default_int = True
+        if self.integration_method in ('Euler', 'RK45_JAX'):
+            default_int = True
+        elif self.integration_method == 'RK45':
+            default_int = False
+        else:
+            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
 
         if self.jit_enable and self.jit_compile_dict.get('pred_state', default_int):
             self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
@@ -961,7 +966,7 @@ class ASIFODESolver(ControlAffineODEDynamics):
     def __init__(self, integration_method, state_transition_system, state_transition_input, **kwargs):
         self.asif_state_transition_system = state_transition_system
         self.asif_state_transition_input = state_transition_input
-        super().__init__(integration_method=integration_method, **kwargs)
+        super().__init__(integration_method=integration_method, use_jax=True, **kwargs)
 
     def state_transition_system(self, state):
         return self.asif_state_transition_system(state)
@@ -1112,7 +1117,7 @@ class DifferentiableODESolver(ODEDynamics):
 
     def __init__(self, state_dot_fn, **kwargs):
         self.state_dot_fn = state_dot_fn
-        super().__init__(integration_method='RK45', **kwargs)
+        super().__init__(integration_method='RK45_JAX', use_jax=True, **kwargs)
 
     def _compute_state_dot(self, t, state, control):
         return self.state_dot_fn(t, state, control)
