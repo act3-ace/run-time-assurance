@@ -1,3 +1,10 @@
+## [1.18.4](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.18.3...v1.18.4) (2024-7-30)
+
+
+### Bug Fixes
+
+* **jax:** remove explicit jax flags for sim api ([3aec43d](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/commit/3aec43dcda2ee621eb9371236d6429096487fc0e))
+
 ## [1.18.3](https://git.act3-ace.com/rta/safe-autonomy-stack/run-time-assurance/compare/v1.18.2...v1.18.3) (2024-7-19)
 
 
