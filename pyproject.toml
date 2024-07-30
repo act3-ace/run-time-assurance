@@ -27,8 +27,9 @@ jax = { version = "0.4.26", extras = ["cpu"] }
 numpy = "^1.23.5"
 matplotlib = "^3.8.0"
 quadprog = "^0.1.11"
-safe-autonomy-simulation = {version = "^2.0.5", source = "safe-autonomy-simulation"}
 pydantic = "^2.8.0"
+safe-autonomy-simulation = "^2.0.12"
+pyqt6 = "^6.7.1"
 
 [tool.poetry.group.lint.dependencies]
 pylint = "2.15.4"
@@ -70,11 +71,6 @@ pymdown-extensions = "^9.5"
 pytkdocs = { version = ">=0.5.0", extras = ["numpy-style"] }
 mkdocstrings-python-legacy = "^0.2.1"
 
-
-[[tool.poetry.source]]
-name = "safe-autonomy-simulation"
-url = "https://git.act3-ace.com/api/v4/projects/1247/packages/pypi/simple"
-priority = "supplemental"
 
 [build-system]
 requires = ["poetry-core"]
