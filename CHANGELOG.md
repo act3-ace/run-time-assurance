@@ -1,73 +1,59 @@
-## [1.16.2](https://github.com/act3-ace/run-time-assurance/compare/v1.16.1...v1.16.2) (2024-07-31)
+## 1.18.3 (2024-07-11)
 
 
 ### Bug Fixes
 
-* **jax:** remove explicit jax flags for new sim api ([50136cb](https://github.com/act3-ace/run-time-assurance/commit/50136cbbd527d9672d99a23763036db4ad5c7711))
+* **safe-autonomy-simulation:** upgrade to safe-autonomy-simulation v2 dynamics
 
-## [1.18.3]() (2024-7-19)
-
-
-### Bug Fixes
-
-* **safe-autonomy-simulation:** upgrade to safe-autonomy-simulation v2 dynamics ([02c0237]()), closes [#49]()
-
-## [1.18.3]() (2024-7-11)
+## ## 1.18.2 (2024-06-27)
 
 
 ### Bug Fixes
 
-* **safe-autonomy-simulation:** upgrade to safe-autonomy-simulation v2 dynamics ([02c0237]()), closes [#49]()
+* integrator tutorial updates
 
-## [1.18.2]() (2024-6-27)
-
-
-### Bug Fixes
-
-* integrator tutorial updates ([4885287]())
-
-## [1.18.1]() (2024-6-26)
+## 1.18.1 (2024-06-26)
 
 
 ### Bug Fixes
 
-* add params to integrator constraints ([38b484c]())
+* add params to integrator constraints
 
-# [1.18.0]() (2024-6-24)
+# 1.18.0 (2024-06-24)
 
 
 ### Features
 
-* Track constraints that cause intervention ([5926b23]())
+* Track constraints that cause intervention
 
-# [1.17.0]() (2024-4-15)
-
-
-### Features
-
-* **sim:** change sim backend to safe-autonomy-simulation ([562829c]()), closes [#48]()
-
-## [1.16.1]() (2024-4-5)
-
-
-### Bug Fixes
-
-* bump jax verstion to 0.4.26 ([80908f5]())
-* **dependencies:** updated safe-autonomy-dynamics to 1.2.3 with jax extra ([8a1e0d4]())
-
-# [1.16.0]() (2024-3-4)
+# 1.17.0 (2024-04-15)
 
 
 ### Features
 
-* Dynamically changing parameters ([5791dad]())
+* **sim:** change sim backend to safe-autonomy-simulation
 
-## 1.15.3 (2023-09-21)
+## [1.16.1](https://github.com/act3-ace/run-time-assurance/compare/v1.16.0...v1.16.1) (2024-04-05)
 
 
 ### Bug Fixes
 
-* **requirements:** update required sa-dynamics version to 0.13.2 96254f6
+* bump jax verstion to 0.4.26 ([7e9688a](https://github.com/act3-ace/run-time-assurance/commit/7e9688a671cfdd5d445dffbbd41610f2fabced26))
+* **dependencies:** updated safe-autonomy-dynamics to 1.2.3 with jax extra ([b4c077d](https://github.com/act3-ace/run-time-assurance/commit/b4c077d04417a65d29af6cb7efdc0df0956410c3))
+
+# [1.16.0](https://github.com/act3-ace/run-time-assurance/compare/v1.15.3...v1.16.0) (2024-03-26)
+
+
+### Features
+
+* Dynamically changing parameters ([2d4aa95](https://github.com/act3-ace/run-time-assurance/commit/2d4aa95e818b0d901632882aec40bff017526c6d))
+
+## [1.15.3](https://github.com/act3-ace/run-time-assurance/compare/v1.15.2...v1.15.3) (2024-01-10)
+
+
+### Bug Fixes
+
+* **requirements:** update required sa-dynamics version to 0.13.2 ([2842994](https://github.com/act3-ace/run-time-assurance/commit/284299422aac33c222291b25242e281fa701b3be))
 
 ## 1.15.2 (2023-09-20)
 
@@ -168,132 +154,132 @@
 
 * removed semantic release commit message repo links c37d7b6
 
-## [1.10.1](https://github.com/act3-ace/run-time-assurance/compare/v1.10.0...v1.10.1) (2023-03-28)
+## 1.10.1 (2023-03-28)
 
 
 ### Bug Fixes
 
-* use jax 0.4.3 ([305f017](https://github.com/act3-ace/run-time-assurance/commit/305f0171fc020bab523f22036031451a743e9d34))
+* use jax 0.4.3
 
-# [1.10.0](https://github.com/act3-ace/run-time-assurance/compare/v1.9.2...v1.10.0) (2023-03-16)
+# 1.10.0 (2023-03-16)
 
 
 ### Features
 
-* Created SA-Dynamics ASIF ode solver with support for jax ode integration ([1b45175](https://github.com/act3-ace/run-time-assurance/commit/1b45175f5cf3cf4277e08bda8e713d03f75ce432))
+* Created SA-Dynamics ASIF ode solver with support for jax ode integration
 
-## [1.9.2](https://github.com/act3-ace/run-time-assurance/compare/v1.9.1...v1.9.2) (2023-03-15)
+## 1.9.2 (2023-03-15)
 
 
 ### Bug Fixes
 
-* Refactor tests to use DataTrackingSampleTestingModule ([4f848bc](https://github.com/act3-ace/run-time-assurance/commit/4f848bcc2374f1db6c033836a4ba0e113fb256c0))
+* Refactor tests to use DataTrackingSampleTestingModule
 
-## [1.9.1](https://github.com/act3-ace/run-time-assurance/compare/v1.9.0...v1.9.1) (2023-03-01)
-
-
-### Bug Fixes
-
-* Use jnp array instead of list for PSM ([f60d869](https://github.com/act3-ace/run-time-assurance/commit/f60d869a0c52ab1f0e2b6ede91457fed0429556c))
-
-# [1.9.0](https://github.com/act3-ace/run-time-assurance/compare/v1.8.0...v1.9.0) (2023-01-25)
-
-
-### Features
-
-* **constraint:** Created inequality constraint class that can be added to QP ([e60fb7f](https://github.com/act3-ace/run-time-assurance/commit/e60fb7fefe97cb00499f1720aa47fe48dc83c38e))
-
-# [1.8.0](https://github.com/act3-ace/run-time-assurance/compare/v1.7.0...v1.8.0) (2023-01-24)
-
-
-### Features
-
-* **constraint:** Resolve "Incorporate exponential/high order CBFs" ([66e53aa](https://github.com/act3-ace/run-time-assurance/commit/66e53aa78c7b7671fe017ae56b8e026e09a58b11))
-* **jit:** Disable jit and vmap for debugging ([45359db](https://github.com/act3-ace/run-time-assurance/commit/45359dbe97010a5eca24d30e58219a8050bfa882))
-
-# [1.7.0](https://github.com/act3-ace/run-time-assurance/compare/v1.6.0...v1.7.0) (2023-01-24)
-
-
-### Features
-
-* **zoo:** 1d Integrator RTA ([b6448c9](https://github.com/act3-ace/run-time-assurance/commit/b6448c987e31c6b5d33c4c41d6077a346896a3b5))
-
-# [1.6.0](https://github.com/act3-ace/run-time-assurance/compare/v1.5.0...v1.6.0) (2023-01-18)
-
-
-### Features
-
-* **logging:** constraint values are logged by rta modules ([0a253b3](https://github.com/act3-ace/run-time-assurance/commit/0a253b360bb6f107c58c20a099e523329afc5e29))
-
-# [1.5.0](https://github.com/act3-ace/run-time-assurance/compare/v1.4.0...v1.5.0) (2023-01-16)
-
-
-### Features
-
-* **implicit asif:** Fix subsample_constraints for implicit ASIF ([4f6a7f4](https://github.com/act3-ace/run-time-assurance/commit/4f6a7f4cc2ddee25c6c9c81c90efd014a47010b3))
-
-# [1.4.0](https://github.com/act3-ace/run-time-assurance/compare/v1.3.0...v1.4.0) (2023-01-16)
-
-
-### Features
-
-* **dynamics:** Default ASIF predicted state method ([e052c7c](https://github.com/act3-ace/run-time-assurance/commit/e052c7c403f8dcbd22a9ffc7d0008b0af2c35339))
-
-# [1.3.0](https://github.com/act3-ace/run-time-assurance/compare/v1.2.0...v1.3.0) (2022-11-14)
-
-
-### Features
-
-* **zoo:** Inspection RTA ([d5c489f](https://github.com/act3-ace/run-time-assurance/commit/d5c489f809b99e619537469f57253c0a75359003))
-
-# [1.2.0](https://github.com/act3-ace/run-time-assurance/compare/v1.1.1...v1.2.0) (2022-11-01)
-
-
-### Features
-
-* **constraint:** constraint bias and monte carlo compat ([941f7e5](https://github.com/act3-ace/run-time-assurance/commit/941f7e56e8feb8b1ea17f52e2ef5ed29e5b3ad03))
-
-## [1.1.1](https://github.com/act3-ace/run-time-assurance/compare/v1.1.0...v1.1.1) (2022-08-18)
+## 1.9.1 (2023-03-01)
 
 
 ### Bug Fixes
 
-* **setup.py:** fix versioning ([89ead8e](https://github.com/act3-ace/run-time-assurance/commit/89ead8e99ea28f0c1b8932e6d64f457185553cee))
+* Use jnp array instead of list for PSM
 
-# [1.1.0](https://github.com/act3-ace/run-time-assurance/compare/v1.0.0...v1.1.0) (2022-08-18)
-
-
-### Bug Fixes
-
-* add version stuff for package ([a74ffcf](https://github.com/act3-ace/run-time-assurance/commit/a74ffcf565518644499c55930ec2fa5b47e0a5c5))
-* **Dockerfiel:** typo ([5616740](https://github.com/act3-ace/run-time-assurance/commit/5616740fed9cd888c1ff2778597fc8dc8cace092))
-* **Dockerfile:** add temp version for build to pass ([8ffe626](https://github.com/act3-ace/run-time-assurance/commit/8ffe626369643a92bd1394d57ab66cae0e1c5a3b))
-* **Dockerfile:** explicitly name version ([ed580c7](https://github.com/act3-ace/run-time-assurance/commit/ed580c708d575bbcd6c32a1ff829c9133f1fb4d8))
-* **Dockerfile:** minor typo fixes ([821983a](https://github.com/act3-ace/run-time-assurance/commit/821983a2919312292deb28be0ecfd66531628548))
-* **Dockerfile:** replace content ([6abedd2](https://github.com/act3-ace/run-time-assurance/commit/6abedd2ec65ecd8a2698fa95269b1743a8ba6dab))
-* **Dockerfile:** stupid computer ([9736db0](https://github.com/act3-ace/run-time-assurance/commit/9736db0167ac8cf5aadfbe8bc9fc7f9b92ce7615))
-* **Dockerfile:** try again with arg ([4caa7be](https://github.com/act3-ace/run-time-assurance/commit/4caa7be727b6080e523a1ab20fd2313be4523946))
-* **Dockerfile:** typo ([b03bbb3](https://github.com/act3-ace/run-time-assurance/commit/b03bbb3f7391b7cb442f068363730c5691688715))
-* **dockerfile:** updat version ([5267338](https://github.com/act3-ace/run-time-assurance/commit/5267338eb3d471db5bc66c75d387798eac1c8cd4))
-* **Dockerfile:** update for package dependencies, remove git clone ([334c3f3](https://github.com/act3-ace/run-time-assurance/commit/334c3f39ec02b9dd2b120b826d480b93cabc6ded))
-* **Dockerfile:** update for sa-dynamics changes ([7b27c2d](https://github.com/act3-ace/run-time-assurance/commit/7b27c2d9c6ba484669150e976d9672be0f8fd165))
-* **docker:** update sa dynamics to 0.3.0 ([c01ee32](https://github.com/act3-ace/run-time-assurance/commit/c01ee3294ded7be264162d5a03f0926e19bfb76f))
-* **gitlab-ci:** image dep for mkkdocs ([7c77d83](https://github.com/act3-ace/run-time-assurance/commit/7c77d8335060ec8f315afa7c0328839c3b27ed9a))
-* **gitlab-ci:** no allow fail on mkdocs ([159f925](https://github.com/act3-ace/run-time-assurance/commit/159f92567020650a46423edd3685e4a99597d4ae))
-* **gitlab-ci:** update cicd ([f1fc16b](https://github.com/act3-ace/run-time-assurance/commit/f1fc16b374100e7446c8e3fa6a628294da72958c))
-* **gitlab-ci:** update mkdocs ([cc3a506](https://github.com/act3-ace/run-time-assurance/commit/cc3a506084ed35fc15a72789a02b9b497d575496))
-* **gitlab-ci:** update mkdocs image ([52e9bc0](https://github.com/act3-ace/run-time-assurance/commit/52e9bc0f337ff94bb6c0abb0103f8df6cbd9c676))
-* image path ([0934e18](https://github.com/act3-ace/run-time-assurance/commit/0934e18c520111ea3d8a25778b10c90c8a69eb9a))
-* more mkdocds fix ([a119ad0](https://github.com/act3-ace/run-time-assurance/commit/a119ad01bad7028a580dd746836edc451dd6bd53))
-* pin mkdocsstrings ([14cdd73](https://github.com/act3-ace/run-time-assurance/commit/14cdd73eed46fa1631c3f2c233dc0c59328aa3eb))
-* **pylint:** fix pylint errors ([e16d75d](https://github.com/act3-ace/run-time-assurance/commit/e16d75d77c93e1f364da1659fdb75bbcfd0f8ba9))
-* remove version file and lint disable ([46d10e8](https://github.com/act3-ace/run-time-assurance/commit/46d10e85660bdc909a00d23b64a17812a82d0299))
-* semantic release files ([37cc3cf](https://github.com/act3-ace/run-time-assurance/commit/37cc3cf37c988cfb25b5b075e4e02bfe2c8530bf))
-* try old mkdocs ([4bde0ab](https://github.com/act3-ace/run-time-assurance/commit/4bde0ab9fd4e6dac613212c039cbd349f9746c10))
-* updat mkdocs to allow failure ([b4c48fb](https://github.com/act3-ace/run-time-assurance/commit/b4c48fb6cf1104b684d2f583cc2237a044b9cfdd))
-* update semantic release items ([bd02af1](https://github.com/act3-ace/run-time-assurance/commit/bd02af1237cc2c2c59add29e919aa0d6823ae513))
+# 1.9.0 (2023-01-25)
 
 
 ### Features
 
-* **Dockerfile:** update Dockerfile verrsion ([cb5cc93](https://github.com/act3-ace/run-time-assurance/commit/cb5cc93374a43c79ea5dcf054217b6faf0231b7b))
+* **constraint:** Created inequality constraint class that can be added to QP
+
+# 1.8.0 (2023-01-24)
+
+
+### Features
+
+* **constraint:** Resolve "Incorporate exponential/high order CBFs"
+* **jit:** Disable jit and vmap for debugging
+
+# 1.7.0 (2023-01-24)
+
+
+### Features
+
+* **zoo:** 1d Integrator RTA
+
+# 1.6.0 (2023-01-18)
+
+
+### Features
+
+* **logging:** constraint values are logged by rta modules
+
+# 1.5.0 (2023-01-16)
+
+
+### Features
+
+* **implicit asif:** Fix subsample_constraints for implicit ASIF
+
+# 1.4.0 (2023-01-16)
+
+
+### Features
+
+* **dynamics:** Default ASIF predicted state method
+
+# 1.3.0 (2022-11-14)
+
+
+### Features
+
+* **zoo:** Inspection RTA
+
+# 1.2.0 (2022-11-01)
+
+
+### Features
+
+* **constraint:** constraint bias and monte carlo compat
+
+## 1.1.1 (2022-08-18)
+
+
+### Bug Fixes
+
+* **setup.py:** fix versioning
+
+# 1.1.0 (2022-08-18)
+
+
+### Bug Fixes
+
+* add version stuff for package
+* **Dockerfiel:** typo
+* **Dockerfile:** add temp version for build to pass
+* **Dockerfile:** explicitly name version
+* **Dockerfile:** minor typo fixes
+* **Dockerfile:** replace content
+* **Dockerfile:** stupid computer
+* **Dockerfile:** try again with arg
+* **Dockerfile:** typo
+* **dockerfile:** updat version
+* **Dockerfile:** update for package dependencies, remove git clone
+* **Dockerfile:** update for sa-dynamics changes
+* **docker:** update sa dynamics to 0.3.0
+* **gitlab-ci:** image dep for mkkdocs
+* **gitlab-ci:** no allow fail on mkdocs
+* **gitlab-ci:** update cicd
+* **gitlab-ci:** update mkdocs
+* **gitlab-ci:** update mkdocs image
+* image path
+* more mkdocds fix
+* pin mkdocsstrings
+* **pylint:** fix pylint errors
+* remove version file and lint disable
+* semantic release files
+* try old mkdocs
+* updat mkdocs to allow failure
+* update semantic release items
+
+
+### Features
+
+* **Dockerfile:** update Dockerfile verrsion

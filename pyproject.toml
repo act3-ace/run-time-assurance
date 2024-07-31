@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "run-time-assurance"
-version = "1.16.2"
+version = "1.18.3"
 description = "The run-time-assurance library provides an interface and implementations for Run Time Assurance (RTA) safety filters."
 authors = [
     "Charles Keating <Charles.Keating@udri.udayton.edu>",
@@ -9,7 +9,7 @@ license = ""
 readme = "README.md"
 homepage = "https://github.com/act3-ace/run-time-assurance.git"
 repository = "https://github.com/act3-ace/run-time-assurance.git"
-documentation = "https://github.com/act3-ace/run-time-assurance/docs"
+documentation = 'https://github.com/act3-ace/run-time-assurance/docs'
 keywords = []
 include = ["docs/*"]
 classifiers = [
