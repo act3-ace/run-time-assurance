@@ -6,7 +6,7 @@ from functools import partial
 from jax import jit
 from jax.experimental.ode import odeint
 import jax.numpy as jnp
-from run_time_assurance.zoo.cwh.utils import generate_cwh_matrices
+from safe_autonomy_dynamics.cwh import generate_cwh_matrices
 from run_time_assurance.zoo.cwh.inspection_3d import CombinedInspectionRTA, InspectionRTA
 from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
 import os
