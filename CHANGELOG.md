@@ -1,3 +1,10 @@
+## [1.18.4](https://github.com/act3-ace/run-time-assurance/compare/v1.18.3...v1.18.4) (2024-07-31)
+
+
+### Bug Fixes
+
+* **jax:** remove explicit jax flags for sim api ([0fa1444](https://github.com/act3-ace/run-time-assurance/commit/0fa144400f03c229242e184e89c19fbf337c79d8))
+
 ## 1.18.3 (2024-07-11)
 
 
