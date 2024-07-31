@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import quadprog
 from jax import jacfwd, jit, lax, vmap
-from safe_autonomy_dynamics.base_models import BaseControlAffineODESolverDynamics, BaseODESolverDynamics
+from safe_autonomy_simulation.dynamics import ControlAffineODEDynamics, ODEDynamics
 from scipy.optimize import minimize
 
 from run_time_assurance.constraint import ConstraintModule, DirectInequalityConstraint, DiscreteCBFConstraint
@@ -86,6 +86,7 @@ class ASIFModule(BaseOptimizationModule):
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
 
+        self.constraint_names = []
         self.ineq_weight_actuation, self.ineq_constant_actuation = self._generate_actuation_constraint_mats()
 
         self.direct_inequality_constraints = self._setup_direct_constraints()
@@ -93,6 +94,8 @@ class ASIFModule(BaseOptimizationModule):
         self.direct_inequality_params = dict.fromkeys(self.direct_inequality_constraints.keys())
         self.direct_inequality_enabled_dict = dict.fromkeys(self.direct_inequality_constraints.keys())
         self._update_direct_inequality_params()
+        self.constraints_causing_intervention = None
+        self.constraint_names += list(self.constraints.keys()) + list(self.direct_inequality_constraints.keys())
 
     def _update_direct_inequality_params(self):
         """Update the parameters for each constraint"""
@@ -151,6 +154,8 @@ class ASIFModule(BaseOptimizationModule):
             c = jnp.hstack((c, jnp.zeros((self.control_dim, self.num_slack))))
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
+            for i in range(self.control_dim):
+                self.constraint_names.append('u' + str(i + 1) + '_min')
 
         if self.control_bounds_high is not None:
             c, b = get_lower_bound_ineq_constraint_mats(self.control_bounds_high, self.control_dim)
@@ -159,6 +164,8 @@ class ASIFModule(BaseOptimizationModule):
             c = jnp.hstack((c, jnp.zeros((self.control_dim, self.num_slack))))
             ineq_weight = jnp.vstack((ineq_weight, c))
             ineq_constant = jnp.concatenate((ineq_constant, b))
+            for i in range(self.control_dim):
+                self.constraint_names.append('u' + str(i + 1) + '_max')
 
         return ineq_weight, ineq_constant
 
@@ -239,17 +246,26 @@ class ASIFModule(BaseOptimizationModule):
         try:
             opt = quadprog.solve_qp(
                 obj_weight, obj_constant, np.array(ineq_weight, dtype=np.float64), np.array(ineq_constant, dtype=np.float64), 0
-            )[0]
+            )
+            u = opt[0]
+
+            # Get constraints causing intervention
+            self.constraints_causing_intervention = []
+            for i in opt[5]:
+                key = self.constraint_names[i - 1]
+                if key not in self.constraints_causing_intervention:
+                    self.constraints_causing_intervention.append(key)
+
         except ValueError as e:
             if e.args[0] == "constraints are inconsistent, no solution":
                 if not self.solver_exception:
                     warnings.warn(SolverWarning())
-                    opt = obj_constant
+                    u = obj_constant
                 else:
                     raise SolverError() from e
             else:
                 raise e
-        return opt[0:self.control_dim]
+        return u[0:self.control_dim]
 
     @abc.abstractmethod
     def _generate_barrier_constraint_mats(self, state: jnp.ndarray, step_size: float, params: dict,
@@ -451,7 +467,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
     backup_controller : RTABackupController
         backup controller object utilized by rta module to generate backup control
     integration_method: str, optional
-        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
+        Integration method to use, either 'RK45', or 'Euler'
     """
 
     def __init__(
@@ -459,7 +475,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         *args: Any,
         backup_window: float,
         backup_controller: RTABackupController,
-        integration_method: str = 'RK45_JAX',
+        integration_method: str = 'RK45',
         **kwargs: Any,
     ):
         self.backup_window = backup_window
@@ -501,12 +517,7 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         else:
             self._generate_ineq_constraint_mats_fn = self._generate_ineq_constraint_mats
 
-        if self.integration_method in ('Euler', 'RK45_JAX'):
-            default_int = True
-        elif self.integration_method == 'RK45':
-            default_int = False
-        else:
-            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
+        default_int = True
 
         if self.jit_enable and self.jit_compile_dict.get('pred_state', default_int):
             self._pred_state_fn = jit(self._pred_state, static_argnames=['step_size'])
@@ -583,6 +594,17 @@ class ImplicitASIFModule(ASIFModule, BackupControlBasedRTA):
         ineq_weight, ineq_constant = self._generate_ineq_constraint_mats_fn(
             state, num_steps, traj_states, traj_sensitivities, params, constraint_enabled_dict
         )
+
+        # Fix constraint names:
+        idx = 0
+        if self.control_bounds_low is not None:
+            idx += self.control_dim
+        if self.control_bounds_high is not None:
+            idx += self.control_dim
+        self.constraint_names = self.constraint_names[0:idx]
+        for k in self.constraints.keys():
+            self.constraint_names += [k] * num_steps
+        self.constraint_names += list(self.direct_inequality_constraints.keys())
 
         return ineq_weight, ineq_constant
 
@@ -933,13 +955,13 @@ def get_lower_bound_ineq_constraint_mats(bound: Union[int, float, np.ndarray, jn
     return c, b
 
 
-class ASIFODESolver(BaseControlAffineODESolverDynamics):
+class ASIFODESolver(ControlAffineODEDynamics):
     """Control Affine ODE solver for ASIF"""
 
     def __init__(self, integration_method, state_transition_system, state_transition_input, **kwargs):
         self.asif_state_transition_system = state_transition_system
         self.asif_state_transition_input = state_transition_input
-        super().__init__(integration_method=integration_method, use_jax=True, **kwargs)
+        super().__init__(integration_method=integration_method, **kwargs)
 
     def state_transition_system(self, state):
         return self.asif_state_transition_system(state)
@@ -1085,12 +1107,12 @@ class DiscreteASIFIntegratorModule(DiscreteASIFModule):
         raise NotImplementedError
 
 
-class DifferentiableODESolver(BaseODESolverDynamics):
+class DifferentiableODESolver(ODEDynamics):
     """Differentiable ODE solver for Discrete ASIF Module"""
 
     def __init__(self, state_dot_fn, **kwargs):
         self.state_dot_fn = state_dot_fn
-        super().__init__(integration_method='RK45_JAX', use_jax=True, **kwargs)
+        super().__init__(integration_method='RK45', **kwargs)
 
     def _compute_state_dot(self, t, state, control):
         return self.state_dot_fn(t, state, control)

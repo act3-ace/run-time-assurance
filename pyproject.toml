@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "run-time-assurance"
-version = "1.16.1"
+version = "1.18.4"
 description = "The run-time-assurance library provides an interface and implementations for Run Time Assurance (RTA) safety filters."
 authors = [
     "Charles Keating <Charles.Keating@udri.udayton.edu>",
@@ -9,7 +9,7 @@ license = ""
 readme = "README.md"
 homepage = "https://github.com/act3-ace/run-time-assurance.git"
 repository = "https://github.com/act3-ace/run-time-assurance.git"
-documentation = 'https://github.com/act3-ace/run-time-assurance/docs'
+documentation = "https://github.com/act3-ace/run-time-assurance/docs"
 keywords = []
 include = ["docs/*"]
 classifiers = [
@@ -23,11 +23,13 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.9, <3.13"
 scipy = ">=1.10.0"
-safe-autonomy-dynamics = { version="^1.2.0", extras = ["jax"] }
 jax = { version = "0.4.26", extras = ["cpu"] }
 numpy = "^1.23.5"
 matplotlib = "^3.8.0"
 quadprog = "^0.1.11"
+pydantic = "^2.8.0"
+safe-autonomy-simulation = "^2.0.12"
+pyqt6 = "^6.7.1"
 
 [tool.poetry.group.lint.dependencies]
 pylint = "2.15.4"
@@ -47,7 +49,7 @@ optional = true
 pytest = "^7.1.2"
 pytest-cov = "2.11.1"
 pyinstrument = "^4.3.0"
-twine = "^4.0.2"
+twine = "^5.1.1"
 coverage-badge = "^1.1.0"
 
 [tool.poetry.group.docs.dependencies]
@@ -68,6 +70,7 @@ Pillow = "^9.2.0"
 pymdown-extensions = "^9.5"
 pytkdocs = { version = ">=0.5.0", extras = ["numpy-style"] }
 mkdocstrings-python-legacy = "^0.2.1"
+
 
 [build-system]
 requires = ["poetry-core"]

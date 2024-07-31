@@ -1,16 +1,27 @@
-"""This module implements RTA methods for the 1D integrator problem applied to spacecraft docking
-"""
+"""This module implements RTA methods for the 1D integrator problem applied to spacecraft docking"""
+
 from collections import OrderedDict
 from typing import Dict, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
-from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
-from safe_autonomy_dynamics.integrators import M_DEFAULT, generate_dynamics_matrices
+from safe_autonomy_simulation.entities.integrator import (
+    M_DEFAULT,
+    PointMassIntegratorDynamics,
+)
 
-from run_time_assurance.constraint import ConstraintModule, ConstraintStrengthener, PolynomialConstraintStrengthener
+from run_time_assurance.constraint import (
+    ConstraintModule,
+    ConstraintStrengthener,
+    PolynomialConstraintStrengthener,
+)
 from run_time_assurance.controller import RTABackupController
-from run_time_assurance.rta import ExplicitASIFModule, ExplicitSimplexModule, ImplicitASIFModule, ImplicitSimplexModule
+from run_time_assurance.rta import (
+    ExplicitASIFModule,
+    ExplicitSimplexModule,
+    ImplicitASIFModule,
+    ImplicitSimplexModule,
+)
 from run_time_assurance.state import RTAStateWrapper
 
 
@@ -43,35 +54,47 @@ class Integrator1dDockingRTAMixin:
     Must call mixin methods using the RTA interface methods
     """
 
-    def _setup_docking_properties(self, m: float, jit_compile_dict: Dict[str, bool], integration_method: str):
+    def _setup_docking_properties(
+        self, m: float, jit_compile_dict: Dict[str, bool], integration_method: str
+    ):
         """Initializes docking specific properties from other class members"""
-        A, B = generate_dynamics_matrices(m=m, mode='1d')
-        self.A = jnp.array(A)
-        self.B = jnp.array(B)
-        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method=integration_method, use_jax=True)
+        self.dynamics = PointMassIntegratorDynamics(
+            m=m,
+            mode="1d",
+            integration_method=integration_method,
+        )
+        self.A = jnp.array(self.dynamics.A)
+        self.B = jnp.array(self.dynamics.B)
 
-        if integration_method == 'RK45':
-            jit_compile_dict.setdefault('pred_state', False)
-            jit_compile_dict.setdefault('integrate', False)
-            if jit_compile_dict.get('pred_state'):
-                raise ValueError('pred_state uses RK45 integration and can not be compiled using jit')
-            if jit_compile_dict.get('integrate'):
-                raise ValueError('integrate uses RK45 integration and can not be compiled using jit')
-        elif integration_method in ('Euler', 'RK45_JAX'):
-            jit_compile_dict.setdefault('pred_state', True)
-            jit_compile_dict.setdefault('integrate', True)
-        else:
-            raise ValueError('integration_method must be either RK45_JAX, RK45, or Euler')
+        assert (
+            integration_method in ("RK45", "Euler")
+        ), f"Invalid integration method {integration_method}, must be either 'RK45' or 'Euler'"
+
+        jit_compile_dict.setdefault("pred_state", True)
+        jit_compile_dict.setdefault("integrate", True)
 
     def _setup_docking_constraints_explicit(self) -> OrderedDict:
         """generates explicit constraints used in the docking problem"""
-        return OrderedDict([('rel_vel', ConstraintIntegrator1dDockingCollisionExplicit())])
+        return OrderedDict(
+            [("rel_vel", ConstraintIntegrator1dDockingCollisionExplicit())]
+        )
 
     def _setup_docking_constraints_implicit(self) -> OrderedDict:
         """generates implicit constraints used in the docking problem"""
-        return OrderedDict([('rel_vel', ConstraintIntegrator1dDockingCollisionImplicit(subsample_constraints_num_least=1))])
+        return OrderedDict(
+            [
+                (
+                    "rel_vel",
+                    ConstraintIntegrator1dDockingCollisionImplicit(
+                        subsample_constraints_num_least=1
+                    ),
+                )
+            ]
+        )
 
-    def _docking_pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+    def _docking_pred_state(
+        self, state: jnp.ndarray, step_size: float, control: jnp.ndarray
+    ) -> jnp.ndarray:
         """Predicts the next state given the current state and control action"""
         out, _ = self.dynamics.step(step_size, state, control)
         return out
@@ -85,7 +108,9 @@ class Integrator1dDockingRTAMixin:
         return jnp.copy(self.B)
 
 
-class Integrator1dDockingExplicitSwitchingRTA(ExplicitSimplexModule, Integrator1dDockingRTAMixin):
+class Integrator1dDockingExplicitSwitchingRTA(
+    ExplicitSimplexModule, Integrator1dDockingRTAMixin
+):
     """Implements Explicit Switching RTA for the Integrator 1d Docking problem
 
     Parameters
@@ -98,7 +123,7 @@ class Integrator1dDockingExplicitSwitchingRTA(ExplicitSimplexModule, Integrator1
         backup controller object utilized by rta module to generate backup control.
         By default Integrator1dDockingBackupController
     integration_method: str, optional
-        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
+        Integration method to use, either 'RK45' or 'Euler'
     """
 
     def __init__(
@@ -109,8 +134,8 @@ class Integrator1dDockingExplicitSwitchingRTA(ExplicitSimplexModule, Integrator1
         control_bounds_low: Union[float, np.ndarray] = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
-        integration_method: str = 'Euler',
-        **kwargs
+        integration_method: str = "Euler",
+        **kwargs,
     ):
         self.m = m
         self.integration_method = integration_method
@@ -119,7 +144,7 @@ class Integrator1dDockingExplicitSwitchingRTA(ExplicitSimplexModule, Integrator1
             backup_controller = Integrator1dDockingBackupController()
 
         if jit_compile_dict is None:
-            jit_compile_dict = {'constraint_violation': True}
+            jit_compile_dict = {"constraint_violation": True}
 
         super().__init__(
             *args,
@@ -127,20 +152,26 @@ class Integrator1dDockingExplicitSwitchingRTA(ExplicitSimplexModule, Integrator1
             control_bounds_low=control_bounds_low,
             backup_controller=backup_controller,
             jit_compile_dict=jit_compile_dict,
-            **kwargs
+            **kwargs,
         )
 
     def _setup_properties(self):
-        self._setup_docking_properties(self.m, self.jit_compile_dict, self.integration_method)
+        self._setup_docking_properties(
+            self.m, self.jit_compile_dict, self.integration_method
+        )
 
     def _setup_constraints(self) -> OrderedDict:
         return self._setup_docking_constraints_explicit()
 
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+    def _pred_state(
+        self, state: jnp.ndarray, step_size: float, control: jnp.ndarray
+    ) -> jnp.ndarray:
         return self._docking_pred_state(state, step_size, control)
 
 
-class Integrator1dDockingImplicitSwitchingRTA(ImplicitSimplexModule, Integrator1dDockingRTAMixin):
+class Integrator1dDockingImplicitSwitchingRTA(
+    ImplicitSimplexModule, Integrator1dDockingRTAMixin
+):
     """Implements Implicit Switching RTA for the Integrator 1d Docking problem
 
     Parameters
@@ -157,7 +188,7 @@ class Integrator1dDockingImplicitSwitchingRTA(ImplicitSimplexModule, Integrator1
         backup controller object utilized by rta module to generate backup control.
         By default Integrator1dDockingBackupController
     integration_method: str, optional
-        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
+        Integration method to use, either 'RK45' or 'Euler'
     """
 
     def __init__(
@@ -169,8 +200,8 @@ class Integrator1dDockingImplicitSwitchingRTA(ImplicitSimplexModule, Integrator1
         control_bounds_low: Union[float, np.ndarray] = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
-        integration_method: str = 'Euler',
-        **kwargs
+        integration_method: str = "Euler",
+        **kwargs,
     ):
         self.m = m
         self.integration_method = integration_method
@@ -179,7 +210,7 @@ class Integrator1dDockingImplicitSwitchingRTA(ImplicitSimplexModule, Integrator1
             backup_controller = Integrator1dDockingBackupController()
 
         if jit_compile_dict is None:
-            jit_compile_dict = {'constraint_violation': True}
+            jit_compile_dict = {"constraint_violation": True}
 
         super().__init__(
             *args,
@@ -188,20 +219,26 @@ class Integrator1dDockingImplicitSwitchingRTA(ImplicitSimplexModule, Integrator1
             control_bounds_high=control_bounds_high,
             control_bounds_low=control_bounds_low,
             jit_compile_dict=jit_compile_dict,
-            **kwargs
+            **kwargs,
         )
 
     def _setup_properties(self):
-        self._setup_docking_properties(self.m, self.jit_compile_dict, self.integration_method)
+        self._setup_docking_properties(
+            self.m, self.jit_compile_dict, self.integration_method
+        )
 
     def _setup_constraints(self) -> OrderedDict:
         return self._setup_docking_constraints_implicit()
 
-    def _pred_state(self, state: jnp.ndarray, step_size: float, control: jnp.ndarray) -> jnp.ndarray:
+    def _pred_state(
+        self, state: jnp.ndarray, step_size: float, control: jnp.ndarray
+    ) -> jnp.ndarray:
         return self._docking_pred_state(state, step_size, control)
 
 
-class Integrator1dDockingExplicitOptimizationRTA(ExplicitASIFModule, Integrator1dDockingRTAMixin):
+class Integrator1dDockingExplicitOptimizationRTA(
+    ExplicitASIFModule, Integrator1dDockingRTAMixin
+):
     """
     Implements Explicit Optimization RTA for the Integrator 1d Docking problem
 
@@ -224,11 +261,11 @@ class Integrator1dDockingExplicitOptimizationRTA(ExplicitASIFModule, Integrator1
         control_bounds_high: Union[float, np.ndarray] = 1,
         control_bounds_low: Union[float, np.ndarray] = -1,
         jit_compile_dict: Dict[str, bool] = None,
-        **kwargs
+        **kwargs,
     ):
         self.m = m
         if jit_compile_dict is None:
-            jit_compile_dict = {'generate_barrier_constraint_mats': True}
+            jit_compile_dict = {"generate_barrier_constraint_mats": True}
 
         super().__init__(
             *args,
@@ -236,11 +273,11 @@ class Integrator1dDockingExplicitOptimizationRTA(ExplicitASIFModule, Integrator1
             control_bounds_low=control_bounds_low,
             control_dim=1,
             jit_compile_dict=jit_compile_dict,
-            **kwargs
+            **kwargs,
         )
 
     def _setup_properties(self):
-        self._setup_docking_properties(self.m, self.jit_compile_dict, 'RK45_JAX')
+        self._setup_docking_properties(self.m, self.jit_compile_dict, "RK45")
 
     def _setup_constraints(self) -> OrderedDict:
         return self._setup_docking_constraints_explicit()
@@ -252,7 +289,9 @@ class Integrator1dDockingExplicitOptimizationRTA(ExplicitASIFModule, Integrator1
         return self._docking_g_x(state)
 
 
-class Integrator1dDockingImplicitOptimizationRTA(ImplicitASIFModule, Integrator1dDockingRTAMixin):
+class Integrator1dDockingImplicitOptimizationRTA(
+    ImplicitASIFModule, Integrator1dDockingRTAMixin
+):
     """
     Implements Implicit Optimization RTA for the Integrator 1d Docking problem
 
@@ -272,7 +311,7 @@ class Integrator1dDockingImplicitOptimizationRTA(ImplicitASIFModule, Integrator1
         backup controller object utilized by rta module to generate backup control.
         By default Integrator1dDockingBackupController
     integration_method: str, optional
-        Integration method to use, either 'RK45_JAX', 'RK45', or 'Euler'
+        Integration method to use, either 'RK45' or 'Euler'
     """
 
     def __init__(
@@ -284,8 +323,8 @@ class Integrator1dDockingImplicitOptimizationRTA(ImplicitASIFModule, Integrator1
         control_bounds_low: Union[float, np.ndarray] = -1,
         backup_controller: RTABackupController = None,
         jit_compile_dict: Dict[str, bool] = None,
-        integration_method: str = 'Euler',
-        **kwargs
+        integration_method: str = "Euler",
+        **kwargs,
     ):
         self.m = m
         self.integration_method = integration_method
@@ -293,7 +332,7 @@ class Integrator1dDockingImplicitOptimizationRTA(ImplicitASIFModule, Integrator1
             backup_controller = Integrator1dDockingBackupController()
 
         if jit_compile_dict is None:
-            jit_compile_dict = {'generate_ineq_constraint_mats': True}
+            jit_compile_dict = {"generate_ineq_constraint_mats": True}
 
         super().__init__(
             *args,
@@ -304,11 +343,13 @@ class Integrator1dDockingImplicitOptimizationRTA(ImplicitASIFModule, Integrator1
             control_bounds_low=control_bounds_low,
             control_dim=1,
             jit_compile_dict=jit_compile_dict,
-            **kwargs
+            **kwargs,
         )
 
     def _setup_properties(self):
-        self._setup_docking_properties(self.m, self.jit_compile_dict, self.integration_method)
+        self._setup_docking_properties(
+            self.m, self.jit_compile_dict, self.integration_method
+        )
 
     def _setup_constraints(self) -> OrderedDict:
         return self._setup_docking_constraints_implicit()
@@ -321,16 +362,14 @@ class Integrator1dDockingImplicitOptimizationRTA(ImplicitASIFModule, Integrator1
 
 
 class Integrator1dDockingBackupController(RTABackupController):
-    """Max braking backup controller to bring velocity to zero for 1d Integrator
-    """
+    """Max braking backup controller to bring velocity to zero for 1d Integrator"""
 
     def _generate_control(
         self,
         state: jnp.ndarray,
         step_size: float,
-        controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray], None] = None
+        controller_state: Union[jnp.ndarray, Dict[str, jnp.ndarray], None] = None,
     ) -> Tuple[jnp.ndarray, None]:
-
         return jnp.array([-1]), None
 
 
@@ -349,8 +388,8 @@ class ConstraintIntegrator1dDockingCollisionExplicit(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 1, 0, 30])
         super().__init__(alpha=alpha, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
-        return -2 * state[0] - state[1]**2
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
+        return -2 * state[0] - state[1] ** 2
 
 
 class ConstraintIntegrator1dDockingCollisionImplicit(ConstraintModule):
@@ -368,5 +407,5 @@ class ConstraintIntegrator1dDockingCollisionImplicit(ConstraintModule):
             alpha = PolynomialConstraintStrengthener([0, 10, 0, 30])
         super().__init__(alpha=alpha, **kwargs)
 
-    def _compute(self, state: jnp.ndarray) -> float:
+    def _compute(self, state: jnp.ndarray, params: dict) -> float:
         return -state[0]
