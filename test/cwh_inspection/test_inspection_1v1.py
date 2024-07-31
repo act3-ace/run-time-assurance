@@ -5,8 +5,9 @@ import time
 from collections import OrderedDict
 import os
 
-from safe_autonomy_dynamics.cwh import M_DEFAULT, N_DEFAULT, generate_cwh_matrices
-from safe_autonomy_dynamics.base_models import BaseLinearODESolverDynamics
+from safe_autonomy_simulation.sims.spacecraft.defaults import M_DEFAULT, N_DEFAULT
+from safe_autonomy_simulation.dynamics import LinearODEDynamics
+from run_time_assurance.zoo.cwh.utils import generate_cwh_matrices
 from run_time_assurance.zoo.cwh.inspection_1v1 import U_MAX_DEFAULT, Inspection1v1RTA, InspectionCascadedRTA, DiscreteInspection1v1RTA
 from run_time_assurance.utils.sample_testing import DataTrackingSampleTestingModule
 from run_time_assurance.utils import to_jnp_array_jit
@@ -29,7 +30,7 @@ class Env(DataTrackingSampleTestingModule):
             self.rta.constraints = new_constraints
 
         A, B = generate_cwh_matrices(M_DEFAULT, N_DEFAULT, mode="3d")
-        self.dynamics = BaseLinearODESolverDynamics(A=A, B=B, integration_method='RK45')
+        self.dynamics = LinearODEDynamics(A=A, B=B, integration_method='RK45')
 
         # Specify LQR gains
         Q = np.eye(6) * 0.05  # State cost
