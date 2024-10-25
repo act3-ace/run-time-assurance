@@ -1,3 +1,10 @@
+## [1.18.5](https://github.com/act3-ace/run-time-assurance/compare/v1.18.4...v1.18.5) (2024-10-25)
+
+
+### Bug Fixes
+
+* **jax:** don't jit compile external function calls ([6f591c3](https://github.com/act3-ace/run-time-assurance/commit/6f591c355c676605b7e99d6f99d19f41734167f9)), closes [#12](https://github.com/act3-ace/run-time-assurance/issues/12)
+
 ## [1.18.4](https://github.com/act3-ace/run-time-assurance/compare/v1.18.3...v1.18.4) (2024-07-31)
 
 
