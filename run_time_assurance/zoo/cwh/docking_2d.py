@@ -102,6 +102,7 @@ class Docking2dRTAMixin:
             A=A,
             B=B,
             integration_method=integration_method,
+            use_jax=True,
         )
 
         assert integration_method in (
@@ -109,8 +110,8 @@ class Docking2dRTAMixin:
             "Euler",
         ), f"Invalid integration method {integration_method}, must be 'RK45' or 'Euler'"
 
-        jit_compile_dict.setdefault("pred_state", True)
-        jit_compile_dict.setdefault("integrate", True)
+        # jit_compile_dict.setdefault("pred_state", True)
+        # jit_compile_dict.setdefault("integrate", True)
 
     def _setup_docking_constraints(
         self,
@@ -144,6 +145,8 @@ class Docking2dRTAMixin:
         self, state: jnp.ndarray, step_size: float, control: jnp.ndarray
     ) -> jnp.ndarray:
         """Predicts the next state given the current state and control action"""
+        state = np.array(state)
+        control = np.array(control)
         out, _ = self.dynamics.step(step_size, state, control)
         return out
 

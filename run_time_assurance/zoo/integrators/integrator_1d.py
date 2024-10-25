@@ -62,6 +62,7 @@ class Integrator1dDockingRTAMixin:
             m=m,
             mode="1d",
             integration_method=integration_method,
+            use_jax=True
         )
         self.A = jnp.array(self.dynamics.A)
         self.B = jnp.array(self.dynamics.B)
@@ -70,8 +71,8 @@ class Integrator1dDockingRTAMixin:
             integration_method in ("RK45", "Euler")
         ), f"Invalid integration method {integration_method}, must be either 'RK45' or 'Euler'"
 
-        jit_compile_dict.setdefault("pred_state", True)
-        jit_compile_dict.setdefault("integrate", True)
+        # jit_compile_dict.setdefault("pred_state", True)
+        # jit_compile_dict.setdefault("integrate", True)
 
     def _setup_docking_constraints_explicit(self) -> OrderedDict:
         """generates explicit constraints used in the docking problem"""

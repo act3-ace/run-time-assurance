@@ -20,7 +20,7 @@ class Env(DataTrackingSampleTestingModule):
         self.docking_region = 1  # m
 
         A, B = generate_cwh_matrices(M_DEFAULT, N_DEFAULT, mode="3d")
-        self.dynamics = LinearODEDynamics(A=A, B=B, integration_method='RK45')
+        self.dynamics = LinearODEDynamics(A=A, B=B, integration_method='RK45', use_jax=True)
 
         # Specify LQR gains
         Q = np.eye(6) * 0.05  # State cost

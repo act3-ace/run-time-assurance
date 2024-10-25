@@ -124,6 +124,7 @@ class Docking3dRTAMixin:
             A=A,
             B=B,
             integration_method=integration_method,
+            use_jax=True
         )
 
         assert integration_method in (
@@ -131,8 +132,8 @@ class Docking3dRTAMixin:
             "RK45",
         ), f"Invalid integration method {integration_method}, must be 'Euler' or 'RK45'"
 
-        jit_compile_dict.setdefault("pred_state", True)
-        jit_compile_dict.setdefault("integrate", True)
+        # jit_compile_dict.setdefault("pred_state", True)
+        # jit_compile_dict.setdefault("integrate", True)
 
     def _setup_docking_constraints(
         self,
