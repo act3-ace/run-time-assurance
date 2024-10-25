@@ -33,7 +33,7 @@ class Docking2DLatinHypercubeRandomSampleTest(LatinHypercubeRandomSampleTestingM
             bounds = np.array([[-10000, -10000, -5, -5], [10000, 10000, 5, 5]])
 
         A, B = generate_cwh_matrices(defaults.M_DEFAULT, defaults.N_DEFAULT, mode="2d")
-        self.dynamics = dynamics.LinearODEDynamics(A=A, B=B, integration_method="RK45")
+        self.dynamics = dynamics.LinearODEDynamics(A=A, B=B, integration_method="RK45", use_jax=True)
 
         super().__init__(
             rta=rta,

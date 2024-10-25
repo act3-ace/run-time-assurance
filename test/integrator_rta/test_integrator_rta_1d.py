@@ -22,7 +22,7 @@ class Env(DataTrackingSampleTestingModule):
         self.docking_region = 0.1
         self.docking_max_vel = 0.1
         self.dynamics = PointMassIntegratorDynamics(
-            m=M_DEFAULT, mode="1d", integration_method="RK45"
+            m=M_DEFAULT, mode="1d", integration_method="RK45", use_jax=True
         )
 
         super().__init__(

@@ -23,12 +23,12 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.9, <3.13"
 scipy = ">=1.10.0"
-jax = { version = "0.4.26", extras = ["cpu"] }
+jax = { version = "^0.4.30", extras = ["cpu"] }
 numpy = "^1.23.5"
 matplotlib = "^3.8.0"
 quadprog = "^0.1.11"
 pydantic = "^2.8.0"
-safe-autonomy-simulation = "^2.0.12"
+safe-autonomy-simulation = "^2.1.2"
 pyqt6 = "^6.7.1"
 
 [tool.poetry.group.lint.dependencies]
