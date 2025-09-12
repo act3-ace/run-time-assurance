@@ -1,3 +1,10 @@
+## [1.18.6](https://github.com/act3-ace/run-time-assurance/compare/v1.18.5...v1.18.6) (2025-09-12)
+
+
+### Bug Fixes
+
+* **dependencies:** Updated dependency versions ([e042838](https://github.com/act3-ace/run-time-assurance/commit/e042838c68d2b0a1d681a286e1308454d4ce4aec))
+
 ## [1.18.5](https://github.com/act3-ace/run-time-assurance/compare/v1.18.4...v1.18.5) (2024-10-25)
 
 
